@@ -363,7 +363,7 @@ from this list.
 
 | System | Depends on | Depended on by |
 |---|---|---|
-| **Combat** (shuriken throw, hit, kill, retrieval) | Movement (dodge i-frame interaction), Map (wall geometry for stick & retrieval) | Round Flow |
+| **Combat** (shuriken throw, hit, kill, retrieval) | Movement (dodge i-frame interaction), Map (wall geometry for stick & retrieval), Projectile *(updated 2026-05-17 during Projectile GDD design)* | Round Flow |
 | **Movement** (walk, jump, dodge, wall-slide, wall-jump) | Couch Input, Character Controller *(updated 2026-05-17 during Movement GDD design)* | Combat, Round Flow, Visual FX |
 | **Round Flow** (spawn, death, round-end, match-end) | Combat, Movement, Map, Game State Manager, Couch Input *(updated 2026-05-17 during GSM + Couch Input GDD design)* | — |
 | **Map** (single-screen platform layouts) | — | Combat (geometry), Round Flow (spawns), Movement (collision) |
@@ -385,14 +385,14 @@ value.
 | `shuriken_stash_size` | 3 (locked by Pillar 4) | Resource scarcity, round pacing | Combat |
 | `dodge_iframes_duration_ms` | 100–300 ms (TowerFall ~16f @60fps ≈ 260 ms) | **Single most consequential balance lever** — too long = stalemates; too short = lucky kills feel unearned | Movement |
 | `shuriken_throw_velocity` | TBD (prototype-driven) | Reaction time required to dodge | Combat |
-| `shuriken_wall_stick_duration_s` | TBD (or permanent until retrieved) | Retrieval pressure, map clutter | Combat |
+| `shuriken_wall_stick_duration_s` | permanent until retrieved *(resolved 2026-05-17 during Projectile GDD design — TowerFall parity)* | Retrieval pressure, map clutter | Projectile |
 | `wall_slide_friction` | TBD | Vertical mobility, wall-as-cover viability | Movement |
 | `wall_jump_cooldown_ms` | TBD | Wall-jump abuse prevention | Movement |
 | `gravity` | Standard 2D platformer range | Jump arc, fall time | Movement |
 | `round_time_cap_s` | 60–90 s (or none) | Stalemate frequency, session pacing | Round Flow |
 | `first_to_n_match_target` | N = 10 (TowerFall default) | Match length | Round Flow |
 | `respawn_delay_s` | 3–5 s between rounds | Round-to-round rhythm | Round Flow |
-| `pickup_radius_px` | TBD | Retrieval feel, contested-pickup tension | Combat |
+| `pickup_radius_px` | 12 px *(default set 2026-05-17 during Projectile GDD design; owner moved Combat → Projectile because pickup detection logic lives in Projectile per Rule 9)* | Retrieval feel, contested-pickup tension | Projectile |
 | `catch_input_mode` | dodge-button auto-catch during i-frames *(resolved 2026-05-17 during Movement GDD — TowerFall parity)* | Defensive depth, control complexity | Movement |
 
 ---
