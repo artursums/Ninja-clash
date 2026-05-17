@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-05-17
-> **Last Updated**: 2026-05-17 (post-Character Controller design — Foundation tier complete)
+> **Last Updated**: 2026-05-17 (post-Movement design — Core tier in progress, 5/13 systems Approved)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -34,7 +34,7 @@ are correctly placed in the MVP tier and at the front of the design queue.
 | 2 | Couch Input | Foundation | MVP | Approved | [couch-input.md](couch-input.md) | Game State Manager |
 | 3 | Map | Foundation | MVP | Approved | [map.md](map.md) | — |
 | 4 | Character Controller *(inferred)* | Foundation | MVP | Approved | [character-controller.md](character-controller.md) | Map |
-| 5 | Movement | Core | MVP | Not Started | — | Character Controller, Couch Input |
+| 5 | Movement | Core | MVP | Approved | [movement.md](movement.md) | Character Controller, Couch Input |
 | 6 | Projectile *(inferred)* | Core | MVP | Not Started | — | Map |
 | 7 | Combat | Feature | MVP | Not Started | — | Projectile, Movement, Map, Couch Input, Character Controller |
 | 8 | Round Flow | Feature | MVP | Not Started | — | Game State Manager, Combat, Movement, Map, Couch Input, Character Controller |
@@ -174,11 +174,12 @@ to Godot 4.6 + the retrievable-projectile mechanic.
 |---|---|
 | Total v1 systems identified | 13 |
 | Deferred systems (post-v1) | 3 |
-| Design docs started | 4 |
-| Design docs reviewed | 4 |
-| Design docs approved | 4 |
-| MVP systems designed | 4 / 8 |
+| Design docs started | 5 |
+| Design docs reviewed | 5 |
+| Design docs approved | 5 |
+| MVP systems designed | 5 / 8 |
 | Foundation tier | **4 / 4 — COMPLETE** |
+| Core tier | **1 / 2 — Movement done, Projectile next** |
 | Vertical Slice systems designed | 0 / 2 |
 | Alpha systems designed | 0 / 3 |
 

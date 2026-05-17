@@ -364,7 +364,7 @@ from this list.
 | System | Depends on | Depended on by |
 |---|---|---|
 | **Combat** (shuriken throw, hit, kill, retrieval) | Movement (dodge i-frame interaction), Map (wall geometry for stick & retrieval) | Round Flow |
-| **Movement** (walk, jump, dodge, wall-slide, wall-jump) | Couch Input | Combat, Round Flow |
+| **Movement** (walk, jump, dodge, wall-slide, wall-jump) | Couch Input, Character Controller *(updated 2026-05-17 during Movement GDD design)* | Combat, Round Flow, Visual FX |
 | **Round Flow** (spawn, death, round-end, match-end) | Combat, Movement, Map, Game State Manager, Couch Input *(updated 2026-05-17 during GSM + Couch Input GDD design)* | — |
 | **Map** (single-screen platform layouts) | — | Combat (geometry), Round Flow (spawns), Movement (collision) |
 | **Couch Input** (4 controllers, hot-plug, clan-select) | — | Movement (player intent), Round Flow (join/leave) |
@@ -393,7 +393,7 @@ value.
 | `first_to_n_match_target` | N = 10 (TowerFall default) | Match length | Round Flow |
 | `respawn_delay_s` | 3–5 s between rounds | Round-to-round rhythm | Round Flow |
 | `pickup_radius_px` | TBD | Retrieval feel, contested-pickup tension | Combat |
-| `catch_input_mode` | dodge-button auto-catch OR separate-button catch (TBD, **MVP blocker**) | Defensive depth, control complexity | Movement |
+| `catch_input_mode` | dodge-button auto-catch during i-frames *(resolved 2026-05-17 during Movement GDD — TowerFall parity)* | Defensive depth, control complexity | Movement |
 
 ---
 

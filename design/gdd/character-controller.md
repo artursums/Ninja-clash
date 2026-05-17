@@ -84,6 +84,7 @@ player. Break the contract and the entire game's promise breaks with it.
     - `apply_jump_impulse(strength: float)` — sets vertical velocity to `-strength` (upward)
     - `cancel_jump()` — applies jump-cut clamp
     - `apply_dodge_impulse(direction: Vector2, strength: float)` — sets velocity for a dodge dash
+    - `set_vertical_velocity(v: float)` — sets vertical velocity directly (used by Movement for wall-slide cap per Rule 6) *(consistency fix added 2026-05-17 during Movement GDD design — method was already documented in Rule 6 but missing from this list)*
     - `drop_through_request()` — temporarily disables OneWay collision for 1 physics tick
 
 11. **Screen-wrap**:
