@@ -1,0 +1,6 @@
+<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+  <!-- 4-pointed shuriken (white; tinted at runtime) -->
+  <polygon points="8,0 10,6 16,8 10,10 8,16 6,10 0,8 6,6" fill="white"/>
+  <!-- Center hole -->
+  <circle cx="8" cy="8" r="1.2" fill="black"/>
+</svg>

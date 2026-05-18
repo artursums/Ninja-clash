@@ -10,13 +10,16 @@ config_version=5
 
 [application]
 
-config/name="Four Clans Prototype - Movement and Combat"
+config/name="Four Clans Prototype - Vertical Slice"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
+Audio="*res://audio.gd"
+GameState="*res://game_state.gd"
+Maps="*res://maps.gd"
 Combat="*res://combat.gd"
 
 [display]
