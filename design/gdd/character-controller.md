@@ -96,6 +96,8 @@ player. Break the contract and the entire game's promise breaks with it.
 
 13. **No body-body collision between players**: enforced via collision mask (Player layer doesn't include itself). Players visually overlap when in the same position; no physical interaction.
 
+14. **Slot identity**: each `PlayerCharacterBody` instance exposes a `slot: int` field (1-4) set at instantiation by Round Flow. Immutable for the lifetime of the instance. Read by Combat to identify which player is involved in a collision (e.g., `player_body.slot`). *(added 2026-05-17 during Combat GDD design — Combat needs to identify slot from the collision body)*
+
 ### States and Transitions
 
 CC tracks minimal state. Movement owns verb-level state machines
@@ -115,7 +117,7 @@ CC has no observable state machine of its own.
 | **Map** | CC reads collision data via Godot's physics layers (Walls on layer 2, OneWay on layer 3); queries `MapResource.playfield_width` and `horizontal_wrap` flags for screen-wrap | Map → CC |
 | **Movement** | Calls `set_horizontal_intent`, `apply_jump_impulse`, `cancel_jump`, `apply_dodge_impulse`, `drop_through_request`; reads state queries (`is_on_floor`, `is_on_wall`, `velocity`) | Movement ↔ CC |
 | **Clan Cosmetics** | Reads CC's `position` + facing direction to render costume + emblem; subscribes to CC for hit reactions | CC → Clan Cosmetics |
-| **Combat** | When a shuriken collides with the CC body (Projectile vs Player layer match), Combat is notified via signal; Combat calls a kill method on CC | CC ↔ Combat |
+| **Combat** | Reads CC's `slot` field (Rule 14) to identify which player was hit on `projectile_hit_player` signal. Reads CC's `position` for throw spawn computation. Combat does NOT call any kill method on CC — kill flows through `Movement.set_dead()` instead; CC is freed by Round Flow shortly after death. *(updated 2026-05-17 during Combat GDD design — original row said "Combat calls a kill method on CC" which was stale)* | CC ↔ Combat |
 | **Visual FX** | Reads CC's velocity + `is_on_floor` for animation state inputs (walk vs idle vs falling) | CC → Visual FX |
 | **Round Flow** | Instantiates CC at round start (one per slot, at the assigned spawn point); frees CC at round end or on death | Round Flow → CC |
 

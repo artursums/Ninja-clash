@@ -162,6 +162,10 @@ single owner of animation-state-machine semantics.
 - `is_dead() -> bool`
 - `facing -> int` (read-only property)
 
+**Public mutators Movement exposes:**
+
+- `set_dead()` — transitions Movement to Dead state (per Rule 13). Idempotent: calling on already-dead Movement is a no-op. Called by Combat on kill (Combat Rule 7.1). *(added 2026-05-17 during Combat GDD design — was implied by Rule 13 but not documented as public API)*
+
 ### Interactions with Other Systems
 
 | Consumer | Interaction | Direction |

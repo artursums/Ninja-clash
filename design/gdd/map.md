@@ -85,7 +85,7 @@ state is the currently loaded map during InMatch.
 | State | When | Behavior |
 |---|---|---|
 | Unloaded | All non-InMatch states | No map scene instantiated; only registry available |
-| Loading | Transition MatchSetup → InMatch | `MapLoader.load(selected_map_id)` instantiates scene synchronously; target completion within 1 frame (16.6 ms at 60 fps) |
+| Loading | Transition MatchSetup → InMatch | `MapLoader.load(selected_map_id)` called by Round Flow's InMatch entry sequence (Round Flow Rule 4.5); instantiates scene synchronously; target completion within 1 frame (16.6 ms at 60 fps) *(updated 2026-05-18 during Round Flow GDD design — credited caller)* |
 | Loaded | InMatch and Paused | Map scene live; Movement, Projectile, Round Flow query its API |
 | Unloading | Transition MatchEnd → MatchSetup or → MainMenu | Map scene freed |
 
@@ -95,7 +95,7 @@ state is the currently loaded map during InMatch.
 |---|---|---|
 | **Movement** | Reads platform collision (solid, one-way) for character physics; reads screen-wrap config for player position wrapping | Map → Movement |
 | **Projectile** | Reads wall surfaces for stick targets; reads one-way platform info (shurikens skip drop-throughs); reads screen-wrap config for projectile wrap | Map → Projectile |
-| **Combat** | Queries map for currently-recoverable shurikens (positions of stuck-in-wall + on-floor shurikens) for HUD shuriken-count display | Map → Combat |
+| **Combat** | No direct dependency. Combat does NOT query Map for shurikens — stash is Combat-tracked, recoverable shuriken positions are Projectile-tracked. Map's geometry affects Combat indirectly via Projectile (stick targets) and CC (collision). *(updated 2026-05-17 during Combat GDD design — original row claiming "Combat queries Map for recoverable shurikens" was incorrect)* | (no direct relationship) |
 | **Round Flow** | Reads `MapResource.spawn_points` at round start; reads currently-loaded map ID from `MatchContext` | Map → Round Flow |
 | **UI Flow** | Reads `MapRegistry.all_maps()` for map-select UI; reads `MapResource.thumbnail` + `display_name` | Map → UI Flow |
 | **GSM** | Map system loads on InMatch entry (via `state_changed` listener); unloads on exit | GSM → Map (indirect) |
@@ -276,7 +276,7 @@ these are per-map authored data, not designer-tunable parameters.
 | Question | Owner | Deadline | Resolution |
 |---|---|---|---|
 | Steam Deck letterboxing: 160 px L/R + 130 px T/B bars are significant. Options for v1.x: fractional scaling (loses pixel-perfect), playfield-widen for 16:10 displays (adds per-map data complexity), or accept the bars as visual identity ("retro CRT" framing). | technical-artist + ux-designer | v1.x | Accept letterboxing for v1; revisit if QA / playtest feedback complains |
-| Spawn rotation per round: should slot 1 always spawn at `spawn[0]`, or should spawns rotate per round to prevent positional advantage? | Round Flow GDD author | Before Round Flow GDD approved | TBD |
+| Spawn rotation per round: should slot 1 always spawn at `spawn[0]`, or should spawns rotate per round to prevent positional advantage? | Round Flow GDD author | Before Round Flow GDD approved | **Resolved 2026-05-18**: cyclic-index rotation per Round Flow Formula 1. `spawn_index(slot, round_index, active_slots) = (active_slots.find(slot) + round_index - 1) mod len(active_slots)`. Deterministic, no RNG. Honors Pillar 2 (Fairness Is Sacred). |
 | Recoverability validator implementation: Godot editor plugin (live preview in editor) vs. standalone CLI tool (CI integration only) vs. both? | gameplay-programmer + tools-programmer | Before alpha (first 4 maps shipping) | TBD — likely CLI for CI + lightweight editor warning for designers |
 | Final v1 map count: concept says 4–6; alpha targets 4, v1 launch adds 1–2. Decision deferred until alpha playtest reveals which maps "carry" the experience. | game-designer + level-designer | Alpha milestone | Defer to alpha |
 | Per-map music vs shared playlist: concept doc says 3–5 music tracks. Should each map have a designated track, or pool/random? | audio-director | Alpha audio pass | TBD |

@@ -71,8 +71,9 @@ dust puff. The drama is the throw, the dodge, and the silence after.
    - Its `recoverable: bool` state (false in Flying, true in Stuck)
 
 3. **Spawn**: when Combat instantiates a Projectile:
-   - Combat passes: initial position (`Vector2`), initial direction (`Vector2` unit vector), and `SHURIKEN_THROW_VELOCITY` (px/s).
+   - Combat passes: initial position (`Vector2`), initial direction (`Vector2` unit vector), `SHURIKEN_THROW_VELOCITY` (px/s), and `projectile_id` (int, unique per round, assigned by Combat). *(constructor signature updated 2026-05-17 during Combat GDD design to add projectile_id — Combat needs the ID for signal routing + thrower tracking)*
    - Projectile sets `velocity = direction.normalized() * SHURIKEN_THROW_VELOCITY`.
+   - Projectile stores `projectile_id` as immutable field for signal payload use.
    - Projectile begins in **Flying** state at the next physics tick.
 
 4. **Flying physics** (each `_physics_process` tick while Flying):
@@ -90,7 +91,8 @@ dust puff. The drama is the throw, the dodge, and the silence after.
 
 6. **One-way platform collision**: per Map GDD Core Rule 5, shurikens **pass through unchanged** with conserved velocity. Implementation: Projectile's Area2D collision mask **excludes** the OneWay layer (layer 3). Projectile physically interacts only with Wall (layer 2) and Player (layer 1).
 
-7. **Player collision** (Godot Area2D `body_entered` signal):
+7. **Player collision** (Godot Area2D `body_entered` signal, **Flying state only**):
+   - **Gate**: this rule applies ONLY while `state == Flying`. In `Stuck` state, Player overlaps are interpreted as pickup attempts (Rule 9), not hits — Projectile suppresses `projectile_hit_player` emission while Stuck. *(gate added 2026-05-17 during Combat GDD design — without it, walking over a stuck shuriken would fire both hit + pickup signals)*
    - When the Area2D overlaps a body on the **Player** collision layer (layer 1 per CC GDD): emit signal `projectile_hit_player(projectile_id, player_body)`.
    - Projectile does **NOT** decide what happens next — Combat consumes this signal and:
      - Polls `player_body.get_node("PlayerMovement").is_iframe_active()` to decide catch-vs-kill

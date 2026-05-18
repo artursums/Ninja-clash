@@ -342,8 +342,8 @@ deferred to the listed per-system GDD.
 
 | Edge case | Concept-level behavior | Detailed in (future GDD) |
 |---|---|---|
-| Round ends with no kills (stalemate) | Sudden-death mechanic to be designed (shrinking arena / hunter buff / time-limit-kills-all). Without resolution, round ends with no winner. | Round Flow |
-| Two players die in the same frame | Both deaths register; round may end in tie. No tie-break in v1 (no one banks the round win). | Round Flow |
+| Round ends with no kills (stalemate) | **MVP behavior**: no stalemate mechanic — rounds run indefinitely until elimination. Sudden-death (shrinking arena / hunter buff / time-limit-kills-all) deferred to v1.x post-MVP playtest. *(Resolved 2026-05-18 during Round Flow GDD design.)* | Round Flow |
+| Two players die in the same frame | Both deaths register; round may end in tie. No tie-break in v1 (no one banks the round win). **v1 limitation** *(documented 2026-05-18 during Round Flow GDD design)*: when the last 2 alive die same-tick (true mutual kill), Round Flow processes Combat's `player_eliminated` events in signal-queue order. The first event triggers round-end with the (still-alive) survivor as winner; the second event arrives after `alive_by_slot[survivor]` was already updated, and the round-end re-entry guard catches it. Net result: round-end attribution is signal-order-dependent and may name a "winner" who is in fact also dead. Acceptable for v1; single-tick coalescing is a v1.x option if playtest reveals it. | Round Flow |
 | Controller plugs in mid-round | New player cannot join the current round. Joins as eligible for next round. | Couch Input |
 | Controller unplugs mid-round | Player is eliminated immediately; round continues. Reconnect re-joins at next round. | Couch Input |
 | All shurikens off-screen / unrecoverable | Cannot happen by map design — every map MUST guarantee 100% projectile recoverability via the wall/floor system. | Map Design |
@@ -363,9 +363,9 @@ from this list.
 
 | System | Depends on | Depended on by |
 |---|---|---|
-| **Combat** (shuriken throw, hit, kill, retrieval) | Movement (dodge i-frame interaction), Map (wall geometry for stick & retrieval), Projectile *(updated 2026-05-17 during Projectile GDD design)* | Round Flow |
+| **Combat** (shuriken throw, hit, kill, retrieval) | Projectile (hit detection + instantiation), Movement (i-frame interaction + set_dead), Couch Input (throw_pressed), Character Controller (position + slot) *(updated 2026-05-17 during Combat GDD design — Map removed: Combat doesn't query Map directly, only indirect via Projectile + CC)* | Round Flow, HUD |
 | **Movement** (walk, jump, dodge, wall-slide, wall-jump) | Couch Input, Character Controller *(updated 2026-05-17 during Movement GDD design)* | Combat, Round Flow, Visual FX |
-| **Round Flow** (spawn, death, round-end, match-end) | Combat, Movement, Map, Game State Manager, Couch Input *(updated 2026-05-17 during GSM + Couch Input GDD design)* | — |
+| **Round Flow** (spawn, death, round-end, match-end) | Combat, Movement, Map, Game State Manager, Couch Input, Character Controller *(updated 2026-05-18 during Round Flow GDD design — CC added: Round Flow directly instantiates `PlayerCharacterBody` per CC Rule 14, not just indirectly via Movement)* | — |
 | **Map** (single-screen platform layouts) | — | Combat (geometry), Round Flow (spawns), Movement (collision) |
 | **Couch Input** (4 controllers, hot-plug, clan-select) | — | Movement (player intent), Round Flow (join/leave) |
 
@@ -384,14 +384,14 @@ value.
 |---|---|---|---|
 | `shuriken_stash_size` | 3 (locked by Pillar 4) | Resource scarcity, round pacing | Combat |
 | `dodge_iframes_duration_ms` | 100–300 ms (TowerFall ~16f @60fps ≈ 260 ms) | **Single most consequential balance lever** — too long = stalemates; too short = lucky kills feel unearned | Movement |
-| `shuriken_throw_velocity` | TBD (prototype-driven) | Reaction time required to dodge | Combat |
+| `shuriken_throw_velocity` | 200 px/s *(pinned 2026-05-17 during Combat GDD design)* | Reaction time required to dodge | Combat |
 | `shuriken_wall_stick_duration_s` | permanent until retrieved *(resolved 2026-05-17 during Projectile GDD design — TowerFall parity)* | Retrieval pressure, map clutter | Projectile |
 | `wall_slide_friction` | TBD | Vertical mobility, wall-as-cover viability | Movement |
 | `wall_jump_cooldown_ms` | TBD | Wall-jump abuse prevention | Movement |
 | `gravity` | Standard 2D platformer range | Jump arc, fall time | Movement |
-| `round_time_cap_s` | 60–90 s (or none) | Stalemate frequency, session pacing | Round Flow |
+| `round_time_cap_s` | **None (locked in v1)** *(pinned 2026-05-18 during Round Flow GDD design — no stalemate mechanic in MVP; sudden-death deferred to v1.x post-MVP playtest)* | Stalemate frequency, session pacing | Round Flow |
 | `first_to_n_match_target` | N = 10 (TowerFall default) | Match length | Round Flow |
-| `respawn_delay_s` | 3–5 s between rounds | Round-to-round rhythm | Round Flow |
+| `respawn_delay_s` | **3.0 s** *(pinned 2026-05-18 during Round Flow GDD design — TowerFall parity; Round Flow Section G knob)*. Inter-round gap also includes `kill_cam_delay_s = 0.5 s` → 3.5 s total. | Round-to-round rhythm | Round Flow |
 | `pickup_radius_px` | 12 px *(default set 2026-05-17 during Projectile GDD design; owner moved Combat → Projectile because pickup detection logic lives in Projectile per Rule 9)* | Retrieval feel, contested-pickup tension | Projectile |
 | `catch_input_mode` | dodge-button auto-catch during i-frames *(resolved 2026-05-17 during Movement GDD — TowerFall parity)* | Defensive depth, control complexity | Movement |
 

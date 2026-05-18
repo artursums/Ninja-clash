@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-05-17
-> **Last Updated**: 2026-05-17 (post-Projectile design — Core tier complete, 6/13 systems Approved)
+> **Last Updated**: 2026-05-18 (post-Round Flow design — **8/13 systems Approved; MVP design path COMPLETE (8/8)**)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -36,8 +36,8 @@ are correctly placed in the MVP tier and at the front of the design queue.
 | 4 | Character Controller *(inferred)* | Foundation | MVP | Approved | [character-controller.md](character-controller.md) | Map |
 | 5 | Movement | Core | MVP | Approved | [movement.md](movement.md) | Character Controller, Couch Input |
 | 6 | Projectile *(inferred)* | Core | MVP | Approved | [projectile.md](projectile.md) | Map |
-| 7 | Combat | Feature | MVP | Not Started | — | Projectile, Movement, Map, Couch Input, Character Controller |
-| 8 | Round Flow | Feature | MVP | Not Started | — | Game State Manager, Combat, Movement, Map, Couch Input, Character Controller |
+| 7 | Combat | Feature | MVP | Approved | [combat.md](combat.md) | Projectile, Movement, Couch Input, Character Controller |
+| 8 | Round Flow | Feature | MVP | Approved | [round-flow.md](round-flow.md) | Game State Manager, Combat, Movement, Map, Couch Input, Character Controller |
 | 9 | Clan Cosmetics *(inferred)* | Feature | Vertical Slice | Not Started | — | Character Controller |
 | 10 | HUD *(inferred)* | Presentation | Vertical Slice | Not Started | — | Round Flow, Combat |
 | 11 | Visual FX *(inferred)* | Presentation | Alpha | Not Started | — | Movement, Combat, Round Flow, Character Controller |
@@ -102,7 +102,7 @@ within the same layer can be designed in parallel.
 
 ### Feature Layer (depends on Core)
 
-7. **Combat** — depends on: Projectile (hit detection), Movement (i-frame interaction), Map (retrieval geometry), Couch Input (`throw_pressed` signal), Character Controller (collision signals when Projectile hits Player body)
+7. **Combat** — depends on: Projectile (hit detection + instantiation), Movement (i-frame interaction + set_dead), Couch Input (`throw_pressed` signal), Character Controller (reads `position` + `slot`). *(updated 2026-05-17 during Combat GDD design — Map removed; Combat reads no Map data directly, only indirect via Projectile + CC)*
 8. **Round Flow** — depends on: Game State Manager, Combat (kill events), Movement (death trigger), Map (spawn points), Couch Input (`controller_disconnected` for mid-round elimination), Character Controller (instantiates `PlayerCharacterBody` at round start)
 9. **Clan Cosmetics** — depends on: Character Controller (visual layer)
 
@@ -174,12 +174,13 @@ to Godot 4.6 + the retrievable-projectile mechanic.
 |---|---|
 | Total v1 systems identified | 13 |
 | Deferred systems (post-v1) | 3 |
-| Design docs started | 6 |
-| Design docs reviewed | 6 |
-| Design docs approved | 6 |
-| MVP systems designed | 6 / 8 |
+| Design docs started | 8 |
+| Design docs reviewed | 8 |
+| Design docs approved | 8 |
+| MVP systems designed | **8 / 8 — COMPLETE** |
 | Foundation tier | **4 / 4 — COMPLETE** |
 | Core tier | **2 / 2 — COMPLETE** |
+| Feature tier | **2 / 3 — Combat + Round Flow done; Clan Cosmetics (VS-tier) remains** |
 | Vertical Slice systems designed | 0 / 2 |
 | Alpha systems designed | 0 / 3 |
 

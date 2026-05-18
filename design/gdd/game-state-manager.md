@@ -211,7 +211,7 @@ not a tuning knob. Designers shouldn't tune it; the implementation team must hit
 
 | Question | Owner | Deadline | Resolution |
 |---|---|---|---|
-| If a round-time-cap stalemate ends with no winner, does Round Flow emit `match_won(null)` or a new `match_aborted` signal? GSM needs an entry condition into MatchEnd for the "nobody won" case. | Round Flow GDD author | Before Round Flow GDD is approved | TBD |
+| If a round-time-cap stalemate ends with no winner, does Round Flow emit `match_won(null)` or a new `match_aborted` signal? GSM needs an entry condition into MatchEnd for the "nobody won" case. | Round Flow GDD author | Before Round Flow GDD is approved | **Resolved 2026-05-18**: Round Flow GDD locks `ROUND_TIME_CAP_S = None` for v1 (no stalemate mechanic in MVP; sudden-death deferred to v1.x post-MVP playtest). Neither `match_won(null)` nor `match_aborted` is needed in v1. v1.x sudden-death design will need to revisit this question. |
 | Should Settings be reachable from InMatch directly (without going through Paused first)? Current design says no — must pause first. UX concern: changing volume mid-match is annoying if it requires a full pause first. | ux-designer + game-designer | Before alpha menu pass | TBD |
 | Should "Back to Menu" from MatchEnd confirm before discarding the match? Not relevant in v1 (no per-match stats persisted), but relevant if stat persistence is ever added. | game-designer | v1.x or later | Deferred |
 | Does GSM Boot need a measured timeout? If Boot exceeds 3 s on Steam Deck, what happens — error overlay, or just accept slow boot? Current design says no timeout, only the performance criterion. | gameplay-programmer + QA | During Boot implementation | TBD — likely no timeout in v1 |
