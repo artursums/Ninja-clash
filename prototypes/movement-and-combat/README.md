@@ -1,127 +1,175 @@
-# Movement and Combat Prototype — Vertical Slice
+# Four Clans — Movement & Combat Prototype
 
-**Status**: PROTOTYPE — throwaway code, not production. Standards intentionally relaxed.
+**Status:** Prototype / vertical slice — throwaway code, standards intentionally relaxed.
+**Engine:** Godot 4.6 · **Players:** local 2-player (gamepad or keyboard) · **Resolution:** 800×450.
 
-**Question this prototype answers**: *Does the throw-dodge-retrieve loop with one-hit-kill rules feel fun in 2-player local play?*
+**Hypothesis under test:** *Does the throw → dodge → retrieve loop feel fun in local 2-player play?*
 
-**Updated 2026-05-18**: extended to a vertical slice that simulates the full designed match flow (title → clan select → map select → match → match end).
+![Four Clans gameplay — Sakura Temple arena](screenshots/04_gameplay.png)
+
+---
+
+## Screenshots
+
+| Title | Clan select | Map select |
+|---|---|---|
+| ![Title](screenshots/01_title.png) | ![Clan select](screenshots/02_clan_select.png) | ![Map select](screenshots/03_map_select.png) |
+
+---
+
+## What this is
+
+A TowerFall-inspired couch-versus arena fighter. Two ninjas face off on a single
+screen: throw shurikens, dodge to catch them out of the air, retrieve spent ammo,
+and eliminate your opponent. It is built as a throwaway vertical slice to validate
+the core combat *feel* before any production code is written.
 
 ---
 
 ## How to run
 
 1. Open **Godot 4.6**.
-2. Import this directory as a project: **Project → Import → select `project.godot`**.
-3. Press **F5** to launch.
-4. If Godot prompts "Select Main Scene", pick `Main.tscn`.
+2. **Project → Import →** select `project.godot` in this directory.
+3. Press **F5** to launch. If prompted for the main scene, pick `Main.tscn`.
+
+Plug in a controller before launching to play with a gamepad (recommended). A
+DualSense (PS5) over USB or Bluetooth is detected automatically.
 
 ---
 
-## The match flow (what F5 gets you)
+## Controls
 
-1. **Title screen** — "FOUR CLANS". Press any key to enter.
-2. **Clan select** — both players pick from Shadow / Storm / Frost / Fire.
-   - P1: **A/D** to move cursor, **W** to lock in, **S** to un-lock
-   - P2: **←/→** to move cursor, **↑** to lock in, **↓** to un-lock
-   - Same-clan picks are rejected (other player must choose a different one)
-   - **ESC** to back out to title
-3. **Map select** — one player picks the arena.
-   - **A/D** or **←/→** to navigate, **W** or **↑** to confirm
-   - **X** = random map
-   - **ESC** to back to clan select
-4. **Match** — first to 5 round wins.
-   - Round-start countdown (3-2-1-FIGHT)
-   - One hit kills. Score increments. 1.5 s round-end pause shows winner.
-   - Repeats until someone reaches 5.
-5. **Match end** — winning clan + final score.
-   - **W** or **↑** to play again (same arena, same clans)
-   - **ESC** or **T** to return to title
+### Gamepad — DualSense (primary)
 
-**ESC during a match** = quit to title.
+Mapping follows the **TowerFall-on-PlayStation** layout. Player 1 = first connected
+controller, Player 2 = second controller.
 
----
-
-## Controls (during a round)
-
-| Action | Player 1 | Player 2 |
+| Action | Button | Notes |
 |---|---|---|
-| Move left | **A** | **Left arrow** |
-| Move right | **D** | **Right arrow** |
-| Jump (always; double-jump available after landing) | **W** | **Up arrow** |
-| Crouch (visual squash only) | **S** | **Down arrow** |
-| Throw shuriken | **Space** | **Enter** |
-| Dodge (i-frames + dash) | **Left Shift** | **Right Shift** |
+| Move / aim | **D-pad** or **Left Stick** | 8-directional; also aims throws and the dash |
+| Jump | **Cross ✕** | double jump in air; wall-jump off walls; also confirms menus |
+| Throw shuriken | **Square ▢** | hold a vertical direction to throw up/down |
+| Dodge | **Circle ◯**, **L1**, **R1** | invincibility frames; catches incoming shurikens |
+| Dash | **L2** or **R2** | 8-way burst toward the held direction (see *Dash* below) |
+| Katana | **Triangle △** | melee swing; deflects shurikens, damages enemies |
 
-**Movement tricks**:
-- **Double-tap a movement key** for a fast slide
-- **Hold direction into a wall while airborne** for slow wall-slide
-- **Wall-jump**: jump while wall-sliding
+### Keyboard (Player 2)
 
----
+**Player 1 is controller-only** (use the gamepad table above). Player 2 plays on the keyboard:
 
-## Maps
+| Action | Key |
+|---|---|
+| Move / aim left | **A** |
+| Move / aim right | **D** |
+| Aim up | **W** |
+| Aim down | **S** |
+| Jump | **Space** |
+| Throw shuriken | **L** |
+| Katana | **K** |
+| Dodge | **Right Shift** |
+| Dash | **double-tap A or D** |
 
-4 arenas, all randomized spawn positions:
+P2's dash is a quick double-tap of a movement key (P2-only, so the gamepad stick can't
+trigger it). On a gamepad, dash is L2/R2 as in the table above.
 
-1. **Rooftop Garden** — open, 3 platforms (good first map)
-2. **Pagoda Climb** — diagonal staircase, vertical traversal
-3. **Twin Pillars** — symmetric, central pillar + bridges
-4. **The Ridge** — divided lanes, central wall, wing ledges (newest)
+### Menu navigation (any controller or the keyboard, on every screen)
 
----
-
-## Visual cues (current placeholder art)
-
-- **Clan-colored ninja silhouette** = base appearance
-- **Yellow flash** = i-frames active (invincible + can catch shurikens)
-- **Grey** = dodge recovery (no i-frames but still locked from re-dodging)
-- **Cyan** = sliding
-- **Purple** = wall-grabbing
-- **Half-height squashed** = crouching (visual only — hitbox unchanged)
-- **Faded grey** = dead (waiting for respawn next round)
-- **Stash icons in HUD** dim when used (3 max per round)
-- **Shuriken** = clan-colored 4-pointed star, spins while flying
+- **Title** — any key or any controller button begins
+- **Move cursor** — D-pad / stick, or A/D
+- **Confirm** — **Cross ✕** / Space
+- **Back / cancel** — **Circle ◯** / Esc
+- **Un-confirm** a clan pick — down (D-pad / S)
+- **Random map** — **Triangle △** / X
 
 ---
 
-## Audio (procedural beeps)
+## Core mechanics
 
-No audio assets shipped. Sounds are sine/square waves generated at startup:
-- Throw / hit / dodge / countdown / round-start / win-fanfare
+### Movement
+- **Run** at a fixed top speed; **double jump** (one ground + one air jump, refreshed on landing).
+- **Wall grab**: hold *into* a wall while airborne to slide down slowly.
+- **Wall jump**: jump while wall-grabbing for an upward kick away from the wall.
+- **Head-stomp**: land on an opponent's head to deal damage and bounce off.
+- **Screen wrap**: fall off the bottom and reappear at the top (and vice-versa).
 
-If beeps are annoying, mute your speakers — they're placeholder sound design.
+### Dash (L2 / R2)
+A short directional burst toward the held aim — 8-way, including straight up and
+diagonals. Gravity is suspended for its duration so up/diagonal dashes hold a clean line.
+
+- **One charge.** In the air you get exactly **one** dash; it does not return until
+  you touch a **floor or wall** — so you cannot infinitely climb.
+- **Ground cooldown ≈ 0.417 s** between dashes (TowerFall's 25-frame dodge cooldown).
+- After spending the air dash, the charge returns **0.5 s after** you touch a surface.
+- L2 and R2 are the *same* action — direction comes from the stick, not the trigger.
+
+### Dodge (Circle / L1 / R1)
+A horizontal dash with **invincibility frames**. While the i-frames are active (the
+yellow flash) you are immune to all hits **and** you **catch** an incoming shuriken
+straight into your stash (or reflect it if your stash is already full). This is the
+signature defensive/retrieval move.
+
+### Combat
+- **5 HP** per life, shown as hearts above the ninja. Shurikens, katana hits, and
+  head-stomps each deal **1 damage**; reaching 0 HP is an elimination.
+- **Shuriken stash**: start with **3**, hold up to **5**. Throwing spends one; pick a
+  spent shuriken back up by walking over it, or catch one mid-air with a dodge.
+- **Katana**: **3 charges**. A swing **deflects** shurikens in front of you (free) and
+  **strikes** an enemy for 1 damage (costs a charge).
+- Brief hurt-invulnerability after a non-lethal hit prevents stun-locking.
 
 ---
 
-## Live tuning panel (visible during rounds)
+## Match flow
 
-5 sliders at bottom-left for the named balance levers:
-1. **Dodge i-frame duration** (single most consequential lever per concept doc)
-2. **Throw velocity** (reaction time required to dodge)
-3. **Pickup radius**
-4. **Self-hit immunity** (spawn-throw self-hit window)
-5. **Wall-grab fall speed** (0 = full hang, 80 = TowerFall slow descent, 200 = barely slows you)
-
-Adjust mid-round to dial in the feel.
+1. **Title** — "FOUR CLANS". Press any input to begin.
+2. **Clan select** — both players pick from **Shadow / Storm / Frost / Fire**
+   (same-clan picks are rejected).
+3. **Map select** — choose the arena.
+4. **Match** — first to **5 eliminations** wins. Each round opens with a 3-2-1-FIGHT
+   countdown, runs until one ninja is eliminated, pauses ~1.6 s on the winner, then repeats.
+5. **Match end** — winning clan + final score; rematch or return to title.
 
 ---
 
-## Known limitations of this prototype
+## Map
 
-- **2-player keyboard only** (4-player needs controllers + group of friends)
-- **Placeholder art** (silhouette SVG ninjas, colored rectangles for walls) — see `design/art-bible.md` for production direction
-- **Procedural beep SFX** — no music, no real sound design
-- **No menus past clan/map select** (no settings, no options, no clan-emblem detail)
-- **Maps don't match `design/levels/launch-maps.md` exact coordinates** — these are 800×450 prototype variants of the spec'd 480×270 launch maps
-- **Round flow is simplified** — Round Flow GDD specifies a 5-state machine; here it's a flat state-machine in the prototype's GameState autoload
+**Sakura Temple** — a pagoda arena with layered platforms, lanterns, and a moonlit
+backdrop. (Currently the only map in the prototype; spawn points are fixed.)
+
+---
+
+## Tuning knobs
+
+A **live tuning panel** (sliders, bottom-left during a round) exposes the most
+consequential balance levers:
+
+1. **Dodge i-frame duration** (`0.20 s`)
+2. **Shuriken throw velocity** (`600`)
+3. **Pickup radius** (`12 px`)
+4. **Self-hit immunity** window (`0.083 s`)
+5. **Wall-grab fall speed** (`80`)
+
+Dash feel is tuned by constants at the top of `player.gd`:
+`SLIDE_SPEED` (400), `SLIDE_DURATION_S` (0.20), `SLIDE_COOLDOWN_S` (0.417),
+`SLIDE_AIR_REFRESH_S` (0.5).
+
+---
+
+## Known limitations
+
+- **Local 2-player only** — no online, no 4-player yet.
+- **One map** (Sakura Temple).
+- **Procedural beep SFX** generated at startup — no music or final sound design.
+- Some **on-screen menu hints are stale** (e.g. they still list keyboard-only keys);
+  the tables in this README reflect the actual bindings in `main.gd`.
+- Maps and round flow are simplified prototype variants of the design-doc specs.
 
 ---
 
 ## After playtest
 
-Fill in `Result` / `Metrics` / `Recommendation` sections of [`REPORT.md`](REPORT.md).
+Record outcomes in [`REPORT.md`](REPORT.md). Decision criteria (from the concept doc):
 
-Decision criteria from the concept doc MVP Acceptance Criteria:
-- **PROCEED**: at least 3 of 5 first-time playtesters describe the dodge timing as "satisfying" or "fair"; at least 3 of 5 voluntarily request another match
-- **PIVOT**: the loop is workable but a specific tuning value or mechanic needs to change before MVP commit
-- **KILL**: the loop is fundamentally not fun even with extreme tuning — the project's core hypothesis fails
+- **PROCEED** — ≥3 of 5 first-time testers call the dodge timing "satisfying"/"fair" and voluntarily ask for a rematch.
+- **PIVOT** — the loop works but a specific value or mechanic needs changing before MVP.
+- **KILL** — the loop is not fun even with extreme tuning.

@@ -2,9 +2,9 @@
 # Date: 2026-05-18
 #
 # Clan select. Both players pick. Same-clan pick is blocked (other player rejected).
-# P1: A/D move · W confirm · S un-confirm
-# P2: ←/→ move · ↑ confirm · ↓ un-confirm
-# ESC: back to title.
+# P1 = controller (D-pad move, Cross confirm, down un-confirm).
+# P2 = keyboard (A/D move, Space confirm, S un-confirm).
+# Circle / Esc (menu_cancel): back to title.
 
 extends Control
 
@@ -18,6 +18,7 @@ var p1_indicator: Label
 var p2_indicator: Label
 var status_label: Label
 var _last_state_seen: int = -1
+var _input_lockout_until: float = 0.0   # swallow the screen-entry press so it can't bleed into a pick
 
 const TILE_W: float = 140.0
 const TILE_H: float = 180.0
@@ -39,6 +40,7 @@ func _on_visibility_changed() -> void:
 		p2_cursor = GameState.p2_clan
 		p1_confirmed = false
 		p2_confirmed = false
+		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
 
 func _on_state_changed(_s: int) -> void:
@@ -109,7 +111,7 @@ func _build() -> void:
 	add_child(status_label)
 
 	var hint: Label = Label.new()
-	hint.text = "P1: A/D move · W confirm · S unconfirm    P2: ←/→ move · ↑ confirm · ↓ unconfirm    ESC: back"
+	hint.text = "P1 (pad): D-pad move · ✕ confirm · ↓ un-confirm    P2 (keys): A/D move · Space confirm · S un-confirm    ◯/Esc: back"
 	hint.position = Vector2(0, 425)
 	hint.size = Vector2(800, 20)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -119,6 +121,13 @@ func _build() -> void:
 
 func _process(_delta: float) -> void:
 	if not visible:
+		return
+	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
+		return
+	# Back to title — any controller (Circle) or Esc.
+	if Input.is_action_just_pressed("menu_cancel"):
+		Audio.play("click")
+		GameState.change_state(GameState.State.TITLE)
 		return
 	if not p1_confirmed:
 		if Input.is_action_just_pressed("p1_left"):
@@ -140,7 +149,7 @@ func _process(_delta: float) -> void:
 			Audio.play("confirm")
 			_refresh()
 	else:
-		if Input.is_action_just_pressed("p1_crouch"):
+		if Input.is_action_just_pressed("p1_aim_down"):
 			p1_confirmed = false
 			Audio.play("click")
 			_refresh()
@@ -165,21 +174,13 @@ func _process(_delta: float) -> void:
 			Audio.play("confirm")
 			_refresh()
 	else:
-		if Input.is_action_just_pressed("p2_crouch"):
+		if Input.is_action_just_pressed("p2_aim_down"):
 			p2_confirmed = false
 			Audio.play("click")
 			_refresh()
 
 	if p1_confirmed and p2_confirmed:
 		GameState.change_state(GameState.State.MAP_SELECT)
-
-func _input(event: InputEvent) -> void:
-	if not visible:
-		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE:
-			GameState.change_state(GameState.State.TITLE)
-			get_viewport().set_input_as_handled()
 
 func _refresh() -> void:
 	for i in 4:

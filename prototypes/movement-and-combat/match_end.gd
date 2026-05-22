@@ -64,7 +64,7 @@ func _build() -> void:
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_font_size_override("font_size", 16)
 	prompt_label.add_theme_color_override("font_color", Color("a8a498"))
-	prompt_label.text = "W or ↑ — play again (same arena)    T — title screen    ESC — title"
+	prompt_label.text = "✕ / Space — play again (same arena)    ◯ / Esc — title screen"
 	add_child(prompt_label)
 
 func _refresh() -> void:
@@ -85,6 +85,11 @@ func _process(_delta: float) -> void:
 	var t: float = Time.get_ticks_msec() / 1000.0
 	if t < _input_lockout_until:
 		return
+	# Back to title — any controller (Circle) or Esc.
+	if Input.is_action_just_pressed("menu_cancel"):
+		Audio.play("click")
+		GameState.change_state(GameState.State.TITLE)
+		return
 	if Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
 		Audio.play("confirm")
 		GameState.start_new_match()
@@ -96,7 +101,7 @@ func _input(event: InputEvent) -> void:
 	if t < _input_lockout_until:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE or event.keycode == KEY_T:
+		if event.keycode == KEY_T:   # Esc/Circle handled by menu_cancel in _process
 			Audio.play("click")
 			GameState.change_state(GameState.State.TITLE)
 			get_viewport().set_input_as_handled()

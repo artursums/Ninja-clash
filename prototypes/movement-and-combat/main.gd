@@ -41,6 +41,7 @@ var _countdown_stage: int = 0
 var _countdown_stage_until: float = 0.0
 var _round_end_until: float = 0.0
 var _current_loaded_map: int = -1
+var _clash_freeze_until: float = 0.0   # real-time end of the active clash hitstop (0 = none)
 
 func _ready() -> void:
 	print("[MAIN] _ready()")
@@ -49,22 +50,57 @@ func _ready() -> void:
 	_build_overlays()
 	GameState.state_changed.connect(_on_state_changed)
 	Combat.kill_logged.connect(_on_kill_logged)
+	Combat.clash_occurred.connect(_on_clash)
 	GameState.change_state(GameState.State.TITLE)
 	print("[MAIN] _ready() complete")
 
 func _setup_input_map() -> void:
-	_add_key("p1_left",  KEY_A)
-	_add_key("p1_right", KEY_D)
-	_add_key("p1_jump",  KEY_W)
-	_add_key("p1_crouch",KEY_S)
-	_add_key("p1_throw", KEY_SPACE)
-	_add_key("p1_dodge", KEY_SHIFT, KEY_LOCATION_LEFT)
-	_add_key("p2_left",  KEY_LEFT)
-	_add_key("p2_right", KEY_RIGHT)
-	_add_key("p2_jump",  KEY_UP)
-	_add_key("p2_crouch",KEY_DOWN)
-	_add_key("p2_throw", KEY_ENTER)
-	_add_key("p2_dodge", KEY_SHIFT, KEY_LOCATION_RIGHT)
+	# P1 — DualSense only (no keyboard binds; gamepad added by _add_pad below).
+	# P2 — keyboard: WASD move/aim, Space jump, L throw, K katana, Right Shift dodge.
+	#      Dash is double-tap A/D (P2-only, handled in player.gd).
+	_add_key("p2_left",     KEY_A)
+	_add_key("p2_right",    KEY_D)
+	_add_key("p2_aim_up",   KEY_W)         # aims throw upward
+	_add_key("p2_aim_down", KEY_S)         # aims throw downward + menu "back"
+	_add_key("p2_jump",     KEY_SPACE)
+	_add_key("p2_throw",    KEY_L)
+	_add_key("p2_katana",   KEY_K)
+	_add_key("p2_dodge",    KEY_SHIFT, KEY_LOCATION_RIGHT)
+	# Gamepad — TowerFall-on-PlayStation layout, appended to the keyboard binds.
+	# First connected pad → P1, second → P2 (a single DualSense drives P1).
+	_add_pad(1, 0)
+	_add_pad(2, 1)
+	# Global menu input — works from ANY keyboard or controller on every non-gameplay
+	# screen (TowerFall-style). device -1 = all connected gamepads.
+	_add_key("menu_cancel", KEY_ESCAPE)
+	_add_pad_button("menu_cancel", JOY_BUTTON_B, -1)   # Circle ◯ — back / cancel
+	_add_key("menu_random", KEY_X)
+	_add_pad_button("menu_random", JOY_BUTTON_Y, -1)   # Triangle △ — random map
+
+# Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
+# PlayStation scheme. Godot uses position-based face-button names, so on a
+# DualSense: JOY_BUTTON_A=Cross ✕, B=Circle ◯, X=Square ▢, Y=Triangle △.
+func _add_pad(player: int, device: int) -> void:
+	var prefix: String = "p%d" % player
+	# Move / aim — D-pad and the left analog stick.
+	_add_pad_button(prefix + "_left",     JOY_BUTTON_DPAD_LEFT,  device)
+	_add_pad_axis(  prefix + "_left",     JOY_AXIS_LEFT_X, -1.0, device)
+	_add_pad_button(prefix + "_right",    JOY_BUTTON_DPAD_RIGHT, device)
+	_add_pad_axis(  prefix + "_right",    JOY_AXIS_LEFT_X,  1.0, device)
+	_add_pad_button(prefix + "_aim_up",   JOY_BUTTON_DPAD_UP,    device)
+	_add_pad_axis(  prefix + "_aim_up",   JOY_AXIS_LEFT_Y, -1.0, device)
+	_add_pad_button(prefix + "_aim_down", JOY_BUTTON_DPAD_DOWN,  device)
+	_add_pad_axis(  prefix + "_aim_down", JOY_AXIS_LEFT_Y,  1.0, device)
+	# Actions — faithful to TowerFall on PlayStation.
+	_add_pad_button(prefix + "_jump",   JOY_BUTTON_A, device)              # Cross ✕  — jump / menu confirm
+	_add_pad_button(prefix + "_throw",  JOY_BUTTON_X, device)              # Square ▢ — throw shuriken (TowerFall "shoot")
+	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_B, device)              # Circle ◯ — dodge
+	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_LEFT_SHOULDER,  device) # L1       — dodge (TowerFall shoulder dodge)
+	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_RIGHT_SHOULDER, device) # R1       — dodge
+	_add_pad_button(prefix + "_katana", JOY_BUTTON_Y, device)              # Triangle △ — katana melee (no TowerFall equivalent)
+	# Slide/dash — L2 and R2 are one action; direction comes from the stick. Gamepad only.
+	_add_pad_axis(prefix + "_slide", JOY_AXIS_TRIGGER_LEFT,  1.0, device)  # L2
+	_add_pad_axis(prefix + "_slide", JOY_AXIS_TRIGGER_RIGHT, 1.0, device)  # R2
 
 func _add_key(action_name: String, key: int, location: int = 0) -> void:
 	if not InputMap.has_action(action_name):
@@ -76,6 +112,26 @@ func _add_key(action_name: String, key: int, location: int = 0) -> void:
 	ev.keycode = key
 	if location != 0:
 		ev.location = location
+	InputMap.action_add_event(action_name, ev)
+
+# Append a gamepad button to an existing action (does not clear keyboard binds).
+func _add_pad_button(action_name: String, button: int, device: int) -> void:
+	if not InputMap.has_action(action_name):
+		InputMap.add_action(action_name)
+	var ev: InputEventJoypadButton = InputEventJoypadButton.new()
+	ev.button_index = button
+	ev.device = device
+	InputMap.action_add_event(action_name, ev)
+
+# Append an analog-stick direction to an action. axis_value sign selects the
+# half-axis (-1.0 = up/left, 1.0 = down/right); the action's deadzone gates it.
+func _add_pad_axis(action_name: String, axis: int, axis_value: float, device: int) -> void:
+	if not InputMap.has_action(action_name):
+		InputMap.add_action(action_name)
+	var ev: InputEventJoypadMotion = InputEventJoypadMotion.new()
+	ev.axis = axis
+	ev.axis_value = axis_value
+	ev.device = device
 	InputMap.action_add_event(action_name, ev)
 
 func _build_arena() -> void:
@@ -92,13 +148,16 @@ func _build_arena() -> void:
 	sky_bg_solid.z_index = -15
 	arena_root.add_child(sky_bg_solid)
 
-	# Sky background image (TextureRect at z=-10) — preserves aspect ratio
+	# Sky background image (TextureRect at z=-10).
+	# Sized 640×450 (positioned x=80) so it fills the gap between walls with 6 px overlap
+	# onto each wall — no visible black strips. KEEP_ASPECT_COVERED keeps moon round,
+	# crops only ~6% of source vertically (decorative cherry-canopy top + cliff base).
 	sky_rect = TextureRect.new()
-	sky_rect.position = Vector2.ZERO
-	sky_rect.size = Vector2(MAP_W, MAP_H)
+	sky_rect.position = Vector2(80, 0)
+	sky_rect.size = Vector2(640, 450)
 	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	sky_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	sky_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	sky_rect.z_index = -10
 	arena_root.add_child(sky_rect)
 
@@ -189,6 +248,10 @@ func _build_overlays() -> void:
 	canvas.add_child(banner_label)
 
 func _on_state_changed(s: int) -> void:
+	# Safety: never carry a clash freeze across a state change (e.g. ESC mid-clash).
+	if Engine.time_scale != 1.0:
+		Engine.time_scale = 1.0
+	_clash_freeze_until = 0.0
 	var S = GameState.State
 	title_screen.visible = (s == S.TITLE)
 	clan_select_screen.visible = (s == S.CLAN_SELECT)
@@ -215,11 +278,47 @@ func _enter_match_intro() -> void:
 		var clan = GameState.get_clan(p.slot)
 		var sprite: Sprite2D = p.get_node("Visual")
 		var sprite_name: String = clan.get("sprite", "cyan")
-		var path: String = "res://sprites/ninjas/ninja_%s_native_80x16.png" % sprite_name
-		if ResourceLoader.exists(path):
-			sprite.texture = load(path)
-		# Sprite already has clan-specific colors baked in — no tint
+		# Load both pose sheet (5 frames) and idle animation sheet (6 frames)
+		var pose_path: String = "res://sprites/ninjas/ninja_%s_native_80x16.png" % sprite_name
+		var idle_path: String = "res://sprites/ninjas/ninja_%s_idle_6frame_native_96x16.png" % sprite_name
+		if ResourceLoader.exists(pose_path):
+			p.pose_texture = load(pose_path)
+		if ResourceLoader.exists(idle_path):
+			p.idle_texture = load(idle_path)
+		# Start in pose mode (idle mode kicks in via _update_visual when truly idle)
+		sprite.texture = p.pose_texture
+		sprite.hframes = 5
+		sprite.frame = 0
+		p.current_visual_mode = "pose"
 		sprite.modulate = Color.WHITE
+		var kat_path: String = "res://sprites/katanas/katana_v2/katana_%s_v2_6frame_native_192x16.png" % sprite_name
+		# Katana swing visual (child "Katana", hidden until a swing)
+		var old_kat: Node = p.get_node_or_null("Katana")
+		if old_kat != null:
+			old_kat.queue_free()
+		var kat: Sprite2D = Sprite2D.new()
+		kat.name = "Katana"
+		if ResourceLoader.exists(kat_path):
+			kat.texture = load(kat_path)
+		kat.hframes = 6
+		kat.frame = 2
+		kat.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		kat.scale = Vector2(1.5, 1.5)
+		kat.visible = false
+		p.add_child(kat)
+		p.katana_sprite = kat
+
+		# Above-head indicators: hearts (closest), stash, katana charges (highest)
+		var old_ind: Node = p.get_node_or_null("Indicators")
+		if old_ind != null:
+			old_ind.queue_free()
+		var ind_root: Node2D = Node2D.new()
+		ind_root.name = "Indicators"
+		p.add_child(ind_root)
+		var cc: Color = clan.color
+		p.heart_icons  = _make_icon_row(ind_root, 5, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
+		p.stash_icons  = _make_icon_row(ind_root, 5, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
+		p.katana_icons = _make_icon_row(ind_root, 3, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
 		p.respawn(spawn_points[p.slot - 1])
 	if hud != null and hud.has_method("show_map_banner"):
 		hud.show_map_banner(Maps.get_map(GameState.selected_map_index).name)
@@ -258,8 +357,43 @@ func _on_kill_logged(_killer: int, _victim: int) -> void:
 	if GameState.current_state == GameState.State.ROUND:
 		GameState.change_state(GameState.State.ROUND_END)
 
+# Two katanas met. Action-movie beat: arc lightning between the blades, freeze the
+# whole scene for a moment (real-time hitstop), then let it resume with both fighters
+# recoiling a hair apart. Driven entirely off real time so the freeze is solid.
+func _on_clash(a: Node, b: Node, midpoint: Vector2) -> void:
+	# Lightning between the blades — 5-frame clash FX, plays through the freeze.
+	_spawn_fx("res://sprites/fx/clash_lightning_5frame_native_160x32.png", 5, midpoint, 12.0, 2.0)
+	# Push each fighter away from the other (small, very slight).
+	var dir_a: int = 1 if a.global_position.x >= b.global_position.x else -1
+	if a.has_method("apply_clash_recoil"):
+		a.apply_clash_recoil(dir_a)
+	if b.has_method("apply_clash_recoil"):
+		b.apply_clash_recoil(-dir_a)
+	# Freeze the scene. Real-time clock restores it in _process (which runs even at scale 0).
+	Engine.time_scale = 0.0
+	_clash_freeze_until = Time.get_ticks_msec() / 1000.0 + Combat.clash_freeze_duration_s
+	Audio.play("hit")   # placeholder clash clang
+
+# Spawn a one-shot strip animation (fx_anim.gd) at a world position, above the action.
+func _spawn_fx(tex_path: String, frame_count: int, pos: Vector2, fps: float, scale: float) -> void:
+	if not ResourceLoader.exists(tex_path):
+		return
+	var fx: Sprite2D = Sprite2D.new()
+	fx.set_script(load("res://fx_anim.gd"))
+	fx.frame_count = frame_count
+	fx.fps = fps
+	fx.texture = load(tex_path)
+	fx.position = pos
+	fx.scale = Vector2(scale, scale)
+	fx.z_index = 60
+	arena_root.add_child(fx)
+
 func _process(_delta: float) -> void:
 	var t: float = Time.get_ticks_msec() / 1000.0
+	# End the clash hitstop on real time (Engine.time_scale==0 still ticks _process).
+	if _clash_freeze_until > 0.0 and t >= _clash_freeze_until:
+		_clash_freeze_until = 0.0
+		Engine.time_scale = 1.0
 	if _in_countdown and t >= _countdown_stage_until:
 		_countdown_stage += 1
 		if _countdown_stage >= STAGE_DURATIONS.size():
@@ -339,6 +473,26 @@ func _apply_sky_background(top_color: Color, bottom_color: Color) -> bool:
 	tex.height = MAP_H
 	sky_rect.texture = tex
 	return false
+
+# Build a horizontal row of small icons centered on x=0 at the given y (relative to player).
+# frame=-1 means single-frame texture; hframes>1 selects a frame from a sprite sheet.
+func _make_icon_row(parent: Node2D, count: int, tex_path: String, frame: int, hframes: int,
+		scale: float, spacing: float, y: float, mod_color: Color) -> Array:
+	var icons: Array = []
+	var tex: Texture2D = load(tex_path) if ResourceLoader.exists(tex_path) else null
+	for i in count:
+		var icon: Sprite2D = Sprite2D.new()
+		icon.texture = tex
+		if hframes > 1:
+			icon.hframes = hframes
+			icon.frame = frame
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		icon.scale = Vector2(scale, scale)
+		icon.position = Vector2((i - (count - 1) * 0.5) * spacing, y)
+		icon.modulate = mod_color
+		parent.add_child(icon)
+		icons.append(icon)
+	return icons
 
 func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform") -> StaticBody2D:
 	var body: StaticBody2D = StaticBody2D.new()

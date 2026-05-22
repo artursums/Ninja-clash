@@ -10,6 +10,7 @@ var cursor: int = 0
 var tiles: Array = []
 var name_labels: Array = []
 var status_label: Label
+var _input_lockout_until: float = 0.0   # swallow the screen-entry press so it can't bleed into confirm
 const TILE_W: float = 150.0
 const TILE_H: float = 110.0
 const SPACING: float = 16.0
@@ -25,6 +26,7 @@ func _ready() -> void:
 func _on_visibility_changed() -> void:
 	if visible:
 		cursor = GameState.selected_map_index
+		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
 
 func _build() -> void:
@@ -108,7 +110,7 @@ func _build() -> void:
 	add_child(status_label)
 
 	var hint: Label = Label.new()
-	hint.text = "A/D or ←/→ move    W or ↑ confirm    X random    ESC back"
+	hint.text = "move: stick/D-pad or A/D    confirm: ✕ / Space    random: △ / X    back: ◯ / Esc"
 	hint.position = Vector2(0, 420)
 	hint.size = Vector2(800, 20)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -118,6 +120,18 @@ func _build() -> void:
 
 func _process(_delta: float) -> void:
 	if not visible:
+		return
+	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
+		return
+	# Back to clan select (Circle / Esc) and random map (Triangle / X) — any controller.
+	if Input.is_action_just_pressed("menu_cancel"):
+		GameState.change_state(GameState.State.CLAN_SELECT)
+		return
+	if Input.is_action_just_pressed("menu_random"):
+		cursor = randi() % Maps.count()
+		GameState.selected_map_index = cursor
+		Audio.play("confirm")
+		GameState.start_new_match()
 		return
 	var count: int = Maps.count()
 	if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p2_left"):
@@ -132,20 +146,6 @@ func _process(_delta: float) -> void:
 		GameState.selected_map_index = cursor
 		Audio.play("confirm")
 		GameState.start_new_match()
-
-func _input(event: InputEvent) -> void:
-	if not visible:
-		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE:
-			GameState.change_state(GameState.State.CLAN_SELECT)
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_X:
-			cursor = randi() % Maps.count()
-			GameState.selected_map_index = cursor
-			Audio.play("confirm")
-			GameState.start_new_match()
-			get_viewport().set_input_as_handled()
 
 func _refresh() -> void:
 	for i in tiles.size():

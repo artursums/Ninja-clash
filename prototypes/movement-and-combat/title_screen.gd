@@ -59,7 +59,7 @@ func _build() -> void:
 	add_child(prompt)
 
 	var footer: Label = Label.new()
-	footer.text = "v0 prototype  ·  2P keyboard local  ·  placeholder art"
+	footer.text = "v0 prototype  ·  gamepad + keyboard  ·  P1 = controller, P2 = keyboard"
 	footer.position = Vector2(0, 410)
 	footer.size = Vector2(800, 30)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -70,7 +70,10 @@ func _build() -> void:
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
-	if event is InputEventKey and event.pressed and not event.echo:
+	# "Press anything to begin" — any key or any controller button.
+	var key_press: bool = event is InputEventKey and event.pressed and not event.echo
+	var pad_press: bool = event is InputEventJoypadButton and event.pressed
+	if key_press or pad_press:
 		Audio.play("confirm")
 		GameState.change_state(GameState.State.CLAN_SELECT)
 		get_viewport().set_input_as_handled()
