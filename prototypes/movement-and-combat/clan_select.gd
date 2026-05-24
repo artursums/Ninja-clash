@@ -124,10 +124,24 @@ func _process(_delta: float) -> void:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
-	# Back to title — any controller (Circle) or Esc.
+	# Back to mode select — any controller (Circle) or Esc.
 	if Input.is_action_just_pressed("menu_cancel"):
 		Audio.play("click")
-		GameState.change_state(GameState.State.TITLE)
+		GameState.change_state(GameState.State.MODE_SELECT)
+		return
+	# Free-for-all: only P1 picks; the three bots take the remaining clans automatically.
+	if GameState.game_mode == GameState.Mode.FFA:
+		if Input.is_action_just_pressed("p1_left"):
+			p1_cursor = (p1_cursor + 3) % 4
+			Audio.play("click"); _refresh()
+		elif Input.is_action_just_pressed("p1_right"):
+			p1_cursor = (p1_cursor + 1) % 4
+			Audio.play("click"); _refresh()
+		elif Input.is_action_just_pressed("p1_jump"):
+			GameState.p1_clan = p1_cursor
+			GameState.assign_ffa_clans()
+			Audio.play("confirm")
+			GameState.change_state(GameState.State.MAP_SELECT)
 		return
 	if not p1_confirmed:
 		if Input.is_action_just_pressed("p1_left"):
@@ -207,6 +221,14 @@ func _refresh() -> void:
 	p2_indicator.text = "▲ P2 LOCKED" if p2_confirmed else "▲ P2"
 	p1_indicator.add_theme_color_override("font_color", GameState.CLANS[p1_cursor].color)
 	p2_indicator.add_theme_color_override("font_color", GameState.CLANS[p2_cursor].color)
+
+	# FFA: hide the P2 marker — only P1 chooses, the 3 bots take the rest.
+	if GameState.game_mode == GameState.Mode.FFA:
+		p2_indicator.visible = false
+		status_label.text = "P1: pick your clan — the 3 bots take the rest"
+		status_label.add_theme_color_override("font_color", Color("a8a498"))
+		return
+	p2_indicator.visible = true
 
 	if p1_confirmed and p2_confirmed:
 		status_label.text = "starting..."

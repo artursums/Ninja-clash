@@ -11,9 +11,9 @@
 
 ## Screenshots
 
-| Title | Clan select | Map select |
-|---|---|---|
-| ![Title](screenshots/01_title.png) | ![Clan select](screenshots/02_clan_select.png) | ![Map select](screenshots/03_map_select.png) |
+| Title | Mode select | Clan select | Map select |
+|---|---|---|---|
+| ![Title](screenshots/01_title.png) | ![Mode select](screenshots/02_mode_select.png) | ![Clan select](screenshots/02_clan_select.png) | ![Map select](screenshots/03_map_select.png) |
 
 ---
 
@@ -48,9 +48,8 @@ controller, Player 2 = second controller.
 |---|---|---|
 | Move / aim | **D-pad** or **Left Stick** | 8-directional; also aims throws and the dash |
 | Jump | **Cross ✕** | double jump in air; wall-jump off walls; also confirms menus |
-| Throw shuriken | **Square ▢** | hold a vertical direction to throw up/down |
-| Dodge | **Circle ◯**, **L1**, **R1** | invincibility frames; catches incoming shurikens |
-| Dash | **L2** or **R2** | 8-way burst toward the held direction (see *Dash* below) |
+| Throw shuriken | **Square ▢** | **hold to aim** (reticle shows the 8-way direction), **release to fire**; a quick tap is a quick-draw. See *Throwing & aiming* below. |
+| Dash-dodge | **L2**, **R2**, **Circle ◯** | one move: 8-way burst + i-frames that catch a shuriken (see below) |
 | Katana | **Triangle △** | melee swing; deflects shurikens, damages enemies |
 
 ### Keyboard (Player 2)
@@ -64,13 +63,12 @@ controller, Player 2 = second controller.
 | Aim up | **W** |
 | Aim down | **S** |
 | Jump | **Space** |
-| Throw shuriken | **L** |
+| Throw shuriken | **L** (hold to aim, release to fire) |
 | Katana | **K** |
-| Dodge | **Right Shift** |
-| Dash | **double-tap A or D** |
+| Dash-dodge | **Right Shift** or **double-tap A / D** |
 
-P2's dash is a quick double-tap of a movement key (P2-only, so the gamepad stick can't
-trigger it). On a gamepad, dash is L2/R2 as in the table above.
+The double-tap is P2-only (so the gamepad stick can't trigger it). On a gamepad the
+dash-dodge is L2 / R2 / Circle, as in the table above.
 
 ### Menu navigation (any controller or the keyboard, on every screen)
 
@@ -92,21 +90,33 @@ trigger it). On a gamepad, dash is L2/R2 as in the table above.
 - **Head-stomp**: land on an opponent's head to deal damage and bounce off.
 - **Screen wrap**: fall off the bottom and reappear at the top (and vice-versa).
 
-### Dash (L2 / R2)
-A short directional burst toward the held aim — 8-way, including straight up and
-diagonals. Gravity is suspended for its duration so up/diagonal dashes hold a clean line.
+### Dash-dodge (L2 / R2 / Circle ◯)
+**The dash and the dodge are one move** — a directional burst that *is* a dodge.
+A short 8-way burst toward the held aim (incl. straight up and diagonals; gravity is
+suspended for its duration so up/diagonal dashes hold a clean line), with brief
+**invincibility frames** that **catch** an incoming shuriken straight into your stash
+(or deflect it back if your stash is full).
 
-- **One charge.** In the air you get exactly **one** dash; it does not return until
-  you touch a **floor or wall** — so you cannot infinitely climb.
-- **Ground cooldown ≈ 0.417 s** between dashes (TowerFall's 25-frame dodge cooldown).
-- After spending the air dash, the charge returns **0.5 s after** you touch a surface.
-- L2 and R2 are the *same* action — direction comes from the stick, not the trigger.
+- **Time it** — TowerFall-style: short i-frames then a **cooldown (~0.42 s)**, so you
+  must dash *just before* a shuriken hits. Blanket-dashing won't catch them.
+- **One air charge** — airborne you get exactly one until you touch a **floor or wall**
+  (no infinite climbing). After spending it, the charge returns **0.5 s after** you land.
+- **No glow** — the move reads from its dash pose/animation, not a flash.
+- Direction comes from the stick/keys, not from which trigger you press.
 
-### Dodge (Circle / L1 / R1)
-A horizontal dash with **invincibility frames**. While the i-frames are active (the
-yellow flash) you are immune to all hits **and** you **catch** an incoming shuriken
-straight into your stash (or reflect it if your stash is already full). This is the
-signature defensive/retrieval move.
+**Shurikens vanish only on a clean hit.** Landing a damaging hit on an opponent spends the
+blade and removes it — the *only* way a shuriken leaves the round. Every other interaction
+keeps it in play and retrievable: a katana deflect or a shuriken-vs-shuriken counter sends
+it flying off to stick somewhere, and a miss sticks where it lands. So blades only thin out
+when someone actually gets hit.
+
+### Throwing & aiming (TowerFall-style)
+- **Hold** the throw button to aim: a clan-colored **reticle** appears showing which of
+  the **8 directions** you're aiming, and you **stand still** (movement input becomes
+  pure aim) — this makes diagonals easy. **Release** to fire that way.
+- A quick **tap** is a *quick-draw* — fires immediately in the held/facing direction.
+- Aiming freezes you only on the ground; in the air you keep your momentum (no
+  air-control while aiming). Hold duration does not affect throw speed.
 
 ### Combat
 - **5 HP** per life, shown as hearts above the ninja. Shurikens, katana hits, and
@@ -122,12 +132,30 @@ signature defensive/retrieval move.
 ## Match flow
 
 1. **Title** — "FOUR CLANS". Press any input to begin.
-2. **Clan select** — both players pick from **Shadow / Storm / Frost / Fire**
-   (same-clan picks are rejected).
-3. **Map select** — choose the arena.
-4. **Match** — first to **5 eliminations** wins. Each round opens with a 3-2-1-FIGHT
-   countdown, runs until one ninja is eliminated, pauses ~1.6 s on the winner, then repeats.
-5. **Match end** — winning clan + final score; rematch or return to title.
+2. **Mode select** — **P1 vs P2** / **P1 vs AI** / **AI vs AI** / **P1 vs 3 (FFA)**, plus AI
+   difficulty (←/→ mode, ↑/↓ difficulty). See *Modes & AI* below.
+3. **Clan select** — players pick from **Shadow / Storm / Frost / Fire** (same-clan picks
+   rejected in duels). In **FFA** only P1 picks; the three bots take the remaining clans.
+4. **Map select** — choose the arena.
+5. **Match** — first to **5 round-wins** takes the match. A round runs until **one ninja is
+   left standing** (the survivor scores), opening with a 3-2-1-FIGHT countdown and pausing
+   ~1.6 s on the winner before the next round.
+6. **Match end** — winning clan + final score; rematch or return to title.
+
+## Modes & AI
+
+| Mode | Who controls whom |
+|---|---|
+| **P1 vs P2** | both human (controller + keyboard) |
+| **P1 vs AI** | you (P1) vs a bot (P2) — *beat the AI* |
+| **AI vs AI** | both bots fight — *watch a demo* |
+| **P1 vs 3 (FFA)** | you (P1) vs **three bots**, free-for-all — last ninja standing wins the round |
+
+The bot has three skill tiers, named after ninja ranks — **GENIN** (already a competent
+fighter), **CHUNIN** (hard), **JONIN** (brutal). Higher tiers dodge your shurikens more
+reliably, fire faster, space tighter, and press melee harder. Even GENIN dodges, retrieves
+ammo, throws on-line, jumps to chase, and swings up close. The match mode + tier is shown
+top-right during a round.
 
 ---
 

@@ -34,12 +34,15 @@ var clan_select_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
 var hud: Control
+var mode_select_screen: Control
 var banner_label: Label
+var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
 
 var _in_countdown: bool = false
 var _countdown_stage: int = 0
 var _countdown_stage_until: float = 0.0
 var _round_end_until: float = 0.0
+var _round_winner_slot: int = 0   # survivor of the round (last ninja standing), 0 = draw
 var _current_loaded_map: int = -1
 var _clash_freeze_until: float = 0.0   # real-time end of the active clash hitstop (0 = none)
 
@@ -174,37 +177,53 @@ func _build_arena() -> void:
 	fg_decorations.z_index = -2
 	arena_root.add_child(fg_decorations)
 
-	# Players (spawned once, respawned per round)
-	var PlayerScript: Script = load("res://player.gd")
-	for slot in [1, 2]:
-		var p = CharacterBody2D.new()
-		p.set_script(PlayerScript)
-		p.slot = slot
-		p.facing = 1 if slot == 1 else -1
-		p.position = spawn_points[slot - 1]
-		var col: CollisionShape2D = CollisionShape2D.new()
-		var rect: RectangleShape2D = RectangleShape2D.new()
-		rect.size = Vector2(PLAYER_W, PLAYER_H)
-		col.shape = rect
-		p.add_child(col)
-		var sprite: Sprite2D = Sprite2D.new()
-		sprite.name = "Visual"
-		sprite.centered = true
-		# 5-frame horizontal sprite sheet (idle/walk1/walk2/jump/attack)
-		sprite.hframes = 5
-		sprite.vframes = 1
-		sprite.frame = 0
-		# Pixel-perfect: nearest filter, integer 2x scale (16x16 → 32x32)
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		sprite.scale = Vector2(2.0, 2.0)
-		# Offset.y=3 (×2 scale = 6px display) aligns feet with hitbox bottom
-		sprite.offset = Vector2(0.0, 3.0)
-		# Default texture — replaced per-clan in _enter_match_intro
-		sprite.texture = load("res://sprites/ninjas/ninja_cyan_native_80x16.png")
-		p.add_child(sprite)
-		arena_root.add_child(p)
-		players.append(p)
-		print("[MAIN] Pre-spawned player slot=", slot)
+	# Players — created to match the mode's fighter count (2 duel · 4 free-for-all).
+	_ensure_player_count(GameState.num_players())
+
+# Spawn position for a fighter slot. The free-for-all needs four; the map provides two,
+# so slots 3-4 use the upper-side platforms.
+func _player_spawn(slot: int) -> Vector2:
+	if GameState.num_players() >= 4:
+		var ffa: Array = [Vector2(230, 340), Vector2(570, 340), Vector2(220, 170), Vector2(580, 170)]
+		return ffa[(slot - 1) % ffa.size()]
+	return spawn_points[(slot - 1) % spawn_points.size()]
+
+func _make_player(slot: int) -> CharacterBody2D:
+	var p: CharacterBody2D = CharacterBody2D.new()
+	p.set_script(load("res://player.gd"))
+	p.slot = slot
+	p.facing = 1 if slot <= 2 else -1
+	p.position = _player_spawn(slot)
+	var col: CollisionShape2D = CollisionShape2D.new()
+	var rect: RectangleShape2D = RectangleShape2D.new()
+	rect.size = Vector2(PLAYER_W, PLAYER_H)
+	col.shape = rect
+	p.add_child(col)
+	var sprite: Sprite2D = Sprite2D.new()
+	sprite.name = "Visual"
+	sprite.centered = true
+	# 5-frame horizontal sprite sheet (idle/walk1/walk2/jump/attack)
+	sprite.hframes = 5
+	sprite.vframes = 1
+	sprite.frame = 0
+	# Pixel-perfect: nearest filter, integer 2x scale (16x16 → 32x32)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.scale = Vector2(2.0, 2.0)
+	# Offset.y=3 (×2 scale = 6px display) aligns feet with hitbox bottom
+	sprite.offset = Vector2(0.0, 3.0)
+	# Default texture — replaced per-clan in _enter_match_intro
+	sprite.texture = load("res://sprites/ninjas/ninja_cyan_native_80x16.png")
+	p.add_child(sprite)
+	arena_root.add_child(p)
+	return p
+
+# Create or free player nodes so the arena holds exactly `n` fighters.
+func _ensure_player_count(n: int) -> void:
+	while players.size() < n:
+		players.append(_make_player(players.size() + 1))
+	while players.size() > n:
+		var p = players.pop_back()
+		p.queue_free()
 
 func _build_overlays() -> void:
 	canvas = CanvasLayer.new()
@@ -214,6 +233,11 @@ func _build_overlays() -> void:
 	title_screen = Control.new()
 	title_screen.set_script(TitleScript)
 	canvas.add_child(title_screen)
+
+	var ModeSelScript: Script = load("res://mode_select.gd")
+	mode_select_screen = Control.new()
+	mode_select_screen.set_script(ModeSelScript)
+	canvas.add_child(mode_select_screen)
 
 	var ClanSelScript: Script = load("res://clan_select.gd")
 	clan_select_screen = Control.new()
@@ -247,6 +271,25 @@ func _build_overlays() -> void:
 	banner_label.text = ""
 	canvas.add_child(banner_label)
 
+	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
+	mode_label = Label.new()
+	mode_label.position = Vector2(540, 6)
+	mode_label.size = Vector2(254, 18)
+	mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	mode_label.add_theme_font_size_override("font_size", 11)
+	mode_label.add_theme_color_override("font_color", Color("8a8ea8"))
+	mode_label.visible = false
+	canvas.add_child(mode_label)
+
+func _update_mode_label() -> void:
+	if mode_label == null:
+		return
+	var names: Array = ["P1 vs P2", "P1 vs AI", "AI vs AI", "P1 vs 3 · FFA"]
+	var txt: String = names[GameState.game_mode]
+	if GameState.game_mode != GameState.Mode.HUMAN_VS_HUMAN:
+		txt += "  ·  " + GameState.DIFFICULTY_NAMES[GameState.ai_difficulty]
+	mode_label.text = txt
+
 func _on_state_changed(s: int) -> void:
 	# Safety: never carry a clash freeze across a state change (e.g. ESC mid-clash).
 	if Engine.time_scale != 1.0:
@@ -254,11 +297,15 @@ func _on_state_changed(s: int) -> void:
 	_clash_freeze_until = 0.0
 	var S = GameState.State
 	title_screen.visible = (s == S.TITLE)
+	mode_select_screen.visible = (s == S.MODE_SELECT)
 	clan_select_screen.visible = (s == S.CLAN_SELECT)
 	map_select_screen.visible = (s == S.MAP_SELECT)
 	match_end_screen.visible = (s == S.MATCH_END)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
+	mode_label.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
+	if mode_label.visible:
+		_update_mode_label()
 
 	if s == S.MATCH_INTRO:
 		_enter_match_intro()
@@ -274,6 +321,7 @@ func _enter_match_intro() -> void:
 	_clear_shurikens()
 	if _current_loaded_map != GameState.selected_map_index:
 		_load_map(GameState.selected_map_index)
+	_ensure_player_count(GameState.num_players())
 	for p in players:
 		var clan = GameState.get_clan(p.slot)
 		var sprite: Sprite2D = p.get_node("Visual")
@@ -308,10 +356,16 @@ func _enter_match_intro() -> void:
 		p.add_child(kat)
 		p.katana_sprite = kat
 
-		# Above-head indicators: hearts (closest), stash, katana charges (highest)
-		var old_ind: Node = p.get_node_or_null("Indicators")
-		if old_ind != null:
-			old_ind.queue_free()
+		# Above-head indicators: hearts (closest), stash, katana charges (highest).
+		# Free EVERY prior indicator row, renaming first so the deferred queue_free can't
+		# leave a name collision: add_child auto-renames a new "Indicators" to "Indicators2"
+		# while the old one lingers, so next round get_node_or_null("Indicators") misses it
+		# and it's never freed — an orphan row whose icons are never updated again, leaving
+		# frozen hearts hovering over a dead/respawned ninja. Rename + free all of them.
+		for child in p.get_children():
+			if String(child.name).begins_with("Indicators"):
+				child.name = "_old_indicators"
+				child.queue_free()
 		var ind_root: Node2D = Node2D.new()
 		ind_root.name = "Indicators"
 		p.add_child(ind_root)
@@ -319,7 +373,9 @@ func _enter_match_intro() -> void:
 		p.heart_icons  = _make_icon_row(ind_root, 5, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
 		p.stash_icons  = _make_icon_row(ind_root, 5, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
 		p.katana_icons = _make_icon_row(ind_root, 3, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
-		p.respawn(spawn_points[p.slot - 1])
+		p.respawn(_player_spawn(p.slot))
+		p.is_bot = GameState.slot_is_bot(p.slot)
+		p.bot_difficulty = GameState.ai_difficulty
 	if hud != null and hud.has_method("show_map_banner"):
 		hud.show_map_banner(Maps.get_map(GameState.selected_map_index).name)
 	_start_countdown()
@@ -330,7 +386,11 @@ func _enter_round() -> void:
 
 func _enter_round_end() -> void:
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
-	var winner_slot: int = GameState.last_kill_killer
+	var winner_slot: int = _round_winner_slot if _round_winner_slot > 0 else GameState.last_kill_killer
+	if winner_slot <= 0:
+		banner_label.text = "DRAW"
+		banner_label.add_theme_color_override("font_color", Color("a8a498"))
+		return
 	var clan: Dictionary = GameState.get_clan(winner_slot)
 	banner_label.text = "%s WINS ROUND" % clan.name
 	banner_label.add_theme_color_override("font_color", clan.color)
@@ -354,7 +414,20 @@ func _advance_countdown_stage() -> void:
 	_countdown_stage_until = Time.get_ticks_msec() / 1000.0 + STAGE_DURATIONS[_countdown_stage]
 
 func _on_kill_logged(_killer: int, _victim: int) -> void:
-	if GameState.current_state == GameState.State.ROUND:
+	if GameState.current_state != GameState.State.ROUND:
+		return
+	# Last ninja standing: the round ends only when one (or none) remain alive.
+	var alive_count: int = 0
+	_round_winner_slot = 0
+	for p in players:
+		if p.alive:
+			alive_count += 1
+			_round_winner_slot = p.slot
+	if alive_count <= 1:
+		if alive_count == 1:
+			Combat.award_survivor(_round_winner_slot)
+		else:
+			_round_winner_slot = 0   # double-KO — no winner this round
 		GameState.change_state(GameState.State.ROUND_END)
 
 # Two katanas met. Action-movie beat: arc lightning between the blades, freeze the
@@ -363,15 +436,16 @@ func _on_kill_logged(_killer: int, _victim: int) -> void:
 func _on_clash(a: Node, b: Node, midpoint: Vector2) -> void:
 	# Lightning between the blades — 5-frame clash FX, plays through the freeze.
 	_spawn_fx("res://sprites/fx/clash_lightning_5frame_native_160x32.png", 5, midpoint, 12.0, 2.0)
-	# Push each fighter away from the other (small, very slight).
+	# Push each fighter away from the other and HITSTOP only those two — never a global
+	# time-freeze — so the other players in a 4-player match keep playing while these two clash.
 	var dir_a: int = 1 if a.global_position.x >= b.global_position.x else -1
+	var until: float = Time.get_ticks_msec() / 1000.0 + Combat.clash_freeze_duration_s
 	if a.has_method("apply_clash_recoil"):
 		a.apply_clash_recoil(dir_a)
+		a.frozen_until = until
 	if b.has_method("apply_clash_recoil"):
 		b.apply_clash_recoil(-dir_a)
-	# Freeze the scene. Real-time clock restores it in _process (which runs even at scale 0).
-	Engine.time_scale = 0.0
-	_clash_freeze_until = Time.get_ticks_msec() / 1000.0 + Combat.clash_freeze_duration_s
+		b.frozen_until = until
 	Audio.play("hit")   # placeholder clash clang
 
 # Spawn a one-shot strip animation (fx_anim.gd) at a world position, above the action.

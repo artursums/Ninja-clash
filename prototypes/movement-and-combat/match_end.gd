@@ -73,11 +73,10 @@ func _refresh() -> void:
 	winner_label.text = "%s WINS" % clan.name
 	winner_label.add_theme_color_override("font_color", clan.color)
 	subline.text = "match victory"
-	var p1c: Dictionary = GameState.get_clan(1)
-	var p2c: Dictionary = GameState.get_clan(2)
-	tally_label.text = "%s  %d  —  %d  %s" % [
-		p1c.name, Combat.scores.get(1, 0), Combat.scores.get(2, 0), p2c.name,
-	]
+	var parts: PackedStringArray = PackedStringArray()
+	for slot in range(1, GameState.num_players() + 1):
+		parts.append("%s %d" % [GameState.get_clan(slot).name, Combat.scores.get(slot, 0)])
+	tally_label.text = "    ·    ".join(parts)
 
 func _process(_delta: float) -> void:
 	if not visible:

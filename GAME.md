@@ -111,8 +111,7 @@ on the keyboard (or a second controller). A single DualSense drives P1.
 | Move / aim | D-pad / Left Stick | A D W S |
 | Jump (double-jump; wall-jump) | Cross ✕ | Space |
 | Throw shuriken | Square ▢ | L |
-| Dodge (i-frames; catches shurikens) | Circle ◯ / L1 / R1 | Right Shift |
-| Dash (8-way burst) | L2 / R2 | double-tap A / D |
+| Dash-dodge (8-way burst + i-frame catch) | L2 / R2 / Circle ◯ | Right Shift or double-tap A / D |
 | Katana (melee swing) | Triangle △ | K |
 
 Hold a vertical direction while throwing to aim up/down. Full mapping + dash/dodge rules:
@@ -129,9 +128,14 @@ production. Full doc + screenshots: [its README](prototypes/movement-and-combat/
 Validates the central hypothesis: *"The throw-dodge-retrieve loop is intrinsically fun in 2-player
 local play for 15+ minute sessions."*
 
-It runs the full simulated flow — title → clan select → map select → match (first-to-5) → match end —
-on **1 arena (Sakura Temple)**, with live tuning sliders for the key balance levers, **pixel-art ninjas
-and backdrop**, and procedural beep SFX. **Run:** open the folder in Godot 4.6, F5, pick `Main.tscn`.
+It runs the full simulated flow — title → mode select → clan select → map select → match (first-to-5) →
+match end — on **1 arena (Sakura Temple)**, with live tuning sliders for the key balance levers,
+**pixel-art ninjas and backdrop**, and procedural beep SFX. **Run:** open the folder in Godot 4.6, F5,
+pick `Main.tscn`.
+
+A **mode select** offers **P1 vs P2 / P1 vs AI / AI vs AI** with a 3-tier bot (GENIN / CHUNIN / JONIN) —
+so you can play a friend, try to beat the AI, or watch an AI-vs-AI demo. *(This is prototype scope; the
+design defers Bot AI to v1.x — the bot here is an early experiment for feel, not the shipping AI.)*
 
 > ⚠️ **The prototype has diverged from the design above.** It currently uses a **5-HP health system
 > plus a katana melee (3 charges)** instead of the design's **one-hit-kill, no-abilities** rules

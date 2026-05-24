@@ -75,5 +75,5 @@ func _input(event: InputEvent) -> void:
 	var pad_press: bool = event is InputEventJoypadButton and event.pressed
 	if key_press or pad_press:
 		Audio.play("confirm")
-		GameState.change_state(GameState.State.CLAN_SELECT)
+		GameState.change_state(GameState.State.MODE_SELECT)
 		get_viewport().set_input_as_handled()
