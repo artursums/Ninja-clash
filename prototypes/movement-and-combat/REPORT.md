@@ -1,8 +1,7 @@
 # Prototype Report: Movement and Combat
 
-> **Status**: PRE-PLAYTEST — Hypothesis + Approach filled in; Result + Metrics + Recommendation **left blank for the playtest session**.
->
-> See [README.md](README.md) for playtest instructions. Fill the remaining sections after a real playtest.
+> **Status**: CONCLUDED — **PROCEED** (developer-confidence, recorded 2026-05-26). See Recommendation below.
+> A formal 2+ human social playtest is still recommended early in production (not blocking).
 
 ---
 
@@ -61,40 +60,58 @@ If even one of these sub-hypotheses fails decisively, the whole loop is in quest
 > - "Pickup radius 12 felt cramped — players sometimes ran past stuck shurikens; 18 felt comfortable."
 > - "Self-hit immunity at 0 caused 3 accidental spawn-suicides in the first 2 minutes; at 0.083 zero accidents over 10 rounds."
 
-**[Fill in here.]**
+**PROCEED.** (Recorded 2026-05-26.) The throw–dodge–retrieve loop was validated through
+extensive hands-on iteration across multiple sessions (solo and keyboard-vs-bot). The
+developer's judgment is that the core loop is fun, has the "one more match" pull, and that
+the mechanics read clearly. This cycle also explored several feel changes beyond the original
+three sub-hypotheses:
+
+- **Double jump removed** — vertical movement now relies on the single jump + wall-jumps +
+  head-stomps; reads as cleaner, not worse.
+- **Dash/dodge** — straight-up dash height capped to match the diagonal; the cooldown now
+  resets instantly on landing (the old air-dash penalty felt too long).
+- **Katana** — added a real post-swing recovery cooldown (the previous one was dead code).
+- **L2/J defense (guard)** — prototyped, then **held out of v1** pending validation (off-GDD;
+  pushes on the purist anti-pillars).
+
+> **Caveat — honesty note:** a formal multi-tester (2+ human) social playtest with recorded
+> metrics was **not** separately captured. This is a *developer-confidence* PROCEED based on
+> heavy iterative testing. A social playtest is still recommended early in production as cheap
+> insurance, but it is not blocking the decision to build.
 
 ---
 
 ## Metrics
 
-> **TO FILL IN AFTER PLAYTEST.** Even rough numbers are valuable — "we played for 15 minutes, here's what we noticed" beats "felt good."
+> Formal structured metrics were not separately captured this cycle (single-developer
+> iterative testing). Recorded below: what is known, and the tuning values carried forward.
 
-- **Playtester count**: N people (target: 2+ humans — solo testing both halves of the keyboard is OK for the first pass but the social feel can't be tested solo)
-- **Total playtest duration**: X minutes
-- **Rounds completed**: N rounds across M matches
-- **Sub-minute round rate**: X / N rounds ended in <60 s? (concept target: 30–60 s)
-- **Frame time** (if observed in `top` / Godot's monitor): peak ms per frame during 2P chaos
-- **Tuning values that felt right** (final slider positions after iteration):
-  - `dodge_iframe_duration_s`: ____ (default 0.20)
-  - `shuriken_throw_velocity`: ____ (default 200)
-  - `pickup_radius_px`: ____ (default 12)
-  - `self_hit_immunity_s`: ____ (default 0.083)
-- **Subjective feel notes** (specific, not "good/bad"):
-  - Dodge feel: ____
-  - Throw arc feel: ____
-  - Retrieval feel: ____
-  - Kill clarity (do you know why you died?): ____
-- **Concept-doc MVP acceptance check**:
-  - At least 3 of 5 playtesters describe dodge timing as "satisfying" or "fair"? ____
-  - At least 3 of 5 voluntarily request another match after their first? ____
+- **Playtester count**: 1 (developer), solo + vs bot — formal multi-tester session not yet run
+- **Total playtest duration**: multiple iterative sessions (not separately timed)
+- **Rounds completed**: not formally counted
+- **Sub-minute round rate**: not measured (concept target: 30–60 s)
+- **Frame time**: no errors and no perceived hitching in headless + windowed runs (Apple M3)
+- **Tuning values carried forward** (prototype `Combat` autoload defaults — to be pinned in production config):
+  - `dodge_iframe_duration_s`: 0.20 (default kept)
+  - `shuriken_throw_velocity`: 200 (default kept)
+  - `pickup_radius_px`: 12 (default kept)
+  - `self_hit_immunity_s`: 0.083 (default kept)
+  - Movement: `MAX_HSPEED` 158.4 · `JUMP_STRENGTH` 480 · single jump (no double jump) ·
+    `SLIDE_SPEED` 400 with up-dash capped to `SLIDE_SPEED·sin45°` · dash recharges on floor touch
+  - Katana: swing 0.32 s + 0.20 s recovery cooldown
+- **Subjective feel notes**: developer-confident the loop is fun; per-tester notes pending a social playtest
+- **Concept-doc MVP acceptance check**: not formally measured (single-developer decision)
 
 ---
 
-## Recommendation: **[PROCEED / PIVOT / KILL]**
+## Recommendation: **PROCEED**
 
-> **TO FILL IN AFTER PLAYTEST.** One paragraph with evidence.
-
-**[Fill in here.]**
+Developer-confidence PROCEED. After extensive hands-on iteration, the core throw–dodge–retrieve
+loop is judged fun and buildable, and the prototype has fully de-risked the make-or-break
+Movement and Combat systems. Production begins with the Foundation layer per
+`production/sprints/sprint-01.md`. Two caveats carried into production: (1) run a 2+ human
+social playtest early to confirm the solo judgment; (2) the L2/J defense mechanic is deferred
+until validated. The prototype tuning values above are pinned as the production starting point.
 
 ---
 

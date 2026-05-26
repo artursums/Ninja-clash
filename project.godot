@@ -11,6 +11,15 @@ config/name="Four Clans"
 config/description="2D arena couch PvP, TowerFall-inspired. Production codebase (src/)."
 config/features=PackedStringArray("4.6", "Forward Plus")
 
+[autoload]
+
+; Autoload names differ from class_names to avoid Godot autoload/class_name clashes:
+;   GameState  -> class GameStateManager   (per the GDD)
+;   CouchInput -> class CouchInputSystem    (per the GDD)
+; GameState is listed first so it exists when CouchInput._ready() looks it up.
+GameState="*res://src/core/game_state_manager.gd"
+CouchInput="*res://src/core/couch_input.gd"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
