@@ -1,0 +1,24 @@
+; Four Clans — PRODUCTION project (Godot 4.6).
+; The throwaway prototype lives in prototypes/movement-and-combat/ (its own project,
+; shielded from this one by a .gdignore). This project only scans src/, assets/, tests/, addons/.
+; Engine/renderer/physics choices follow .claude/docs/technical-preferences.md.
+
+config_version=5
+
+[application]
+
+config/name="Four Clans"
+config/description="2D arena couch PvP, TowerFall-inspired. Production codebase (src/)."
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
+
+[physics]
+
+2d/physics_engine="GodotPhysics2D"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
