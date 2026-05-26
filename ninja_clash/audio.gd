@@ -8,10 +8,16 @@
 extends Node
 
 const SAMPLE_RATE := 22050
+const SFX_DIR := "res://audio/sfx/"   # drop real <key>.ogg/.wav here to replace the beeps
 
 var _streams: Dictionary = {}
 
 func _ready() -> void:
+	_build_streams()
+	_load_real_sfx_overrides()   # a real file at res://audio/sfx/<key>.ogg|wav replaces its beep
+
+# Procedural placeholder SFX. Each key can be overridden by a real audio file (see _load_real_sfx_overrides).
+func _build_streams() -> void:
 	_streams["throw"] = _make_beep(880.0, 0.06, "sine", 0.3)
 	_streams["hit"] = _make_beep(120.0, 0.18, "square", 0.4)
 	_streams["dodge"] = _make_beep(440.0, 0.08, "sine", 0.25)
@@ -23,6 +29,18 @@ func _ready() -> void:
 	_streams["win_1"] = _make_beep(523.0, 0.18, "sine", 0.35)
 	_streams["win_2"] = _make_beep(659.0, 0.18, "sine", 0.35)
 	_streams["win_3"] = _make_beep(784.0, 0.35, "sine", 0.4)
+
+# Upgrade path to real audio: if res://audio/sfx/<key>.ogg (or .wav) exists, use it instead of the
+# generated beep — so the owner can drop in finished SFX with zero code changes.
+func _load_real_sfx_overrides() -> void:
+	for key in _streams.keys():
+		for ext in ["ogg", "wav"]:
+			var path: String = SFX_DIR + String(key) + "." + ext
+			if ResourceLoader.exists(path):
+				var s = load(path)
+				if s is AudioStream:
+					_streams[key] = s
+				break
 
 func _make_beep(freq: float, duration: float, wave: String, vol: float) -> AudioStreamWAV:
 	var stream := AudioStreamWAV.new()

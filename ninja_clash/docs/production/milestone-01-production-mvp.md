@@ -28,9 +28,9 @@ regressing the fun that's already there.
 - [ ] Icon (placeholder `icon.svg` wired), store page assets, screenshots/trailer — **owner-sourced**.
 
 ### 3. Content / polish
-- [ ] **Audio** — real SFX + music replacing the synthesized beeps (system can be built; final audio files owner-sourced).
-- [ ] Menu / title polish.
-- [ ] Final art pass (generated pixel-art → finished; owner-sourced).
+- [~] **Audio system** — upgrade path done: a real file at `audio/sfx/<key>.ogg|wav` auto-replaces the placeholder beep (zero code change); `Settings` controls master volume; 1 regression test. **Real SFX/music files are owner-sourced** (music-per-state + audio buses come with real music).
+- [ ] Menu / title **visual** polish — code/layout I can do; needs art direction.
+- [ ] Final art pass (generated pixel-art → finished; **owner-sourced**).
 
 ## Exit criteria (shippable v1)
 - [ ] A real exported build runs on the target platforms at 60 fps.
