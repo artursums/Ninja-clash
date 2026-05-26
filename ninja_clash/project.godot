@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Four Clans Prototype - Vertical Slice"
+config/name="Ninja Clash"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
@@ -21,6 +21,10 @@ Audio="*res://audio.gd"
 GameState="*res://game_state.gd"
 Maps="*res://maps.gd"
 Combat="*res://combat.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
 [display]
 
