@@ -15,6 +15,7 @@ func _ready() -> void:
 	_streams["throw"] = _make_beep(880.0, 0.06, "sine", 0.3)
 	_streams["hit"] = _make_beep(120.0, 0.18, "square", 0.4)
 	_streams["dodge"] = _make_beep(440.0, 0.08, "sine", 0.25)
+	_streams["block"] = _make_beep(1320.0, 0.05, "square", 0.3)   # bright metallic clink — blade parry
 	_streams["round_start"] = _make_beep(660.0, 0.20, "sine", 0.35)
 	_streams["countdown"] = _make_beep(440.0, 0.10, "square", 0.25)
 	_streams["click"] = _make_beep(1000.0, 0.04, "square", 0.2)

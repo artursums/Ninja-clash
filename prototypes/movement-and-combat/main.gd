@@ -69,6 +69,7 @@ func _setup_input_map() -> void:
 	_add_key("p2_throw",    KEY_L)
 	_add_key("p2_katana",   KEY_K)
 	_add_key("p2_dodge",    KEY_SHIFT, KEY_LOCATION_RIGHT)
+	_add_key("p2_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
 	# Gamepad — TowerFall-on-PlayStation layout, appended to the keyboard binds.
 	# First connected pad → P1, second → P2 (a single DualSense drives P1).
 	_add_pad(1, 0)
@@ -101,9 +102,9 @@ func _add_pad(player: int, device: int) -> void:
 	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_LEFT_SHOULDER,  device) # L1       — dodge (TowerFall shoulder dodge)
 	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_RIGHT_SHOULDER, device) # R1       — dodge
 	_add_pad_button(prefix + "_katana", JOY_BUTTON_Y, device)              # Triangle △ — katana melee (no TowerFall equivalent)
-	# Slide/dash — L2 and R2 are one action; direction comes from the stick. Gamepad only.
-	_add_pad_axis(prefix + "_slide", JOY_AXIS_TRIGGER_LEFT,  1.0, device)  # L2
-	_add_pad_axis(prefix + "_slide", JOY_AXIS_TRIGGER_RIGHT, 1.0, device)  # R2
+	# L2 = defend (hold the katana up to guard); R2 = slide/dash. Direction comes from the stick.
+	_add_pad_axis(prefix + "_defend", JOY_AXIS_TRIGGER_LEFT,  1.0, device)  # L2 — guard
+	_add_pad_axis(prefix + "_slide",  JOY_AXIS_TRIGGER_RIGHT, 1.0, device)  # R2 — dash/dodge
 
 func _add_key(action_name: String, key: int, location: int = 0) -> void:
 	if not InputMap.has_action(action_name):

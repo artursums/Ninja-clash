@@ -9,7 +9,6 @@ extends CharacterBody2D
 # === Hardcoded tuning ===
 const MAX_HSPEED := 158.4   # 220 → 176 → 158.4 (another −10%) for a heavier-footed run
 const JUMP_STRENGTH := 480.0
-const AIR_JUMP_STRENGTH := 420.0
 const GRAVITY := 1400.0
 const PLAYER_TERMINAL_FALL_SPEED := 320.0   # TowerFall-style: caps fall acceleration so it feels constant
 const STOMP_BOUNCE_STRENGTH := 260.0         # small TowerFall-style hop after stomping (~25 px height)
@@ -21,6 +20,9 @@ const DEATH_TOPPLE_RATE := 5.0               # rad/s the corpse tips toward lyin
 const DODGE_TOTAL_DURATION_S := 0.30   # bot re-dodge pacing reference (the dash-dodge cooldown is SLIDE_COOLDOWN_S)
 const SLIDE_SPEED := 400.0       # softer than the old 520 — was launching the player too far
 const SLIDE_DURATION_S := 0.20   # ~80px slide (was ~114px)
+# Upward dash speed is capped to the diagonal-up dash's vertical component (SLIDE_SPEED·sin45°),
+# so a straight-up dash peaks at the SAME height as a diagonal one instead of out-climbing it.
+const SLIDE_MAX_UP_SPEED := SLIDE_SPEED * 0.7071067811865476
 const SLIDE_COOLDOWN_S := 0.417  # ground re-dash cooldown — TowerFall dodge cooldown (25 frames @ 60fps)
 const SLIDE_AIR_REFRESH_S := 0.5 # after the air dash is spent, recharge this long after touching a surface
 const DOUBLE_TAP_WINDOW_S := 0.25 # P2 keyboard: two taps of A/D within this window = dash (slot 2 only)
@@ -35,6 +37,7 @@ const MAX_HP := 5
 const MAX_KATANA := 3
 const HURT_IFRAME_S := 0.35              # brief invuln after a non-lethal hit (prevents stunlock)
 const KATANA_SWING_DURATION_S := 0.32    # full swing length
+const KATANA_COOLDOWN_S := 0.2           # recovery gap after a swing finishes before the next can start
 const KATANA_HIT_START_S := 0.05         # hitbox active window (start)
 const KATANA_HIT_END_S := 0.22           # hitbox active window (end)
 const KATANA_RANGE := 30.0               # reach in front of player
@@ -69,14 +72,16 @@ var is_iframe: bool = false
 var is_sliding: bool = false
 var is_wall_grabbing: bool = false
 var is_swinging: bool = false
+var is_defending: bool = false         # holding L2/J — katana raised to block front shurikens & strikes
 var is_aiming: bool = false            # holding throw → reticle shown, movement frozen (TowerFall)
 var aim_dir: Vector2 = Vector2.RIGHT   # current 8-way throw aim while aiming (non-normalized intent)
 var _aim_locked_dir: Vector2 = Vector2.ZERO  # snap direction frozen at aim-open / re-aim (no enemy tracking)
 var _reticle: Node2D = null            # aim reticle, lazily built
 var swing_start_t: float = -999.0
+var katana_cooldown_until: float = -999.0   # earliest time the next swing is allowed (0.2 s gate)
 var swing_hit_done: bool = false       # ensure one player-hit per swing
 var hurt_iframe_until: float = 0.0
-var jumps_remaining: int = 2   # ground + air; resets to 2 whenever on floor
+var jumps_remaining: int = 1   # single jump (no double jump); resets to 1 whenever on floor
 var iframe_t_end: float = 0.0
 var slide_t_end: float = 0.0
 var slide_dir: Vector2 = Vector2.ZERO   # normalized dash direction (8-way), set on each slide
@@ -126,6 +131,7 @@ var input_throw: String = ""
 var input_dodge: String = ""
 var input_katana: String = ""
 var input_slide: String = ""
+var input_defend: String = ""
 
 # === Visual (sprite child added by main.gd) ===
 var visual: Sprite2D = null
@@ -177,6 +183,7 @@ func _ready() -> void:
 	input_dodge = prefix + "_dodge"
 	input_katana = prefix + "_katana"
 	input_slide = prefix + "_slide"
+	input_defend = prefix + "_defend"
 	visual = get_node_or_null("Visual") as Sprite2D
 	katana_sprite = get_node_or_null("Katana") as Sprite2D
 	# Refresh the stash row the instant the count changes (throw/catch/pickup/die/respawn),
@@ -194,6 +201,7 @@ func _physics_process(delta: float) -> void:
 	if not alive:
 		_hide_reticle()
 		is_swinging = false   # a corpse isn't swinging (it died mid-swing)
+		is_defending = false  # ...nor holding a guard
 		if _corpse_settled:
 			velocity = Vector2.ZERO
 			_update_visual()
@@ -213,6 +221,7 @@ func _physics_process(delta: float) -> void:
 	if not GameState.is_round_active():
 		_hide_reticle()
 		is_swinging = false   # don't hold a frozen blade through the round-end / victory pause
+		is_defending = false
 		velocity.x = 0.0
 		# Still apply gravity gently to settle on platforms
 		velocity.y = min(velocity.y + 600.0 * delta, 400.0)
@@ -247,7 +256,7 @@ func _physics_process(delta: float) -> void:
 		if _pressed(input_throw) and stash > 0:
 			_throw_shuriken(_throw_aim())
 	else:
-		if not is_aiming and _pressed(input_throw) and stash > 0:
+		if not is_aiming and _pressed(input_throw) and stash > 0 and not _held(input_defend):
 			is_aiming = true
 			aim_dir = _throw_aim()               # capture on press (covers instant quick-draws)
 			_relock_aim()                        # lock the assist onto whoever's in the wedge NOW
@@ -280,19 +289,23 @@ func _physics_process(delta: float) -> void:
 
 	# Refresh jumps whenever touching floor — forgiving timing (no transition required)
 	if on_floor_now:
-		jumps_remaining = 2
+		jumps_remaining = 1
 
-	# Dash (L2/R2) recharge — only on a real floor/wall contact. A dash taken while
-	# airborne pays the SLIDE_AIR_REFRESH_S delay once on touchdown; a ground dash just
-	# waits out the base cooldown. The penalty is decided at dash time (below) and
-	# applied exactly once here — so the brief floor detachment a dash causes (and any
-	# is_on_floor() flicker during fast movement) can't stack delays or stall recharge.
-	if (on_floor_now or on_wall_now) and not is_sliding:
-		if air_dash_penalty:
-			slide_cooldown_until = maxf(slide_cooldown_until, t + SLIDE_AIR_REFRESH_S)
+	# Dash (L2/R2) recharge. Landing on the FLOOR after an air dash (the R2 up-boost) resets it
+	# INSTANTLY — no leftover cooldown, no penalty — so you can boost again the moment you touch
+	# down. A ground-to-ground re-dash still waits out the base cooldown (so the dodge can't be
+	# mashed along the floor), and a wall contact keeps the old air-penalty timing.
+	if not is_sliding:
+		if on_floor_now and air_dash_penalty:
+			slide_charged = true              # just landed from an air dash → reset immediately
+			slide_cooldown_until = 0.0
 			air_dash_penalty = false
-		if t >= slide_cooldown_until:
-			slide_charged = true
+		elif on_floor_now or on_wall_now:
+			if air_dash_penalty:
+				slide_cooldown_until = maxf(slide_cooldown_until, t + SLIDE_AIR_REFRESH_S)
+				air_dash_penalty = false
+			if t >= slide_cooldown_until:
+				slide_charged = true
 
 	# Wall-grab detection (airborne + touching wall + pressing INTO wall)
 	is_wall_grabbing = false
@@ -304,11 +317,21 @@ func _physics_process(delta: float) -> void:
 	if move != 0.0 and not is_sliding:
 		facing = int(sign(move))
 
-	# Apply velocity — priority: dash-dodge > clash-recoil > wall-jump-lock > walk.
+	# Defense (guard) — hold L2/J to plant the katana in front. Blocks front shurikens and
+	# katana strikes (see _blocks_incoming); roots you in place; gives no ammo (vs dodge, which
+	# catches). Mutually exclusive with dash / aim / swing / wall-grab. You may still turn to
+	# face the incoming threat (facing follows movement above), but you cannot move.
+	is_defending = _held(input_defend) and not is_swinging and not is_sliding \
+		and not is_aiming and not is_wall_grabbing
+
+	# Apply velocity — priority: dash-dodge > guard > clash-recoil > wall-jump-lock > walk.
 	# Aiming does NOT appear here: you run while you aim, same as ever.
 	if is_sliding:
 		# Directional dash-dodge: drive the whole velocity vector (8-way, incl. up/diagonal).
-		velocity = slide_dir * SLIDE_SPEED
+		# Upward speed is capped (see _dash_velocity) so a straight-up dash matches a diagonal's height.
+		velocity = _dash_velocity()
+	elif is_defending:
+		velocity.x = 0.0   # rooted while guarding — committal (gravity still applies below)
 	elif t < clash_recoil_until:
 		pass   # hold the post-clash push-apart; don't let movement input cancel it
 	elif t < hit_recoil_until:
@@ -329,7 +352,7 @@ func _physics_process(delta: float) -> void:
 	if is_wall_grabbing and velocity.y > Combat.wall_grab_fall_speed:
 		velocity.y = Combat.wall_grab_fall_speed
 
-	# Jump: wall-jump (only when airborne and on wall) > ground/air via jumps_remaining
+	# Jump: wall-jump (only when airborne and on wall) > single ground jump via jumps_remaining
 	if _pressed(input_jump):
 		if on_wall_now and not on_floor_now:
 			velocity.y = -WALL_JUMP_VSTRENGTH
@@ -337,16 +360,15 @@ func _physics_process(delta: float) -> void:
 			facing = int(sign(wall_normal.x))
 			wall_jump_lock_until = t + WALL_JUMP_LOCK_S
 			is_wall_grabbing = false
-			jumps_remaining = 2  # full double jump available — chain wall + 2 air jumps upward
+			jumps_remaining = 0  # the wall jump IS the jump — no bonus air jump (no double jump)
 		elif jumps_remaining > 0:
-			var strength: float = JUMP_STRENGTH if on_floor_now else AIR_JUMP_STRENGTH
-			velocity.y = -strength
+			velocity.y = -JUMP_STRENGTH   # single jump, always full strength (coyote case included)
 			jumps_remaining -= 1
 
 	# Dash-dodge request — ONE move on L2, R2 AND Circle (slide + dodge are now unified),
 	# plus a P2-only keyboard double-tap of A/D. Double-tap is scoped to slot 2 so an
 	# analog stick can't trigger it.
-	var dash_requested: bool = _pressed(input_slide) or _pressed(input_dodge)
+	var dash_requested: bool = not is_defending and (_pressed(input_slide) or _pressed(input_dodge))
 	if slot == 2:
 		if _pressed(input_left):
 			if t - last_left_tap_t <= DOUBLE_TAP_WINDOW_S:
@@ -364,7 +386,7 @@ func _physics_process(delta: float) -> void:
 	# Dash-dodge — fires toward the held aim (8-way) with brief i-frames that catch an
 	# incoming shuriken. Spends the charge; in the air you get exactly one until you touch
 	# floor/wall again (no infinite climbing). The cooldown forces timing per shuriken.
-	if dash_requested and not is_sliding and slide_charged:
+	if dash_requested and not is_sliding and not is_defending and slide_charged:
 		slide_charged = false
 		slide_cooldown_until = t + SLIDE_COOLDOWN_S
 		air_dash_penalty = not (on_floor_now or on_wall_now)   # only airborne dashes pay the touch-down delay
@@ -373,7 +395,7 @@ func _physics_process(delta: float) -> void:
 	# Katana swing — start, then run hit checks while active.
 	# Once all 3 charges are spent, the katana is locked out entirely for the rest of
 	# the round (respawn refills it); pressing it does nothing until then.
-	if _pressed(input_katana) and not is_swinging and katana_charges > 0:
+	if _pressed(input_katana) and not is_swinging and not is_defending and katana_charges > 0 and t >= katana_cooldown_until:
 		_start_swing(t)
 	if is_swinging:
 		_process_swing(t)
@@ -398,8 +420,16 @@ func _start_slide(dir: Vector2, t: float) -> void:
 	if dir.x != 0.0:
 		facing = int(sign(dir.x))   # only reface on a horizontal component; pure-vertical keeps facing
 	slide_t_end = t + SLIDE_DURATION_S
-	velocity = dir * SLIDE_SPEED
+	velocity = _dash_velocity()
 	Audio.play("dodge")
+
+# Dash burst velocity for the current slide_dir, with the upward component capped so a
+# straight-up dash can't out-climb a diagonal-up one — both reach the same peak height.
+func _dash_velocity() -> Vector2:
+	var v: Vector2 = slide_dir * SLIDE_SPEED
+	if v.y < -SLIDE_MAX_UP_SPEED:
+		v.y = -SLIDE_MAX_UP_SPEED
+	return v
 
 # Current 8-way aim from the stick/D-pad (move + aim_up/down actions).
 # Falls back to the current facing when the stick is neutral, so a dash with no
@@ -584,7 +614,6 @@ func _bot_think(t: float) -> void:
 	var deflect_chance: float   = [0.0, 0.40,  0.55,  0.70][lvl]  # parry an incoming shuriken with the blade
 	var dash_close_chance: float= [0.0, 0.020, 0.032, 0.048][lvl] # burst-dash to close a big gap
 	var dash_air_chance: float  = [0.0, 0.030, 0.050, 0.080][lvl] # air-dash mid-jump toward the foe
-	var dbljump_chance: float   = [0.0, 0.030, 0.045, 0.070][lvl] # double-jump to keep climbing
 	# Human-feel knobs (research: "start from perfect play, then add reaction lag + errors").
 	var reaction_s: float       = [0.0, 0.24,  0.17,  0.11][lvl]  # lag before it answers a NEW threat (point-blank throws beat it)
 	var pickup_range: float     = [0.0, 120.0, 150.0, 180.0][lvl] # how far it detours to grab a loose blade (stash<5)
@@ -811,9 +840,6 @@ func _bot_think(t: float) -> void:
 		if is_on_floor() and (dy < -jump_react_h or randf() < hop_chance):
 			_bot_pressed[input_jump] = true
 			_bot_next_jump_t = t + randf_range(0.45, 1.0)
-		elif not is_on_floor() and jumps_remaining > 0 and dy < -jump_react_h and randf() < dbljump_chance:
-			_bot_pressed[input_jump] = true                       # double-jump to keep climbing
-			_bot_next_jump_t = t + randf_range(0.3, 0.6)
 
 	# 8) Dashes — close distance and add unpredictability, ON THE GROUND and IN THE AIR.
 	# Mixing an air-dash after a jump (dash-jump) is how a human covers ground fast; we
@@ -827,7 +853,7 @@ func _bot_think(t: float) -> void:
 				want_dash = randf() < dash_close_chance
 		else:
 			# air-dash mid-jump: chase across a gap, OR burst diagonally UP toward a higher
-			# foe (aim_up is held, so the dash fires up-diagonal — the double-jump+dash climb).
+			# foe (aim_up is held, so the dash fires up-diagonal — the jump+dash climb).
 			var chasing: bool = desired == to_enemy and adx > 50.0
 			if (chasing or want_height) and randf() < dash_air_chance:
 				want_dash = true
@@ -894,6 +920,7 @@ func _start_swing(t: float) -> void:
 	is_swinging = true
 	swing_start_t = t
 	swing_hit_done = false
+	katana_cooldown_until = t + KATANA_SWING_DURATION_S + KATANA_COOLDOWN_S   # 0.2 s recovery after the swing finishes (0.52 s total swing-to-swing)
 	Audio.play("dodge")   # placeholder swoosh
 
 # Active during the swing's hit window: deflect any flying shuriken in front,
@@ -1072,15 +1099,40 @@ func hit_by_shuriken(shuriken) -> bool:
 		return false   # never self-damage, never free — the blade stays in play
 	if t < hurt_iframe_until:
 		return false   # recently hit — invincible; shuriken passes through
+	if _blocks_incoming(shuriken.velocity_v):
+		# Guard up and facing the throw → the blade knocks it away. No damage, no catch:
+		# unlike a dodge (which pockets the blade as ammo), a block deflects it back into play.
+		shuriken.deflect(slot, facing)
+		_on_block(shuriken.velocity_v)
+		return false   # not caught into stash, not destroyed
 	# A clean hit lands — the blade is spent and VANISHES. This is the ONLY way a shuriken
 	# leaves the round; every other interaction (deflect, clash, miss) keeps it retrievable.
 	take_damage(1, shuriken.velocity_v, shuriken.thrower_slot)
 	return true   # caller frees the shuriken
 
-# Apply damage. Returns true if it landed (false if blocked by dodge/hurt i-frames or already dead).
+# True when a guard is up AND the hit comes from the front (the side we face). The hit's
+# travel direction is impact_velocity.x; a front guard faces INTO the threat, so we block
+# when our facing points opposite to where the hit is heading. Vertical hits (stomps,
+# impact_velocity.x == 0) are never blocked — the blade is held to the side, not overhead.
+func _blocks_incoming(impact_velocity: Vector2) -> bool:
+	if not is_defending:
+		return false
+	var hx: float = signf(impact_velocity.x)
+	return hx != 0.0 and int(hx) == -facing
+
+# Feedback for a successful block: a spark off the blade + a metallic clink. No damage,
+# no knockback — a held guard stays planted (the velocity root re-zeroes x next frame anyway).
+func _on_block(_impact_velocity: Vector2) -> void:
+	Audio.play("block")
+	_spawn_strike_flash(global_position + Vector2(facing * 12.0, -2.0))
+
+# Apply damage. Returns true if it landed (false if blocked by guard/dodge/hurt i-frames or dead).
 # Death (knockback + score) only happens when HP reaches 0.
 func take_damage(amount: int, impact_velocity: Vector2, killer_slot: int = 0) -> bool:
 	if not alive:
+		return false
+	if _blocks_incoming(impact_velocity):
+		_on_block(impact_velocity)   # guard catches a front katana strike — sparks off, no damage
 		return false
 	var t: float = Time.get_ticks_msec() / 1000.0
 	if is_iframe or t < hurt_iframe_until:
@@ -1127,7 +1179,7 @@ func _check_headstomp() -> void:
 		if coll.get_normal().y < -0.5:
 			if other.hit_by_stomp(self):
 				velocity.y = -STOMP_BOUNCE_STRENGTH   # bounce up
-				jumps_remaining = 2                    # refresh for chain stomps
+				jumps_remaining = 1                    # refresh the single jump for chain stomps
 
 func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void:
 	alive = false
@@ -1157,13 +1209,15 @@ func respawn(at_pos: Vector2) -> void:
 	is_sliding = false
 	is_wall_grabbing = false
 	is_swinging = false
+	is_defending = false
 	swing_hit_done = false
 	hurt_iframe_until = 0.0
-	jumps_remaining = 2
+	jumps_remaining = 1
 	wall_jump_lock_until = -999.0
 	clash_recoil_until = 0.0
 	hit_recoil_until = 0.0
 	frozen_until = 0.0
+	katana_cooldown_until = -999.0
 	slide_charged = true
 	slide_cooldown_until = 0.0
 	air_dash_penalty = false
@@ -1218,7 +1272,10 @@ func _update_visual() -> void:
 		return
 	# === Alive: determine state & pick texture mode + frame ===
 	var in_action: bool = is_sliding or t < throw_anim_until
-	if in_action:
+	if is_defending:
+		_set_visual_mode("pose")
+		visual.frame = FRAME_IDLE   # planted brace; the raised blade (below) sells the guard
+	elif in_action:
 		_set_visual_mode("pose")
 		visual.frame = FRAME_ATTACK
 	elif is_wall_grabbing or not is_on_floor():
@@ -1252,8 +1309,8 @@ func _update_visual() -> void:
 	# around the node origin (the anchored handle), keeping the grip put while the blade
 	# swings to the facing side. The V2 art is drawn blade-left, so facing right => mirror.
 	if katana_sprite != null:
-		katana_sprite.visible = is_swinging
 		if is_swinging:
+			katana_sprite.visible = true
 			katana_sprite.flip_h = false
 			katana_sprite.scale = Vector2(-facing * KATANA_VISUAL_SCALE, KATANA_VISUAL_SCALE)
 			katana_sprite.position = Vector2(facing * 7.0, -1.0)   # hand: just in front of the chest
@@ -1267,6 +1324,17 @@ func _update_visual() -> void:
 			else:
 				katana_sprite.frame = 2
 				katana_sprite.offset = Vector2(0.0, -6.0)
+		elif is_defending:
+			# Guard stance: the raised(2) vertical blade held planted in front of the chest.
+			# Same grip-anchor as the swing windup, nudged a touch further forward.
+			katana_sprite.visible = true
+			katana_sprite.flip_h = false
+			katana_sprite.scale = Vector2(-facing * KATANA_VISUAL_SCALE, KATANA_VISUAL_SCALE)
+			katana_sprite.position = Vector2(facing * 8.0, -2.0)
+			katana_sprite.frame = 2
+			katana_sprite.offset = Vector2(0.0, -6.0)
+		else:
+			katana_sprite.visible = false
 	# Above-head indicators are refreshed in _process (every rendered frame, after all
 	# physics mutations), so HP / stash / katana counts can't lag behind a hit, catch,
 	# pickup or stomp that another node applied this frame.
