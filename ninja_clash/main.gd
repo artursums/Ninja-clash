@@ -43,6 +43,16 @@ const DIGIT_TEXS: Array = [
 const ROUND_GAP_WORD := 24.0    # px between "ROUND" and the number
 const ROUND_GAP_DIGIT := 4.0    # px between digits
 
+# Round-winner indicator (shown at ROUND_END): "P<N>" (color-tinted) + "WINS".
+const WINS_TEX := preload("res://sprites/player-win/wins_native.png")
+const PLAYER_TEXS: Array = [
+	null,   # index 0 unused — slots are 1-4
+	preload("res://sprites/player-win/p1_native.png"),
+	preload("res://sprites/player-win/p2_native.png"),
+	preload("res://sprites/player-win/p3_native.png"),
+	preload("res://sprites/player-win/p4_native.png"),
+]
+
 var arena_root: Node2D
 var sky_bg_solid: ColorRect
 var sky_rect: TextureRect
@@ -62,6 +72,7 @@ var mode_select_screen: Control
 var banner_label: Label
 var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites during the countdown
 var round_display: Node2D        # composed "ROUND N" (wordmark + digit sprites) at countdown stage 0
+var win_display: Node2D          # composed "P<N> WINS" shown at ROUND_END for the round's winner
 var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
 
 var _in_countdown: bool = false
@@ -311,6 +322,12 @@ func _build_overlays() -> void:
 	round_display.visible = false
 	canvas.add_child(round_display)
 
+	# "P<N> WINS" composite, shown at the end of each round.
+	win_display = Node2D.new()
+	win_display.position = Vector2(400, 175)
+	win_display.visible = false
+	canvas.add_child(win_display)
+
 	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
 	mode_label = Label.new()
 	mode_label.position = Vector2(540, 6)
@@ -344,6 +361,7 @@ func _on_state_changed(s: int) -> void:
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
 	mode_label.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
+	win_display.visible = false   # only _enter_round_end re-shows it (for the round's winner)
 	if mode_label.visible:
 		_update_mode_label()
 
@@ -424,7 +442,10 @@ func _enter_round() -> void:
 
 func _enter_round_end() -> void:
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
-	# Round-winner banner removed (not wanted) — just hold a brief beat before the next round.
+	var winner_slot: int = _round_winner_slot if _round_winner_slot > 0 else GameState.last_kill_killer
+	if winner_slot > 0:
+		_show_round_winner(winner_slot)   # "P<N> WINS" sprite composite
+	# else: a draw (double-KO) → show nothing
 
 func _start_countdown() -> void:
 	_in_countdown = true
@@ -460,17 +481,32 @@ func _show_round_number(n: int) -> void:
 		total += float(DIGIT_TEXS[int(ch)].get_width()) + ROUND_GAP_DIGIT
 	total -= ROUND_GAP_DIGIT   # no trailing gap
 	var x: float = -total * 0.5
-	x = _place_round_glyph(ROUND_WORD_TEX, x) + ROUND_GAP_WORD
+	x = _place_glyph(round_display, ROUND_WORD_TEX, x) + ROUND_GAP_WORD
 	for ch in digits:
-		x = _place_round_glyph(DIGIT_TEXS[int(ch)], x) + ROUND_GAP_DIGIT
+		x = _place_glyph(round_display, DIGIT_TEXS[int(ch)], x) + ROUND_GAP_DIGIT
 
-# Add one glyph (top-left at x, vertically centered on y=0) and return the cursor's right edge.
-func _place_round_glyph(tex: Texture2D, x: float) -> float:
+# Build "P<N> WINS" under win_display for the round's winner, centered on its origin.
+func _show_round_winner(slot: int) -> void:
+	for c in win_display.get_children():
+		c.free()
+	if slot < 1 or slot >= PLAYER_TEXS.size() or PLAYER_TEXS[slot] == null:
+		win_display.visible = false
+		return
+	var p_tex: Texture2D = PLAYER_TEXS[slot]
+	var total: float = float(p_tex.get_width()) + ROUND_GAP_WORD + float(WINS_TEX.get_width())
+	var x: float = -total * 0.5
+	x = _place_glyph(win_display, p_tex, x) + ROUND_GAP_WORD
+	_place_glyph(win_display, WINS_TEX, x)
+	win_display.visible = true
+	_pop_node(win_display, 1.4)
+
+# Add one glyph to `parent` (top-left at x, vertically centered on y=0); return its right edge.
+func _place_glyph(parent: Node2D, tex: Texture2D, x: float) -> float:
 	var s := Sprite2D.new()
 	s.texture = tex
 	s.centered = false
 	s.position = Vector2(x, -tex.get_height() * 0.5)
-	round_display.add_child(s)
+	parent.add_child(s)
 	return x + tex.get_width()
 
 # Punch-in for a Node2D (countdown sprite or the ROUND composite): scale `from` → 1.0 + fade.
