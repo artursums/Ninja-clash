@@ -10,8 +10,7 @@ extends Node
 const SAMPLE_RATE := 22050
 const SFX_DIR := "res://audio/sfx/"   # drop real <key>.ogg/.wav here to replace the beeps
 const MENU_MUSIC_PATH := "res://audio/start-menu/Ninja Kintsugi.mp3"
-# In-match music slots in here later (a separate track per the owner); empty = silence for now.
-const MATCH_MUSIC_PATH := ""
+const MATCH_MUSIC_PATH := "res://audio/gameplay/Steel Lanterns.mp3"   # starts after the countdown
 
 var _streams: Dictionary = {}
 var _music_player: AudioStreamPlayer = null
@@ -103,18 +102,27 @@ func _hook_game_state() -> void:
 		_on_state_changed(GameState.current_state)   # start music for the boot state (TITLE)
 
 
-# Menu screens loop the menu track; in-match screens switch to the match track (empty for now).
-# Re-entering another menu screen does NOT restart the track (play_music is a no-op if unchanged).
+# Music per screen:
+#   • Menu screens (incl. the Match-End results) loop the menu track.
+#   • The fight (ROUND / ROUND_END) plays the gameplay track — which therefore starts only AFTER
+#     the countdown, since the countdown is MATCH_INTRO.
+#   • MATCH_INTRO (the 3·2·1·FIGHT countdown) drops the menu loop so the count plays over tension;
+#     but if the gameplay track is already going (a between-round countdown) it keeps playing.
+# play_music is a no-op when the track is unchanged, so moving between screens never restarts it.
 func _on_state_changed(new_state: int) -> void:
 	var menu_states := [
 		GameState.State.TITLE, GameState.State.MODE_SELECT,
 		GameState.State.CLAN_SELECT, GameState.State.MAP_SELECT,
 		GameState.State.MATCH_END,
 	]
+	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
 	if new_state in menu_states:
 		play_music(MENU_MUSIC_PATH)
-	else:
-		play_music(MATCH_MUSIC_PATH)   # "" → stops (no in-match track yet)
+	elif new_state in fight_states:
+		play_music(MATCH_MUSIC_PATH)
+	elif new_state == GameState.State.MATCH_INTRO:
+		if _current_music_path == MENU_MUSIC_PATH:
+			stop_music()   # silence under the first countdown; a between-round track keeps playing
 
 
 # Play a looping music track. No-op if it's already the playing track (so menu-screen changes

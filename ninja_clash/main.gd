@@ -15,7 +15,7 @@ const BG_IMAGE_PATH := "res://sprites/level-1.png"
 const PLATFORM_SRC_Y_WALKABLE := 395.0   # measured: top of opaque stone in platform.png (1536×1024)
 const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width × this
 
-const STAGE_DURATIONS: Array = [0.6, 0.35, 0.35, 0.35, 0.5]
+const STAGE_DURATIONS: Array = [0.5, 0.8, 0.8, 0.8, 0.7]   # slower, more dramatic count (was 0.35/number)
 const STAGE_TEXTS: Array = ["", "3", "2", "1", "FIGHT!"]
 const STAGE_SOUNDS: Array = ["", "countdown", "countdown", "countdown", "round_start"]
 
@@ -402,17 +402,34 @@ func _start_countdown() -> void:
 	_advance_countdown_stage()
 
 func _advance_countdown_stage() -> void:
+	var pop_from := 1.5
 	if _countdown_stage == 0:
 		banner_label.text = "ROUND %d" % GameState.current_round
 		banner_label.add_theme_color_override("font_color", Color("f0eee8"))
+		banner_label.add_theme_font_size_override("font_size", 52)
+		pop_from = 1.25
 	else:
 		banner_label.text = STAGE_TEXTS[_countdown_stage]
-		var clr: Color = Color("d4a830") if _countdown_stage < 4 else Color("e05030")
-		banner_label.add_theme_color_override("font_color", clr)
+		var is_fight: bool = _countdown_stage >= 4
+		banner_label.add_theme_color_override("font_color", Color("e05030") if is_fight else Color("d4a830"))
+		banner_label.add_theme_font_size_override("font_size", 80 if is_fight else 72)
+		pop_from = 2.0 if is_fight else 1.5
 		var snd: String = STAGE_SOUNDS[_countdown_stage]
 		if snd != "":
 			Audio.play(snd)
+	_pop_banner(pop_from)
 	_countdown_stage_until = Time.get_ticks_msec() / 1000.0 + STAGE_DURATIONS[_countdown_stage]
+
+# Punch-in: the banner scales down from `from` to 1.0 with an overshoot, plus a quick fade-in.
+# (Label clip_contents is off, so the oversized pop renders without clipping the box.)
+func _pop_banner(from: float) -> void:
+	banner_label.pivot_offset = banner_label.size * 0.5
+	banner_label.scale = Vector2(from, from)
+	banner_label.modulate.a = 0.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(banner_label, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(banner_label, "modulate:a", 1.0, 0.14)
 
 func _on_kill_logged(_killer: int, _victim: int) -> void:
 	if GameState.current_state != GameState.State.ROUND:
