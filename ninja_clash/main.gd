@@ -26,6 +26,22 @@ const STAGE_TEXTURES: Array = [
 	preload("res://sprites/countdown/countdown_1_premium_native.png"),
 	preload("res://sprites/countdown/fight_premium_native.png"),
 ]
+# "ROUND N" indicator (stage 0): a ROUND wordmark + per-digit sprites, composed for any N.
+const ROUND_WORD_TEX := preload("res://sprites/round-counter/round_word_native.png")
+const DIGIT_TEXS: Array = [
+	preload("res://sprites/round-counter/digit_0_native.png"),
+	preload("res://sprites/round-counter/digit_1_native.png"),
+	preload("res://sprites/round-counter/digit_2_native.png"),
+	preload("res://sprites/round-counter/digit_3_native.png"),
+	preload("res://sprites/round-counter/digit_4_native.png"),
+	preload("res://sprites/round-counter/digit_5_native.png"),
+	preload("res://sprites/round-counter/digit_6_native.png"),
+	preload("res://sprites/round-counter/digit_7_native.png"),
+	preload("res://sprites/round-counter/digit_8_native.png"),
+	preload("res://sprites/round-counter/digit_9_native.png"),
+]
+const ROUND_GAP_WORD := 24.0    # px between "ROUND" and the number
+const ROUND_GAP_DIGIT := 4.0    # px between digits
 
 var arena_root: Node2D
 var sky_bg_solid: ColorRect
@@ -45,6 +61,7 @@ var hud: Control
 var mode_select_screen: Control
 var banner_label: Label
 var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites during the countdown
+var round_display: Node2D        # composed "ROUND N" (wordmark + digit sprites) at countdown stage 0
 var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
 
 var _in_countdown: bool = false
@@ -288,6 +305,12 @@ func _build_overlays() -> void:
 	countdown_sprite.visible = false
 	canvas.add_child(countdown_sprite)
 
+	# "ROUND N" composite (wordmark + digits), centered at the same spot as the countdown numbers.
+	round_display = Node2D.new()
+	round_display.position = Vector2(400, 175)
+	round_display.visible = false
+	canvas.add_child(round_display)
+
 	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
 	mode_label = Label.new()
 	mode_label.position = Vector2(540, 6)
@@ -417,41 +440,55 @@ func _start_countdown() -> void:
 
 func _advance_countdown_stage() -> void:
 	if _countdown_stage == 0:
-		# "ROUND N" — text (no premium sprite for this stage).
+		# "ROUND N" — premium ROUND wordmark + digit sprites (composed for the current round).
 		countdown_sprite.visible = false
-		banner_label.text = "ROUND %d" % GameState.current_round
-		banner_label.add_theme_color_override("font_color", Color("f0eee8"))
-		banner_label.add_theme_font_size_override("font_size", 52)
-		_pop_banner(1.25)
+		_show_round_number(GameState.current_round)
+		round_display.visible = true
+		_pop_node(round_display, 1.25)
 	else:
-		# 3 / 2 / 1 / FIGHT — premium stone sprites replace the old text.
-		banner_label.text = ""
+		# 3 / 2 / 1 / FIGHT — premium stone sprites.
+		round_display.visible = false
 		countdown_sprite.texture = STAGE_TEXTURES[_countdown_stage]
 		countdown_sprite.visible = true
-		_pop_sprite(2.0 if _countdown_stage >= 4 else 1.5)   # FIGHT pops hardest
+		_pop_node(countdown_sprite, 2.0 if _countdown_stage >= 4 else 1.5)   # FIGHT pops hardest
 		var snd: String = STAGE_SOUNDS[_countdown_stage]
 		if snd != "":
 			Audio.play(snd)
 	_countdown_stage_until = Time.get_ticks_msec() / 1000.0 + STAGE_DURATIONS[_countdown_stage]
 
-# Punch-in for the "ROUND N" text banner: scale from `from` to 1.0 with an overshoot + quick fade.
-func _pop_banner(from: float) -> void:
-	banner_label.pivot_offset = banner_label.size * 0.5
-	banner_label.scale = Vector2(from, from)
-	banner_label.modulate.a = 0.0
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(banner_label, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(banner_label, "modulate:a", 1.0, 0.14)
+# Build the "ROUND N" composite under round_display: the wordmark then each digit, laid out
+# left-to-right and centered on round_display's origin (so the pop scales around the centre).
+func _show_round_number(n: int) -> void:
+	for c in round_display.get_children():
+		c.free()
+	var digits: String = str(maxi(n, 0))
+	var total: float = float(ROUND_WORD_TEX.get_width()) + ROUND_GAP_WORD
+	for ch in digits:
+		total += float(DIGIT_TEXS[int(ch)].get_width()) + ROUND_GAP_DIGIT
+	total -= ROUND_GAP_DIGIT   # no trailing gap
+	var x: float = -total * 0.5
+	x = _place_round_glyph(ROUND_WORD_TEX, x) + ROUND_GAP_WORD
+	for ch in digits:
+		x = _place_round_glyph(DIGIT_TEXS[int(ch)], x) + ROUND_GAP_DIGIT
 
-# Punch-in for the countdown sprite (Sprite2D scales around its own centre): `from` → 1.0 + fade.
-func _pop_sprite(from: float) -> void:
-	countdown_sprite.scale = Vector2(from, from)
-	countdown_sprite.modulate.a = 0.0
+# Add one glyph (top-left at x, vertically centered on y=0) and return the cursor's right edge.
+func _place_round_glyph(tex: Texture2D, x: float) -> float:
+	var s := Sprite2D.new()
+	s.texture = tex
+	s.centered = false
+	s.position = Vector2(x, -tex.get_height() * 0.5)
+	round_display.add_child(s)
+	return x + tex.get_width()
+
+# Punch-in for a Node2D (countdown sprite or the ROUND composite): scale `from` → 1.0 + fade.
+# modulate cascades to children, so the whole ROUND composite fades together.
+func _pop_node(node: Node2D, from: float) -> void:
+	node.scale = Vector2(from, from)
+	node.modulate.a = 0.0
 	var tw := create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(countdown_sprite, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(countdown_sprite, "modulate:a", 1.0, 0.14)
+	tw.tween_property(node, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "modulate:a", 1.0, 0.14)
 
 func _on_kill_logged(_killer: int, _victim: int) -> void:
 	if GameState.current_state != GameState.State.ROUND:
@@ -514,6 +551,7 @@ func _process(_delta: float) -> void:
 			_in_countdown = false
 			banner_label.text = ""
 			countdown_sprite.visible = false
+			round_display.visible = false
 			GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
