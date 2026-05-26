@@ -6,48 +6,51 @@
 
 extends CharacterBody2D
 
-# === Hardcoded tuning ===
-const MAX_HSPEED := 158.4   # 220 → 176 → 158.4 (another −10%) for a heavier-footed run
-const JUMP_STRENGTH := 480.0
-const GRAVITY := 1400.0
-const PLAYER_TERMINAL_FALL_SPEED := 320.0   # TowerFall-style: caps fall acceleration so it feels constant
-const STOMP_BOUNCE_STRENGTH := 260.0         # small TowerFall-style hop after stomping (~25 px height)
-const SHURIKEN_POGO_BOUNCE := 240.0          # brief upward hop when you fall onto your OWN shuriken (then keep falling)
-const DOWN_THROW_SPEED := 720.0              # straight-down throw drops faster than the player (~378 vs 320 px/s) so it pulls away
-const SHURIKEN_THROW_RECOIL := 260.0         # airborne straight-down throw kicks YOU up — pauses the fall + a small hop (extra air time)
-const DEATH_KNOCKBACK := 90.0                # on death: small sideways shove, then it just drops aside (no ball-like launch)
-const DEATH_TOPPLE_RATE := 5.0               # rad/s the corpse tips toward lying-down, then holds (a collapse, not a spin)
-const DODGE_TOTAL_DURATION_S := 0.30   # bot re-dodge pacing reference (the dash-dodge cooldown is SLIDE_COOLDOWN_S)
-const SLIDE_SPEED := 400.0       # softer than the old 520 — was launching the player too far
-const SLIDE_DURATION_S := 0.20   # ~80px slide (was ~114px)
-# Upward dash speed is capped to the diagonal-up dash's vertical component (SLIDE_SPEED·sin45°),
-# so a straight-up dash peaks at the SAME height as a diagonal one instead of out-climbing it.
-const SLIDE_MAX_UP_SPEED := SLIDE_SPEED * 0.7071067811865476
-const SLIDE_COOLDOWN_S := 0.417  # ground re-dash cooldown — TowerFall dodge cooldown (25 frames @ 60fps)
-const SLIDE_AIR_REFRESH_S := 0.5 # after the air dash is spent, recharge this long after touching a surface
-const DOUBLE_TAP_WINDOW_S := 0.25 # P2 keyboard: two taps of A/D within this window = dash (slot 2 only)
-const WALL_JUMP_VSTRENGTH := 540.0   # snappy upward kick (TowerFall-style climb)
-const WALL_JUMP_HKICK := 200.0       # less sideways push so you can grab same wall again
-const WALL_JUMP_LOCK_S := 0.10       # short lock so player can press back toward wall fast
+# === Tuning (data-driven) ===
+# Loaded from player_tuning.tres in _ready (or an injected PlayerTuning for tests) so balance is
+# editable + testable. Declared as vars (not consts) for that reason; the defaults below match the
+# validated prototype, so behaviour is identical when no resource is present. Structural values
+# (PLAYER_W/H, sprite frame indices) stay as consts — they are not balance knobs.
+const TUNING_PATH := "res://player_tuning.tres"
+var tuning: PlayerTuning = null   # inject in tests; otherwise TUNING_PATH is loaded in _ready
+
+var MAX_HSPEED := 158.4
+var JUMP_STRENGTH := 480.0
+var GRAVITY := 1400.0
+var PLAYER_TERMINAL_FALL_SPEED := 320.0
+var STOMP_BOUNCE_STRENGTH := 260.0
+var SHURIKEN_POGO_BOUNCE := 240.0
+var DOWN_THROW_SPEED := 720.0
+var SHURIKEN_THROW_RECOIL := 260.0
+var DEATH_KNOCKBACK := 90.0
+var DEATH_TOPPLE_RATE := 5.0
+var DODGE_TOTAL_DURATION_S := 0.30
+var SLIDE_SPEED := 400.0
+var SLIDE_DURATION_S := 0.20
+var SLIDE_MAX_UP_SPEED := 282.8427124746191   # = SLIDE_SPEED·sin45°; recomputed in _apply_tuning()
+var SLIDE_COOLDOWN_S := 0.417
+var SLIDE_AIR_REFRESH_S := 0.5
+var DOUBLE_TAP_WINDOW_S := 0.25
+var WALL_JUMP_VSTRENGTH := 540.0
+var WALL_JUMP_HKICK := 200.0
+var WALL_JUMP_LOCK_S := 0.10
 const PLAYER_W := 20.0
 const PLAYER_H := 32.0
 
-# HP + katana melee
-const MAX_HP := 5
-const MAX_KATANA := 3
-const HURT_IFRAME_S := 0.35              # brief invuln after a non-lethal hit (prevents stunlock)
-const KATANA_SWING_DURATION_S := 0.32    # full swing length
-const KATANA_COOLDOWN_S := 0.2           # recovery gap after a swing finishes before the next can start
-const KATANA_HIT_START_S := 0.05         # hitbox active window (start)
-const KATANA_HIT_END_S := 0.22           # hitbox active window (end)
-const KATANA_RANGE := 30.0               # reach in front of player
-const KATANA_HALF_H := 18.0              # vertical half-extent of the swing hitbox
-const KATANA_VISUAL_SCALE := 1.0         # swing-sprite scale (was 1.5 — smaller reads better)
-# A surviving foe gets a small, brief knock-back on a katana hit — just enough to sell the
-# impact, then they regain control. Held over a short window so their input can't cancel it.
-const KATANA_HIT_KNOCKBACK := 150.0      # backward push speed (px/s)
-const KATANA_HIT_POP := 70.0             # tiny upward pop alongside the push
-const KATANA_HIT_RECOIL_S := 0.10        # how long the push is held before control returns
+# HP + katana melee (tuning — see note above)
+var MAX_HP := 5
+var MAX_KATANA := 3
+var HURT_IFRAME_S := 0.35
+var KATANA_SWING_DURATION_S := 0.32
+var KATANA_COOLDOWN_S := 0.2
+var KATANA_HIT_START_S := 0.05
+var KATANA_HIT_END_S := 0.22
+var KATANA_RANGE := 30.0
+var KATANA_HALF_H := 18.0
+var KATANA_VISUAL_SCALE := 1.0
+var KATANA_HIT_KNOCKBACK := 150.0
+var KATANA_HIT_POP := 70.0
+var KATANA_HIT_RECOIL_S := 0.10
 
 # Sprite sheet frame indices — must match sprites/ninjas/generate_ninjas.py POSES order
 const FRAME_IDLE := 0
@@ -170,8 +173,51 @@ signal stash_changed(slot: int, new_count: int)
 var _spawn_collision_layer: int = 1   # captured at _ready; restored on respawn (a corpse goes to layer 0)
 var _corpse_settled: bool = false     # once a dead body lands it freezes here permanently (unmovable)
 
+
+## Apply data-driven tuning: copy the PlayerTuning resource into the runtime fields. Defaults
+## match the resource, so behaviour is unchanged; editing player_tuning.tres re-balances the game.
+func _apply_tuning() -> void:
+	if tuning == null and ResourceLoader.exists(TUNING_PATH):
+		tuning = load(TUNING_PATH)
+	if tuning != null:
+		MAX_HSPEED = tuning.max_hspeed
+		JUMP_STRENGTH = tuning.jump_strength
+		GRAVITY = tuning.gravity
+		PLAYER_TERMINAL_FALL_SPEED = tuning.terminal_fall_speed
+		STOMP_BOUNCE_STRENGTH = tuning.stomp_bounce_strength
+		SHURIKEN_POGO_BOUNCE = tuning.shuriken_pogo_bounce
+		DOWN_THROW_SPEED = tuning.down_throw_speed
+		SHURIKEN_THROW_RECOIL = tuning.shuriken_throw_recoil
+		DEATH_KNOCKBACK = tuning.death_knockback
+		DEATH_TOPPLE_RATE = tuning.death_topple_rate
+		DODGE_TOTAL_DURATION_S = tuning.dodge_total_duration_s
+		SLIDE_SPEED = tuning.slide_speed
+		SLIDE_DURATION_S = tuning.slide_duration_s
+		SLIDE_COOLDOWN_S = tuning.slide_cooldown_s
+		SLIDE_AIR_REFRESH_S = tuning.slide_air_refresh_s
+		DOUBLE_TAP_WINDOW_S = tuning.double_tap_window_s
+		WALL_JUMP_VSTRENGTH = tuning.wall_jump_vstrength
+		WALL_JUMP_HKICK = tuning.wall_jump_hkick
+		WALL_JUMP_LOCK_S = tuning.wall_jump_lock_s
+		MAX_HP = tuning.max_hp
+		MAX_KATANA = tuning.max_katana
+		HURT_IFRAME_S = tuning.hurt_iframe_s
+		KATANA_SWING_DURATION_S = tuning.katana_swing_duration_s
+		KATANA_COOLDOWN_S = tuning.katana_cooldown_s
+		KATANA_HIT_START_S = tuning.katana_hit_start_s
+		KATANA_HIT_END_S = tuning.katana_hit_end_s
+		KATANA_RANGE = tuning.katana_range
+		KATANA_HALF_H = tuning.katana_half_h
+		KATANA_VISUAL_SCALE = tuning.katana_visual_scale
+		KATANA_HIT_KNOCKBACK = tuning.katana_hit_knockback
+		KATANA_HIT_POP = tuning.katana_hit_pop
+		KATANA_HIT_RECOIL_S = tuning.katana_hit_recoil_s
+	SLIDE_MAX_UP_SPEED = SLIDE_SPEED * 0.7071067811865476
+
+
 func _ready() -> void:
 	add_to_group("players")
+	_apply_tuning()   # data-driven balance: load player_tuning.tres (or use the injected resource)
 	_spawn_collision_layer = collision_layer   # remember our solid layer so respawn restores it
 	var prefix = "p1" if slot == 1 else "p2"
 	input_left = prefix + "_left"
