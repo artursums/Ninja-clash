@@ -1,58 +1,55 @@
-# Milestone 01 — Production MVP
+# Milestone 01 — Ninja Clash v1 (production from prototype base)
 
-> **Status**: In Progress (Sprint 1 active)
-> **Created**: 2026-05-26
-> **Source**: design/gdd/systems-index.md (MVP tier — 8 systems)
+> **Status**: In Progress
+> **Re-scoped**: 2026-05-26 per [ADR-0002](../../docs/architecture/ADR-0002-prototype-as-production-base.md)
+> **Game**: `ninja_clash/` (the promoted prototype) · **Engine**: Godot 4.6
+
+> **History note:** this milestone originally scoped a *from-scratch rewrite in `src/`* of 8
+> designed systems. Per ADR-0002 we pivoted: the prototype is a validated, nearly-complete game,
+> so we **adopt it as the production base and harden it** instead of rebuilding. The from-scratch
+> rewrite (Sprints 1–2) is archived in `archive/src-rewrite/` as reference.
 
 ## Goal
-Re-implement the 8 approved MVP systems to production standards in `src/` and
-integrate them into a complete, playable first-to-N couch match — the production
-equivalent of what the throwaway prototype validated. This is the point at which
-"the game exists in `src/`," not just in a prototype.
+Take the validated prototype (`ninja_clash`) to a **shippable, maintainable** couch-PvP game —
+quality code where it matters, online (v2) kept viable, real content, store-ready — without
+regressing the fun that's already there.
 
-## Scope — the 8 MVP systems
-Build order follows the dependency graph in `systems-index.md`:
+## Three work streams
 
-| Layer | Systems | GDD |
-|-------|---------|-----|
-| Foundation | Game State Manager, Couch Input, Map, Character Controller | approved |
-| Core | Movement, Projectile | approved |
-| Feature | Combat, Round Flow | approved |
+### 1. Hardening (quality + online)
+- [x] **Input/state separation** — sim reads `PlayerInput` intent, not the device (ADR-0001 pattern). Online v2 stays viable. *(done — commit 57e8551)*
+- [ ] **Data-driven tuning** — extract hardcoded values (gravity, i-frames, speeds, …) into config Resources, so balance is editable + testable.
+- [ ] **GUT tests on the core math** — dodge i-frame window, shuriken physics/recoverability, combat resolution. (Harness now runs in `ninja_clash`; 5 tests so far.)
+- [ ] Menu input through the intent layer (lower priority — UI nav, not the replicated sim).
 
-Vertical-Slice/Alpha systems (Clan Cosmetics, HUD, VFX, Audio, UI Flow) are **out
-of scope** for this milestone — they belong to later milestones.
+### 2. Store-readiness
+- [ ] Export presets (Windows / macOS / Linux / Steam Deck) — produce real builds.
+- [ ] Save/persistence — settings (audio/video), maybe high scores.
+- [ ] Icon, store page assets, screenshots/trailer (assets — owner-sourced).
 
-## Out of Scope (anti-pillars / deferred)
-- Bot AI (v1.x — concept anti-pillar; the prototype's bot does **not** carry over)
-- Online networking (v2+ — addressed only by the input/state-separation ADR)
-- L2/J defense mechanic (deferred until validated; off-GDD)
-- Any progression, abilities, power-ups, or meta systems
+### 3. Content / polish
+- [ ] **Audio** — real SFX + music replacing the synthesized beeps (system can be built; final audio files owner-sourced).
+- [ ] Menu / title polish.
+- [ ] Final art pass (generated pixel-art → finished; owner-sourced).
 
-## Exit Criteria
-- [ ] All 8 MVP systems implemented in `src/` and pass their GDD acceptance criteria
-- [ ] A full 2-player match is playable end-to-end **from `src/`** (not the prototype):
-      menu → match setup → rounds → match end
-- [ ] GUT test suites green in headless for every system (balance formulas, slot logic,
-      projectile recoverability, round flow)
-- [ ] 60 fps locked during 2-player play; < 1 GB RAM (per technical-preferences.md budgets)
-- [ ] Projectile recoverability validator passes (no shuriken can become unrecoverable)
-- [ ] Prototype tuning values (dodge i-frames, throw velocity, pickup radius, etc.)
-      pinned into data-driven config, sourced from the playtest
+## Exit criteria (shippable v1)
+- [ ] A real exported build runs on the target platforms at 60 fps.
+- [ ] Core feel/combat math covered by GUT tests; no S1/S2 bugs.
+- [ ] Tuning is data-driven (no balance values hardcoded in logic).
+- [ ] Input is intent-driven (online-viable); save/settings persist.
+- [ ] Real audio + finished art + polished menus.
+- [ ] Store page + assets ready.
 
-## Sprints laddering up to this milestone
-| Sprint | Focus | Systems | Status |
-|--------|-------|---------|--------|
-| [Sprint 1](../sprints/sprint-01.md) | Scaffold + architecture + Foundation spine | Project setup, ADR-0001, Game State Manager, Couch Input | ✅ Done (42 tests green) |
-| [Sprint 2](../sprints/sprint-02.md) | Finish Foundation + core feel | Map, Character Controller, core Movement (walk/jump/dodge) | Planned |
-| Sprint 3 (planned) | Feel complete + projectiles | Movement (wall-jump/drop-through), Projectile | — |
-| Sprint 4 (planned) | The game | Combat, Round Flow → first full `src/` match | — |
+## What carries over from the rewrite (reference, not re-run)
+The archived `src/` work + the GDDs + ADR-0001 are the **hardening guide** — they define the clean
+patterns (input/state separation ✅, data-driven config, DI/testability) we now apply to the
+prototype rather than rebuild.
 
-Rough estimate: ~4 one-week full-time sprints to a complete Production MVP. Sprint 1 came in
-under budget, but Movement + Combat are the L-effort hot-zones — hold the buffer.
-
-## Risks
-- The two feel-critical systems (Movement, Combat) carry the most design risk; the
-  prototype de-risked them, so production must **pin the prototype's tuned values**
-  rather than re-discovering them.
-- Solo production-quality velocity is unproven — Sprint 1 establishes the real
-  build pace; re-estimate Sprints 2–3 after it closes.
+## Sprints
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| [Sprint 1](../sprints/sprint-01.md) | *(superseded)* from-scratch Foundation rewrite (GSM, Couch Input) | Archived — see ADR-0002 |
+| [Sprint 2](../sprints/sprint-02.md) | *(superseded)* from-scratch Map / Character Controller / Movement | Archived — see ADR-0002 |
+| [Sprint 3](../sprints/sprint-03.md) | **Ninja Clash hardening** (input/state ✅ → config + tests) | Active |
+| Sprint 4 (planned) | Store-readiness (export, save, icon) | — |
+| Sprint 5 (planned) | Content/polish (audio, menus, art) | — |

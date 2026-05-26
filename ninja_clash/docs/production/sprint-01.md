@@ -1,5 +1,11 @@
 # Sprint 1 — 2026-05-26 to 2026-05-30
 
+> ⚠️ **SUPERSEDED (2026-05-26) — historical record.** This sprint built the from-scratch `src/`
+> rewrite (Game State Manager, Couch Input). Per [ADR-0002](../../docs/architecture/ADR-0002-prototype-as-production-base.md)
+> we adopted the prototype (`ninja_clash`) as the production base instead; this rewrite is archived
+> in `archive/src-rewrite/`. Its value lives on as the ADR-0001 pattern + tested reference now
+> reused for hardening. Kept here for history; not the active plan.
+
 > **Milestone**: [Milestone 01 — Production MVP](../milestones/milestone-01-production-mvp.md)
 > **Capacity**: 1 week, full-time (~5 days) · solo
 > **Status**: Planned
