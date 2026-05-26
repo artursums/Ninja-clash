@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="PlayerTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://player_tuning.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+max_hspeed = 158.4
+jump_strength = 480.0
+gravity = 1400.0
+terminal_fall_speed = 320.0
+stomp_bounce_strength = 260.0
+shuriken_pogo_bounce = 240.0
+down_throw_speed = 720.0
+shuriken_throw_recoil = 260.0
+death_knockback = 90.0
+death_topple_rate = 5.0
+dodge_total_duration_s = 0.3
+slide_speed = 400.0
+slide_duration_s = 0.2
+slide_cooldown_s = 0.417
+slide_air_refresh_s = 0.5
+double_tap_window_s = 0.25
+wall_jump_vstrength = 540.0
+wall_jump_hkick = 200.0
+wall_jump_lock_s = 0.1
+max_hp = 5
+max_katana = 3
+hurt_iframe_s = 0.35
+katana_swing_duration_s = 0.32
+katana_cooldown_s = 0.2
+katana_hit_start_s = 0.05
+katana_hit_end_s = 0.22
+katana_range = 30.0
+katana_half_h = 18.0
+katana_visual_scale = 1.0
+katana_hit_knockback = 150.0
+katana_hit_pop = 70.0
+katana_hit_recoil_s = 0.1

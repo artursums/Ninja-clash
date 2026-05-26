@@ -1,0 +1,40 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Ninja Clash"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Audio="*res://audio.gd"
+GameState="*res://game_state.gd"
+Maps="*res://maps.gd"
+Combat="*res://combat.gd"
+PlayerInput="*res://player_input_router.gd"
+Settings="*res://settings_store.gd"
+
+[display]
+
+window/size/viewport_width=800
+window/size/viewport_height=450
+window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
+
+[rendering]
+
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
