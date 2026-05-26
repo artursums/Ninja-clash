@@ -11,19 +11,38 @@ const SAMPLE_RATE := 22050
 const SFX_DIR := "res://audio/sfx/"   # drop real <key>.ogg/.wav here to replace the beeps
 const MENU_MUSIC_PATH := "res://audio/start-menu/Ninja Kintsugi.mp3"
 const MATCH_MUSIC_PATH := "res://audio/gameplay/Steel Lanterns.mp3"   # starts after the countdown
+const MUSIC_BUS := "Music"   # both buses route to Master; Settings drives their levels independently
+const SFX_BUS := "SFX"
 
 var _streams: Dictionary = {}
 var _music_player: AudioStreamPlayer = null
 var _current_music_path: String = ""
 
 func _ready() -> void:
+	# Keep music + menu SFX audible while the tree is paused (the pause overlay relies on this).
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_ensure_buses()   # before any player is routed, so bus names resolve
 	_build_streams()
 	_load_real_sfx_overrides()   # a real file at res://audio/sfx/<key>.ogg|wav replaces its beep
 	_music_player = AudioStreamPlayer.new()
-	_music_player.bus = "Master"   # follows the Settings master volume
+	_music_player.bus = MUSIC_BUS   # follows the Settings music volume
 	add_child(_music_player)
 	# GameState is also an autoload; hook deferred so it's ready regardless of autoload order.
 	call_deferred("_hook_game_state")
+
+# Create the Music + SFX buses (each sending to Master) if they don't already exist, so the
+# Settings menu can control music and effects volume independently. No bus layout asset needed.
+func _ensure_buses() -> void:
+	_ensure_bus(MUSIC_BUS)
+	_ensure_bus(SFX_BUS)
+
+func _ensure_bus(bus_name: String) -> void:
+	if AudioServer.get_bus_index(bus_name) != -1:
+		return
+	var idx: int = AudioServer.bus_count
+	AudioServer.add_bus(idx)
+	AudioServer.set_bus_name(idx, bus_name)
+	AudioServer.set_bus_send(idx, "Master")
 
 # Procedural placeholder SFX. Each key can be overridden by a real audio file (see _load_real_sfx_overrides).
 func _build_streams() -> void:
@@ -79,7 +98,7 @@ func play(snd_name: String) -> void:
 		return
 	var p: AudioStreamPlayer = AudioStreamPlayer.new()
 	p.stream = _streams[snd_name]
-	p.bus = "Master"
+	p.bus = SFX_BUS   # follows the Settings effects volume
 	add_child(p)
 	p.play()
 	p.finished.connect(func() -> void: p.queue_free())

@@ -93,6 +93,12 @@ func _ready() -> void:
 	Combat.clash_occurred.connect(_on_clash)
 	GameState.change_state(GameState.State.TITLE)
 	print("[MAIN] _ready() complete")
+	# TEMP DEBUG (spawn-adjacency investigation): autostart an AI-vs-AI match so the bots play
+	# through several rounds headless and the [SPAWN]/[ROUND START] logs reveal the positions.
+	if OS.has_environment("NC_AUTOSTART_AIVAI"):
+		GameState.game_mode = GameState.Mode.AI_VS_AI
+		GameState.ai_difficulty = 3   # JONIN — brutal, resolves rounds fast
+		GameState.start_new_match()
 
 func _setup_input_map() -> void:
 	# P1 — DualSense only (no keyboard binds; gamepad added by _add_pad below).
@@ -117,6 +123,9 @@ func _setup_input_map() -> void:
 	_add_pad_button("menu_cancel", JOY_BUTTON_B, -1)   # Circle ◯ — back / cancel
 	_add_key("menu_random", KEY_X)
 	_add_pad_button("menu_random", JOY_BUTTON_Y, -1)   # Triangle △ — random map
+	# Pause — Esc on the keyboard, Start on any pad. Opens the pause overlay during a round.
+	_add_key("menu_pause", KEY_ESCAPE)
+	_add_pad_button("menu_pause", JOY_BUTTON_START, -1)
 
 # Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
 # PlayStation scheme. Godot uses position-based face-button names, so on a
@@ -328,6 +337,16 @@ func _build_overlays() -> void:
 	win_display.visible = false
 	canvas.add_child(win_display)
 
+	# Pause overlay — on its own top CanvasLayer so it draws above the HUD/arena, and
+	# PROCESS_MODE_ALWAYS (set in pause_menu.gd) so it keeps running while the tree is paused.
+	var pause_layer: CanvasLayer = CanvasLayer.new()
+	pause_layer.layer = 20
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(pause_layer)
+	var pause_menu: Control = Control.new()
+	pause_menu.set_script(load("res://pause_menu.gd"))
+	pause_layer.add_child(pause_menu)
+
 	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
 	mode_label = Label.new()
 	mode_label.position = Vector2(540, 6)
@@ -431,9 +450,14 @@ func _enter_match_intro() -> void:
 		p.heart_icons  = _make_icon_row(ind_root, 5, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
 		p.stash_icons  = _make_icon_row(ind_root, 5, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
 		p.katana_icons = _make_icon_row(ind_root, 3, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
-		p.respawn(_player_spawn(p.slot))
+		var spawn_target: Vector2 = _player_spawn(p.slot)
+		p.respawn(spawn_target)
 		p.is_bot = GameState.slot_is_bot(p.slot)
 		p.bot_difficulty = GameState.ai_difficulty
+		# TEMP DEBUG (spawn-adjacency investigation): target vs actual position right after respawn.
+		print("[SPAWN] r%d slot=%d clan=%s target=%s pos=%s alive=%s" % [
+			GameState.current_round, p.slot, GameState.get_clan(p.slot).name,
+			spawn_target, p.position, p.alive])
 	_start_countdown()
 
 func _enter_round() -> void:
@@ -581,6 +605,10 @@ func _process(_delta: float) -> void:
 			banner_label.text = ""
 			countdown_sprite.visible = false
 			round_display.visible = false
+			# TEMP DEBUG (spawn-adjacency investigation): where are they when the round actually starts?
+			for dp in players:
+				print("[ROUND START] r%d slot=%d pos=%s on_floor=%s" % [
+					GameState.current_round, dp.slot, dp.position, dp.is_on_floor()])
 			GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
@@ -592,9 +620,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var s = GameState.current_state
 		var S = GameState.State
+		# Esc during a live ROUND opens the pause overlay (pause_menu.gd owns it, not handled here).
+		# In the brief countdown / round-end transitions, Esc still bails to the title screen.
 		if event.keycode == KEY_ESCAPE:
-			if s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END:
-				print("[MAIN] ESC during match -> TITLE")
+			if s == S.MATCH_INTRO or s == S.ROUND_END:
+				print("[MAIN] ESC during transition -> TITLE")
 				GameState.change_state(S.TITLE)
 				get_viewport().set_input_as_handled()
 

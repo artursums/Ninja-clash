@@ -1349,8 +1349,10 @@ func _update_visual() -> void:
 	else:
 		visual.modulate = Color.WHITE
 	# === Clear any leftover death rotation; facing flip ===
+	# The art is drawn facing LEFT (sheathed-hilt/"tail" on the right), so we mirror
+	# when facing RIGHT to put the tail behind — matching motion and the katana mirror below.
 	visual.rotation = 0.0
-	visual.flip_h = (facing < 0)
+	visual.flip_h = (facing > 0)
 	# === Katana swing sprite — two poses only: vertical windup → diagonal strike ===
 	# The ninja must GRIP THE HANDLE. Each V2 frame draws the grip at a different spot,
 	# so we anchor that grip pixel to the hand via `offset`, place the hand just in front
