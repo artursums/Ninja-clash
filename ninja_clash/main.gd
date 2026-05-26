@@ -18,6 +18,14 @@ const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width
 const STAGE_DURATIONS: Array = [0.5, 0.8, 0.8, 0.8, 0.7]   # slower, more dramatic count (was 0.35/number)
 const STAGE_TEXTS: Array = ["", "3", "2", "1", "FIGHT!"]
 const STAGE_SOUNDS: Array = ["", "countdown", "countdown", "countdown", "round_start"]
+# Premium stone sprites for stages 1-4 (3 / 2 / 1 / FIGHT). Stage 0 ("ROUND N") stays as text.
+const STAGE_TEXTURES: Array = [
+	null,
+	preload("res://sprites/countdown/countdown_3_premium_native.png"),
+	preload("res://sprites/countdown/countdown_2_premium_native.png"),
+	preload("res://sprites/countdown/countdown_1_premium_native.png"),
+	preload("res://sprites/countdown/fight_premium_native.png"),
+]
 
 var arena_root: Node2D
 var sky_bg_solid: ColorRect
@@ -36,6 +44,7 @@ var match_end_screen: Control
 var hud: Control
 var mode_select_screen: Control
 var banner_label: Label
+var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites during the countdown
 var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
 
 var _in_countdown: bool = false
@@ -272,6 +281,13 @@ func _build_overlays() -> void:
 	banner_label.text = ""
 	canvas.add_child(banner_label)
 
+	# Countdown sprite (3 / 2 / 1 / FIGHT). Centered over the upper-middle of the arena, like the
+	# old text banner. Native res at scale 1.0; the pop animation scales it transiently.
+	countdown_sprite = Sprite2D.new()
+	countdown_sprite.position = Vector2(400, 175)
+	countdown_sprite.visible = false
+	canvas.add_child(countdown_sprite)
+
 	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
 	mode_label = Label.new()
 	mode_label.position = Vector2(540, 6)
@@ -402,26 +418,25 @@ func _start_countdown() -> void:
 	_advance_countdown_stage()
 
 func _advance_countdown_stage() -> void:
-	var pop_from := 1.5
 	if _countdown_stage == 0:
+		# "ROUND N" — text (no premium sprite for this stage).
+		countdown_sprite.visible = false
 		banner_label.text = "ROUND %d" % GameState.current_round
 		banner_label.add_theme_color_override("font_color", Color("f0eee8"))
 		banner_label.add_theme_font_size_override("font_size", 52)
-		pop_from = 1.25
+		_pop_banner(1.25)
 	else:
-		banner_label.text = STAGE_TEXTS[_countdown_stage]
-		var is_fight: bool = _countdown_stage >= 4
-		banner_label.add_theme_color_override("font_color", Color("e05030") if is_fight else Color("d4a830"))
-		banner_label.add_theme_font_size_override("font_size", 80 if is_fight else 72)
-		pop_from = 2.0 if is_fight else 1.5
+		# 3 / 2 / 1 / FIGHT — premium stone sprites replace the old text.
+		banner_label.text = ""
+		countdown_sprite.texture = STAGE_TEXTURES[_countdown_stage]
+		countdown_sprite.visible = true
+		_pop_sprite(2.0 if _countdown_stage >= 4 else 1.5)   # FIGHT pops hardest
 		var snd: String = STAGE_SOUNDS[_countdown_stage]
 		if snd != "":
 			Audio.play(snd)
-	_pop_banner(pop_from)
 	_countdown_stage_until = Time.get_ticks_msec() / 1000.0 + STAGE_DURATIONS[_countdown_stage]
 
-# Punch-in: the banner scales down from `from` to 1.0 with an overshoot, plus a quick fade-in.
-# (Label clip_contents is off, so the oversized pop renders without clipping the box.)
+# Punch-in for the "ROUND N" text banner: scale from `from` to 1.0 with an overshoot + quick fade.
 func _pop_banner(from: float) -> void:
 	banner_label.pivot_offset = banner_label.size * 0.5
 	banner_label.scale = Vector2(from, from)
@@ -430,6 +445,15 @@ func _pop_banner(from: float) -> void:
 	tw.set_parallel(true)
 	tw.tween_property(banner_label, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(banner_label, "modulate:a", 1.0, 0.14)
+
+# Punch-in for the countdown sprite (Sprite2D scales around its own centre): `from` → 1.0 + fade.
+func _pop_sprite(from: float) -> void:
+	countdown_sprite.scale = Vector2(from, from)
+	countdown_sprite.modulate.a = 0.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(countdown_sprite, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(countdown_sprite, "modulate:a", 1.0, 0.14)
 
 func _on_kill_logged(_killer: int, _victim: int) -> void:
 	if GameState.current_state != GameState.State.ROUND:
@@ -491,6 +515,7 @@ func _process(_delta: float) -> void:
 		if _countdown_stage >= STAGE_DURATIONS.size():
 			_in_countdown = false
 			banner_label.text = ""
+			countdown_sprite.visible = false
 			GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
