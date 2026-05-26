@@ -9,12 +9,22 @@ extends Node
 
 const SAMPLE_RATE := 22050
 const SFX_DIR := "res://audio/sfx/"   # drop real <key>.ogg/.wav here to replace the beeps
+const MENU_MUSIC_PATH := "res://audio/start-menu/Ninja Kintsugi.mp3"
+# In-match music slots in here later (a separate track per the owner); empty = silence for now.
+const MATCH_MUSIC_PATH := ""
 
 var _streams: Dictionary = {}
+var _music_player: AudioStreamPlayer = null
+var _current_music_path: String = ""
 
 func _ready() -> void:
 	_build_streams()
 	_load_real_sfx_overrides()   # a real file at res://audio/sfx/<key>.ogg|wav replaces its beep
+	_music_player = AudioStreamPlayer.new()
+	_music_player.bus = "Master"   # follows the Settings master volume
+	add_child(_music_player)
+	# GameState is also an autoload; hook deferred so it's ready regardless of autoload order.
+	call_deferred("_hook_game_state")
 
 # Procedural placeholder SFX. Each key can be overridden by a real audio file (see _load_real_sfx_overrides).
 func _build_streams() -> void:
@@ -81,3 +91,54 @@ func play_win_fanfare() -> void:
 	play("win_2")
 	await get_tree().create_timer(0.18).timeout
 	play("win_3")
+
+
+# === Background music ===
+
+# Connect to GameState and apply music for the current screen. Deferred from _ready so the
+# GameState autoload exists regardless of autoload order.
+func _hook_game_state() -> void:
+	if GameState != null and GameState.has_signal("state_changed"):
+		GameState.state_changed.connect(_on_state_changed)
+		_on_state_changed(GameState.current_state)   # start music for the boot state (TITLE)
+
+
+# Menu screens loop the menu track; in-match screens switch to the match track (empty for now).
+# Re-entering another menu screen does NOT restart the track (play_music is a no-op if unchanged).
+func _on_state_changed(new_state: int) -> void:
+	var menu_states := [
+		GameState.State.TITLE, GameState.State.MODE_SELECT,
+		GameState.State.CLAN_SELECT, GameState.State.MAP_SELECT,
+		GameState.State.MATCH_END,
+	]
+	if new_state in menu_states:
+		play_music(MENU_MUSIC_PATH)
+	else:
+		play_music(MATCH_MUSIC_PATH)   # "" → stops (no in-match track yet)
+
+
+# Play a looping music track. No-op if it's already the playing track (so menu-screen changes
+# don't restart it). An empty path stops the music.
+func play_music(path: String, loop: bool = true) -> void:
+	if path.is_empty():
+		stop_music()
+		return
+	if path == _current_music_path and _music_player.playing:
+		return
+	if not ResourceLoader.exists(path):
+		push_warning("Audio: music not found: %s" % path)
+		return
+	var stream: AudioStream = load(path)
+	if stream == null:
+		return
+	if "loop" in stream:
+		stream.loop = loop   # AudioStreamMP3 / OggVorbis loop the whole file
+	_music_player.stream = stream
+	_current_music_path = path
+	_music_player.play()
+
+
+func stop_music() -> void:
+	if _music_player != null:
+		_music_player.stop()
+	_current_music_path = ""
