@@ -424,14 +424,7 @@ func _enter_round() -> void:
 
 func _enter_round_end() -> void:
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
-	var winner_slot: int = _round_winner_slot if _round_winner_slot > 0 else GameState.last_kill_killer
-	if winner_slot <= 0:
-		banner_label.text = "DRAW"
-		banner_label.add_theme_color_override("font_color", Color("a8a498"))
-		return
-	var clan: Dictionary = GameState.get_clan(winner_slot)
-	banner_label.text = "%s WINS ROUND" % clan.name
-	banner_label.add_theme_color_override("font_color", clan.color)
+	# Round-winner banner removed (not wanted) — just hold a brief beat before the next round.
 
 func _start_countdown() -> void:
 	_in_countdown = true
