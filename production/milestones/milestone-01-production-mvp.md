@@ -23,9 +23,9 @@ regressing the fun that's already there.
 - [ ] Menu input through the intent layer (lower priority — UI nav, not the replicated sim).
 
 ### 2. Store-readiness
-- [ ] Export presets (Windows / macOS / Linux / Steam Deck) — produce real builds.
-- [ ] Save/persistence — settings (audio/video), maybe high scores.
-- [ ] Icon, store page assets, screenshots/trailer (assets — owner-sourced).
+- [x] **Save/persistence** — `SettingsStore` (autoload `Settings`) persists audio volume + fullscreen to `user://settings.cfg`, applied on boot. 3 GUT tests. *(A settings menu binds to it in the UI-polish stream.)*
+- [~] **Export presets** — guide written (`ninja_clash/EXPORT.md`); the actual presets + signed builds are created by the owner in the editor (needs export templates + signing).
+- [ ] Icon (placeholder `icon.svg` wired), store page assets, screenshots/trailer — **owner-sourced**.
 
 ### 3. Content / polish
 - [ ] **Audio** — real SFX + music replacing the synthesized beeps (system can be built; final audio files owner-sourced).
