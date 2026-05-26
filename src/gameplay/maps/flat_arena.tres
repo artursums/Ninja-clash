@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MapResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/core/map/map_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"flat_arena"
+display_name = "Flat Arena"
+scene_path = "res://src/gameplay/maps/flat_arena.tscn"
+spawn_points = Array[Vector2]([Vector2(60, 238), Vector2(180, 238), Vector2(300, 238), Vector2(420, 238)])
+horizontal_wrap = true
+vertical_wrap = false
+playfield_width = 480.0
+playfield_height = 270.0
+recommended_player_count = Vector2i(2, 4)
+recoverability_validated = true

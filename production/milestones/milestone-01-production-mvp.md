@@ -40,14 +40,15 @@ of scope** for this milestone — they belong to later milestones.
       pinned into data-driven config, sourced from the playtest
 
 ## Sprints laddering up to this milestone
-| Sprint | Focus | Systems |
-|--------|-------|---------|
-| [Sprint 1](../sprints/sprint-01.md) | Scaffold + architecture + Foundation base | Project setup, ADR-0001, Game State Manager, Couch Input (+ Map, Character Controller as Should-Have) |
-| Sprint 2 (planned) | Core feel — the hot zone | Character Controller (finish), Movement, Projectile |
-| Sprint 3 (planned) | The game | Combat, Round Flow → first full `src/` match |
+| Sprint | Focus | Systems | Status |
+|--------|-------|---------|--------|
+| [Sprint 1](../sprints/sprint-01.md) | Scaffold + architecture + Foundation spine | Project setup, ADR-0001, Game State Manager, Couch Input | ✅ Done (42 tests green) |
+| [Sprint 2](../sprints/sprint-02.md) | Finish Foundation + core feel | Map, Character Controller, core Movement (walk/jump/dodge) | Planned |
+| Sprint 3 (planned) | Feel complete + projectiles | Movement (wall-jump/drop-through), Projectile | — |
+| Sprint 4 (planned) | The game | Combat, Round Flow → first full `src/` match | — |
 
-Rough estimate: ~3–4 one-week full-time sprints to a complete Production MVP,
-assuming PROCEED from the playtest gate.
+Rough estimate: ~4 one-week full-time sprints to a complete Production MVP. Sprint 1 came in
+under budget, but Movement + Combat are the L-effort hot-zones — hold the buffer.
 
 ## Risks
 - The two feel-critical systems (Movement, Combat) carry the most design risk; the

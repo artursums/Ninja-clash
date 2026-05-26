@@ -24,6 +24,17 @@ CouchInput="*res://src/core/couch_input.gd"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
+[display]
+
+; 480x270 internal pixel-art resolution (Map GDD Core Rule 3), scaled to the window with
+; aspect-preserving letterbox. Default window = x2 (960x540).
+window/size/viewport_width=480
+window/size/viewport_height=270
+window/size/window_width_override=960
+window/size/window_height_override=540
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
+
 [physics]
 
 2d/physics_engine="GodotPhysics2D"

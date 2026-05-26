@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CharacterControllerConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/core/character_controller_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+gravity_px_s2 = 1200.0
+terminal_velocity_px_s = 600.0
+max_hspeed_px_s = 120.0
+horizontal_accel_px_s2 = 3000.0
+jump_cut_velocity_px_s = 200.0
+stationary_threshold_px_s = 5.0
+hitbox_width = 10.0
+hitbox_height = 16.0
