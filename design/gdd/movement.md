@@ -1,9 +1,26 @@
 # Movement
 
-> **Status**: In Design
+> **Status**: Approved (reconciled with prototype validation 2026-06-02)
 > **Author**: artursums + assistant
-> **Last Updated**: 2026-05-17
+> **Last Updated**: 2026-06-02
 > **Implements Pillar**: Primary — *Game-Feel First*; Secondary — *Fairness Is Sacred*
+
+> ## Prototype Reconciliation (2026-06-02) — AUTHORITATIVE
+> The `prototypes/movement-and-combat` playtest validated changes to this design. Where the
+> body below disagrees, this block wins (production follows it):
+>
+> 1. **No air-jump / no double jump.** The air-jump was removed in the prototype and the
+>    single-jump feel was judged cleaner. **Rules 4.6, 6b, 12, the `air_jump_available` flag,
+>    and the `AIR_JUMP_STRENGTH` knob are CUT.** Vertical recovery comes from the single
+>    ground-jump + **coyote time** (forgiveness) + wall-jump. Wall-jump still does not consume
+>    a jump (there is no air-jump to consume).
+> 2. **Dodge has no separate cooldown.** Re-dodge is gated only by `DODGE_TOTAL_DURATION_S`
+>    (the lockout window), per Formula 1. The prototype's extra slide-cooldown + "instant
+>    ground-reset" were artifacts of a different model and do not carry over.
+> 3. **Pinned starting values** (from the validated prototype; CC values live in
+>    `character_controller_config.tres`): `GRAVITY 1400`, `TERMINAL 320`, `MAX_HSPEED 158.4`,
+>    `JUMP_STRENGTH 480`, `DODGE_DASH_SPEED 400`, `DODGE_IFRAME 0.20`, `DODGE_TOTAL 0.30`.
+> 4. **Defense (L2 guard) is NOT in v1** (deferred; was never part of this GDD).
 
 ## Overview
 

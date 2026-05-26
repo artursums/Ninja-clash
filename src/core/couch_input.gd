@@ -72,11 +72,32 @@ func _ready() -> void:
 
 # --- Raw InputEvent adapter (the ONLY place that reads InputEvent). Thin: delegates to the
 #     testable internal handlers below. ---
+const _DEBUG_KEY_DEVICE := 1000   ## synthetic device id for the dev keyboard fallback
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton:
 		_on_button_event(event.device, event.button_index, event.pressed)
 	elif event is InputEventJoypadMotion:
 		_on_motion_event(event.device, event.axis, event.axis_value)
+	elif config.debug_keyboard_input and event is InputEventKey and not event.echo:
+		# Dev-only keyboard fallback (DEBUG_KEYBOARD_INPUT) — maps keys to a synthetic gamepad so
+		# the same slot/intent path is exercised. WASD/arrows = move, Space = A, K = throw, Enter = pause.
+		var button := _debug_key_to_button(event.physical_keycode)
+		if button >= 0:
+			_on_button_event(_DEBUG_KEY_DEVICE, button, event.pressed)
+
+
+func _debug_key_to_button(key: int) -> int:
+	match key:
+		KEY_A, KEY_LEFT: return JOY_BUTTON_DPAD_LEFT
+		KEY_D, KEY_RIGHT: return JOY_BUTTON_DPAD_RIGHT
+		KEY_W, KEY_UP: return JOY_BUTTON_DPAD_UP
+		KEY_S, KEY_DOWN: return JOY_BUTTON_DPAD_DOWN
+		KEY_SPACE: return JOY_BUTTON_A
+		KEY_K: return JOY_BUTTON_X
+		KEY_ENTER: return JOY_BUTTON_START
+	return -1
 
 
 func _on_joy_connection_changed(device: int, connected: bool) -> void:

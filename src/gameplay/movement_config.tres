@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="MovementConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/gameplay/movement_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+jump_strength = 480.0
+dodge_dash_speed = 400.0
+dodge_iframe_duration_s = 0.2
+dodge_total_duration_s = 0.3
+stick_neutral_threshold = 0.25
+coyote_time_s = 0.083
+jump_buffer_s = 0.083
+wall_jump_vertical_strength = 350.0
+wall_jump_horizontal_kick = 180.0
+wall_jump_cooldown_s = 0.3
+wall_slide_max_fall_speed = 100.0
+drop_through_threshold = 0.5

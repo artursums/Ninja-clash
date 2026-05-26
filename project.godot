@@ -10,6 +10,9 @@ config_version=5
 config/name="Four Clans"
 config/description="2D arena couch PvP, TowerFall-inspired. Production codebase (src/)."
 config/features=PackedStringArray("4.6", "Forward Plus")
+; TEMPORARY: the Sprint 2 movement harness, so the build is runnable. Replaced by the real
+; boot flow when UI Flow / Round Flow land.
+run/main_scene="res://src/gameplay/test_harness/movement_harness.tscn"
 
 [autoload]
 
