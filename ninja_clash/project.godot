@@ -21,6 +21,7 @@ Audio="*res://audio.gd"
 GameState="*res://game_state.gd"
 Maps="*res://maps.gd"
 Combat="*res://combat.gd"
+PlayerInput="*res://player_input_router.gd"
 
 [editor_plugins]
 

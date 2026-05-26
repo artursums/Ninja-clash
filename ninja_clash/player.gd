@@ -571,16 +571,19 @@ func _hide_reticle() -> void:
 	if _reticle != null:
 		_reticle.visible = false
 
-# === Input source: real device, or bot virtual input when is_bot ===
+# === Input source: bot virtual input, else the captured per-tick intent (ADR-0001) ===
+# Humans read the PlayerInput router's snapshot — NOT the live device — so the simulation is
+# driven by an intent that a future network layer could supply instead. Bots already inject
+# virtual intent (_bot_held/_bot_pressed), so they were always device-independent.
 func _held(action: String) -> bool:
 	if is_bot:
 		return _bot_held.get(action, false)
-	return Input.is_action_pressed(action)
+	return PlayerInput.held(action)
 
 func _pressed(action: String) -> bool:
 	if is_bot:
 		return _bot_pressed.get(action, false)
-	return Input.is_action_just_pressed(action)
+	return PlayerInput.pressed(action)
 
 # === Bot AI ===
 # A genuinely competent fighter, tiered by bot_difficulty (1 GENIN / 2 CHUNIN / 3 JONIN).
