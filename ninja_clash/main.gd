@@ -393,8 +393,6 @@ func _enter_match_intro() -> void:
 		p.respawn(_player_spawn(p.slot))
 		p.is_bot = GameState.slot_is_bot(p.slot)
 		p.bot_difficulty = GameState.ai_difficulty
-	if hud != null and hud.has_method("show_map_banner"):
-		hud.show_map_banner(Maps.get_map(GameState.selected_map_index).name)
 	_start_countdown()
 
 func _enter_round() -> void:
