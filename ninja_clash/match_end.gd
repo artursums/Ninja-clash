@@ -1,18 +1,42 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
-# Match-end screen. Shows winning clan + round tally + prompts.
-# W or Enter: play again (back to MAP_SELECT, same clans).
-# T: title screen (reset everything).
-# ESC: title screen.
-
+# Match-end screen. Shows the winning clan + round tally, then offers three choices:
+#   CHOOSE CHARACTERS → CLAN_SELECT (re-pick clans, same mode)
+#   CHOOSE ARENA      → MAP_SELECT  (re-pick map, same clans)
+#   MAIN MENU         → TITLE
+# Navigate ↑/↓ (either player / any pad), confirm ✕/Space, ◯/Esc → main menu.
+# Reuses the pause-menu sprite kit (backdrop + wooden button plates + pointer) for a consistent look.
 extends Control
+
+const MENU := "res://sprites/menu/"
+
+const PLATE_W := 320.0
+const PLATE_H := 46.0
+const PLATE_STEP := 60.0
+const PLATE_TOP := 224.0
+const PLATE_CX := (800.0 - PLATE_W) / 2.0
+
+const COL_SEL := Color("d4a830")    # highlighted item
+const COL_DIM := Color("f0eee8")    # idle item text
+
+# Option labels; the state each routes to is resolved at runtime by _option_state() (autoload enum
+# values aren't safe to embed in a const initializer).
+const OPT_TEXT: Array = ["CHOOSE CHARACTERS", "CHOOSE ARENA", "MAIN MENU"]
+
+func _option_state(i: int) -> int:
+	match i:
+		0: return GameState.State.CLAN_SELECT
+		1: return GameState.State.MAP_SELECT
+		_: return GameState.State.TITLE
 
 var winner_label: Label
 var subline: Label
 var tally_label: Label
-var prompt_label: Label
+var hint_label: Label
+var plates: Array = []     # button-plate TextureRects
+var opt_labels: Array = []
+var cursor_rect: TextureRect
+var _cursor: int = 0
 var _input_lockout_until: float = 0.0
+
 
 func _ready() -> void:
 	anchor_right = 1.0
@@ -21,86 +45,123 @@ func _ready() -> void:
 	_build()
 	visibility_changed.connect(_on_visibility_changed)
 
+
 func _on_visibility_changed() -> void:
 	if visible:
+		_cursor = 0
 		_refresh()
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 1.0
 		Audio.play_win_fanfare()
 
+
 func _build() -> void:
-	var bg: ColorRect = ColorRect.new()
-	bg.anchor_right = 1.0
-	bg.anchor_bottom = 1.0
-	bg.color = Color(0.05, 0.05, 0.08, 0.95)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
+	var backdrop := TextureRect.new()
+	backdrop.texture = load(MENU + "pause_backdrop_native.png")
+	backdrop.anchor_right = 1.0
+	backdrop.anchor_bottom = 1.0
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(backdrop)
 
-	winner_label = Label.new()
-	winner_label.position = Vector2(0, 100)
-	winner_label.size = Vector2(800, 80)
+	winner_label = _label(0, 60, 800, 80, 60)
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	winner_label.add_theme_font_size_override("font_size", 64)
-	add_child(winner_label)
 
-	subline = Label.new()
-	subline.position = Vector2(0, 195)
-	subline.size = Vector2(800, 30)
+	subline = _label(0, 142, 800, 28, 18)
 	subline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subline.add_theme_font_size_override("font_size", 20)
-	subline.add_theme_color_override("font_color", Color("d4a830"))
-	add_child(subline)
+	subline.text = "match victory"
+	subline.add_theme_color_override("font_color", COL_SEL)
 
-	tally_label = Label.new()
-	tally_label.position = Vector2(0, 260)
-	tally_label.size = Vector2(800, 60)
+	tally_label = _label(0, 176, 800, 30, 22)
 	tally_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tally_label.add_theme_font_size_override("font_size", 32)
-	tally_label.add_theme_color_override("font_color", Color("f0eee8"))
-	add_child(tally_label)
+	tally_label.add_theme_color_override("font_color", COL_DIM)
 
-	prompt_label = Label.new()
-	prompt_label.position = Vector2(0, 380)
-	prompt_label.size = Vector2(800, 30)
-	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt_label.add_theme_font_size_override("font_size", 16)
-	prompt_label.add_theme_color_override("font_color", Color("a8a498"))
-	prompt_label.text = "✕ / Space — play again (same arena)    ◯ / Esc — title screen"
-	add_child(prompt_label)
+	for i in OPT_TEXT.size():
+		var y: float = PLATE_TOP + i * PLATE_STEP
+		var plate := _tex_sized(load(MENU + "pause_button_normal_native.png"), PLATE_CX, y, PLATE_W, PLATE_H)
+		plates.append(plate)
+		var lbl := _label(PLATE_CX, y, PLATE_W, PLATE_H, 22)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.text = String(OPT_TEXT[i])
+		opt_labels.append(lbl)
+
+	cursor_rect = _tex_sized(load(MENU + "pause_cursor_native.png"), 0, 0, 28, 32)
+
+	hint_label = _label(0, 414, 800, 22, 12)
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint_label.text = "↑/↓ select     ✕ / Space confirm     ◯ / Esc — main menu"
+	hint_label.add_theme_color_override("font_color", Color("6a6e88"))
+
+
+# --- Node helpers ---
+
+func _tex_sized(tex: Texture2D, x: float, y: float, w: float, h: float) -> TextureRect:
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_SCALE
+	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tr.position = Vector2(x, y)
+	tr.size = Vector2(w, h)
+	add_child(tr)
+	return tr
+
+func _label(x: float, y: float, w: float, h: float, font_size: int) -> Label:
+	var lbl := Label.new()
+	lbl.position = Vector2(x, y)
+	lbl.size = Vector2(w, h)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", font_size)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(lbl)
+	return lbl
+
+
+# --- Refresh / input ---
 
 func _refresh() -> void:
 	var winner_slot: int = GameState.match_winner_slot
 	var clan: Dictionary = GameState.get_clan(winner_slot)
 	winner_label.text = "%s WINS" % clan.name
 	winner_label.add_theme_color_override("font_color", clan.color)
-	subline.text = "match victory"
+
 	var parts: PackedStringArray = PackedStringArray()
 	for slot in range(1, GameState.num_players() + 1):
 		parts.append("%s %d" % [GameState.get_clan(slot).name, Combat.scores.get(slot, 0)])
 	tally_label.text = "    ·    ".join(parts)
 
+	for i in plates.size():
+		var sel: bool = (i == _cursor)
+		plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
+		opt_labels[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
+
+	var cy: float = PLATE_TOP + _cursor * PLATE_STEP
+	cursor_rect.position = Vector2(PLATE_CX - 38.0, cy + (PLATE_H - 32.0) / 2.0)
+
+
+func _nav(suffix: String) -> bool:
+	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+
+
 func _process(_delta: float) -> void:
 	if not visible:
 		return
-	var t: float = Time.get_ticks_msec() / 1000.0
-	if t < _input_lockout_until:
+	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
-	# Back to title — any controller (Circle) or Esc.
 	if Input.is_action_just_pressed("menu_cancel"):
 		Audio.play("click")
 		GameState.change_state(GameState.State.TITLE)
 		return
-	if Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
+	if _nav("aim_up"):
+		_cursor = (_cursor + OPT_TEXT.size() - 1) % OPT_TEXT.size()
+		Audio.play("click")
+		_refresh()
+	elif _nav("aim_down"):
+		_cursor = (_cursor + 1) % OPT_TEXT.size()
+		Audio.play("click")
+		_refresh()
+	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
 		Audio.play("confirm")
-		GameState.start_new_match()
-
-func _input(event: InputEvent) -> void:
-	if not visible:
-		return
-	var t: float = Time.get_ticks_msec() / 1000.0
-	if t < _input_lockout_until:
-		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_T:   # Esc/Circle handled by menu_cancel in _process
-			Audio.play("click")
-			GameState.change_state(GameState.State.TITLE)
-			get_viewport().set_input_as_handled()
+		GameState.change_state(_option_state(_cursor))

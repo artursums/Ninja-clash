@@ -11,7 +11,10 @@ extends Resource
 @export var jump_strength: float = 480.0
 @export var gravity: float = 1400.0
 @export var terminal_fall_speed: float = 320.0
-@export var stomp_bounce_strength: float = 260.0
+@export var stomp_bounce_strength: float = 260.0       # upward pop the stomper gets off a head
+@export var stomp_bounce_sideways: float = 150.0       # sideways shove away from the victim (anti-perch)
+@export var stomp_bounce_lock_s: float = 0.12          # how long that sideways shove resists input
+@export var stomp_cooldown_s: float = 0.45             # stomper can't stomp again within this window
 @export var shuriken_pogo_bounce: float = 240.0
 @export var down_throw_speed: float = 720.0
 @export var shuriken_throw_recoil: float = 260.0

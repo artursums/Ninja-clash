@@ -35,6 +35,13 @@ const CLANS: Array = [
 	{"name": "FIRE",   "color": Color("ff9132"), "secondary": Color("ffc382"), "sprite": "orange"},
 ]
 
+# Skins — an appearance STYLE layered on top of a clan's COLOUR. "base" is the classic
+# ninja; "elemental" is the colour's alternate elemental look; the rest are costume sets.
+# Every style resolves to a valid sprite for any of the four clan colours.
+const SKIN_STYLES: Array = ["base", "elemental", "chef", "cyber", "edo", "office", "pirate", "vacation"]
+const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION"]
+const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "glacier", "orange": "inferno"}
+
 var current_state: int = State.TITLE
 var game_mode: int = Mode.HUMAN_VS_HUMAN
 var ai_difficulty: int = 1   # 1=GENIN, 2=CHUNIN, 3=JONIN
@@ -42,6 +49,10 @@ var p1_clan: int = 3   # default Fire
 var p2_clan: int = 1   # default Storm
 var p3_clan: int = 2   # FFA bot — default Frost
 var p4_clan: int = 0   # FFA bot — default Shadow
+var p1_skin: int = 0   # skin STYLE index (into SKIN_STYLES); humans cycle theirs in clan select
+var p2_skin: int = 0
+var p3_skin: int = 0   # FFA/AI bots stay Classic
+var p4_skin: int = 0
 var selected_map_index: int = 0
 var current_round: int = 1
 var target_score: int = 5
@@ -65,6 +76,34 @@ func clan_index(slot: int) -> int:
 		2: return p2_clan
 		3: return p3_clan
 		_: return p4_clan
+
+func skin_count() -> int:
+	return SKIN_STYLES.size()
+
+func skin_index(slot: int) -> int:
+	match slot:
+		1: return p1_skin
+		2: return p2_skin
+		3: return p3_skin
+		_: return p4_skin
+
+func skin_label(style_idx: int) -> String:
+	return String(SKIN_LABELS[style_idx % SKIN_LABELS.size()])
+
+# Pose sheet (80×16, 5 frames) for a clan colour + skin style.
+func skin_pose_path(color: String, style_idx: int) -> String:
+	var style: String = String(SKIN_STYLES[style_idx % SKIN_STYLES.size()])
+	if style == "base":
+		return "res://sprites/ninjas/ninja_%s_native_80x16.png" % color
+	if style == "elemental":
+		return "res://sprites/ninjas/ninja_%s_%s_native_80x16.png" % [color, ELEMENTAL_BY_COLOR.get(color, "")]
+	return "res://sprites/ninjas/costumes/sprite_%s_%s_native_80x16.png" % [style, color]
+
+# Idle sheet (96×16, 6 frames) — only the base skin ships one; "" = none (player falls back to the pose idle).
+func skin_idle_path(color: String, style_idx: int) -> String:
+	if String(SKIN_STYLES[style_idx % SKIN_STYLES.size()]) == "base":
+		return "res://sprites/ninjas/ninja_%s_idle_6frame_native_96x16.png" % color
+	return ""
 
 # 2 for the duel modes, 4 for the free-for-all.
 func num_players() -> int:

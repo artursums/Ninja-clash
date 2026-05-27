@@ -1,19 +1,26 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
+# Map select. Move with stick/D-pad or A/D, confirm with Cross/Space, △/X = random map.
+# Circle / Esc: back to clan select.
 #
-# Map select. P1 navigates with A/D, confirms with W. X = random map.
-# ESC: back to clan select.
-
+# Visuals: wooden map frame (glowing "selected" variant) around a pre-rendered arena
+# thumbnail, with a carved nameplate below and flanking arrows. One arena ships today
+# (Sakura Temple); the cursor logic stays data-driven for when more are added.
 extends Control
 
+const MENU := "res://sprites/menu/"
+# Arena name (Maps autoload) → sprite slug. Falls back to "sakura" for any unmapped arena.
+const SLUG_BY_NAME := {"Sakura Temple": "sakura"}
+
+const FRAME_W := 228.0
+const FRAME_H := 178.0
+const FRAME_X := (800.0 - FRAME_W) / 2.0
+const FRAME_Y := 96.0
+const THUMB_W := 184.0
+const THUMB_H := 134.0
+
 var cursor: int = 0
-var tiles: Array = []
-var name_labels: Array = []
-var status_label: Label
-var _input_lockout_until: float = 0.0   # swallow the screen-entry press so it can't bleed into confirm
-const TILE_W: float = 150.0
-const TILE_H: float = 110.0
-const SPACING: float = 16.0
+var thumb: TextureRect
+var nameplate: TextureRect
+var _input_lockout_until: float = 0.0
 
 func _ready() -> void:
 	anchor_right = 1.0
@@ -29,6 +36,10 @@ func _on_visibility_changed() -> void:
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
 
+func _slug_for(index: int) -> String:
+	var map_name: String = Maps.get_map(index).name
+	return SLUG_BY_NAME.get(map_name, "sakura")
+
 func _build() -> void:
 	var bg: ColorRect = ColorRect.new()
 	bg.anchor_right = 1.0
@@ -37,93 +48,45 @@ func _build() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
-	var header: Label = Label.new()
-	header.text = "CHOOSE ARENA"
-	header.position = Vector2(0, 30)
-	header.size = Vector2(800, 40)
-	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	header.add_theme_font_size_override("font_size", 36)
-	header.add_theme_color_override("font_color", Color("f0eee8"))
-	add_child(header)
+	var header := _spr(load(MENU + "header_choose_arena_native.png"))
+	header.position = Vector2((800.0 - header.size.x) / 2.0, 16.0)
 
-	var count: int = Maps.count()
-	var total_w: float = count * TILE_W + (count - 1) * SPACING
-	var start_x: float = (800.0 - total_w) / 2.0
-	var y: float = 140.0
+	# Wooden frame first, arena thumbnail dropped into its window on top (the frame's
+	# inner panel is opaque, so the thumbnail must sit above it).
+	var frame := _spr(load(MENU + "map_frame_selected_native.png"))
+	frame.position = Vector2(FRAME_X, FRAME_Y)
 
-	for i in count:
-		var data: Dictionary = Maps.get_map(i)
-		var tile_holder: Control = Control.new()
-		tile_holder.position = Vector2(start_x + i * (TILE_W + SPACING), y)
-		tile_holder.size = Vector2(TILE_W, TILE_H)
-		tile_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(tile_holder)
+	thumb = _spr(load(MENU + "map_sakura_temple_native.png"))
+	thumb.position = Vector2(FRAME_X + (FRAME_W - THUMB_W) / 2.0, FRAME_Y + (FRAME_H - THUMB_H) / 2.0)
 
-		# Background of thumbnail (uses map's bg_color)
-		var thumb_bg: ColorRect = ColorRect.new()
-		thumb_bg.size = Vector2(TILE_W, TILE_H)
-		thumb_bg.color = data.bg_color
-		thumb_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tile_holder.add_child(thumb_bg)
+	var arrow_l := _spr(load(MENU + "ui_arrow_left_normal_native.png"), 2.2)
+	arrow_l.position = Vector2(FRAME_X - 20.0 * 2.2 - 18.0, FRAME_Y + FRAME_H / 2.0 - 9.0 * 2.2)
+	var arrow_r := _spr(load(MENU + "ui_arrow_right_normal_native.png"), 2.2)
+	arrow_r.position = Vector2(FRAME_X + FRAME_W + 18.0, FRAME_Y + FRAME_H / 2.0 - 9.0 * 2.2)
 
-		# Mini wall rendering, scaled 800x450 → TILE_W x TILE_H
-		var scale_x: float = TILE_W / 800.0
-		var scale_y: float = TILE_H / 450.0
-		for w in data.walls:
-			var mini: ColorRect = ColorRect.new()
-			mini.size = Vector2(w.size.x * scale_x, w.size.y * scale_y)
-			mini.position = Vector2(
-				(w.center.x - w.size.x * 0.5) * scale_x,
-				(w.center.y - w.size.y * 0.5) * scale_y,
-			)
-			mini.color = data.wall_color
-			mini.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			tile_holder.add_child(mini)
+	nameplate = _spr(load(MENU + "map_nameplate_sakura_native.png"))
+	nameplate.position = Vector2((800.0 - nameplate.size.x) / 2.0, 298.0)
 
-		# Spawn dots
-		for sp in data.spawn_points:
-			var dot: ColorRect = ColorRect.new()
-			dot.size = Vector2(4, 4)
-			dot.position = Vector2(sp.x * scale_x - 2, sp.y * scale_y - 2)
-			dot.color = Color("d4a830")
-			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			tile_holder.add_child(dot)
+	var hint := _spr(load(MENU + "ui_hint_plate_native.png"), 1.5)
+	hint.position = Vector2((800.0 - hint.size.x * 1.5) / 2.0, 392.0)
 
-		tiles.append(tile_holder)
-
-		var name_lbl: Label = Label.new()
-		name_lbl.text = data.name
-		name_lbl.position = Vector2(tile_holder.position.x, tile_holder.position.y + TILE_H + 6)
-		name_lbl.size = Vector2(TILE_W, 24)
-		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_lbl.add_theme_font_size_override("font_size", 14)
-		name_lbl.add_theme_color_override("font_color", Color("f0eee8"))
-		add_child(name_lbl)
-		name_labels.append(name_lbl)
-
-	status_label = Label.new()
-	status_label.position = Vector2(0, 350)
-	status_label.size = Vector2(800, 30)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 16)
-	status_label.add_theme_color_override("font_color", Color("a8a498"))
-	add_child(status_label)
-
-	var hint: Label = Label.new()
-	hint.text = "move: stick/D-pad or A/D    confirm: ✕ / Space    random: △ / X    back: ◯ / Esc"
-	hint.position = Vector2(0, 420)
-	hint.size = Vector2(800, 20)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.add_theme_color_override("font_color", Color("6a6e88"))
-	add_child(hint)
+func _spr(tex: Texture2D, sprite_scale: float = 1.0) -> TextureRect:
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_SCALE
+	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tr.size = Vector2(tex.get_size())
+	tr.scale = Vector2(sprite_scale, sprite_scale)
+	add_child(tr)
+	return tr
 
 func _process(_delta: float) -> void:
 	if not visible:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
-	# Back to clan select (Circle / Esc) and random map (Triangle / X) — any controller.
 	if Input.is_action_just_pressed("menu_cancel"):
 		GameState.change_state(GameState.State.CLAN_SELECT)
 		return
@@ -148,13 +111,6 @@ func _process(_delta: float) -> void:
 		GameState.start_new_match()
 
 func _refresh() -> void:
-	for i in tiles.size():
-		var tile: Control = tiles[i]
-		if i == cursor:
-			tile.modulate = Color(1.4, 1.4, 1.4)
-			name_labels[i].add_theme_color_override("font_color", Color("d4a830"))
-		else:
-			tile.modulate = Color(0.55, 0.55, 0.6)
-			name_labels[i].add_theme_color_override("font_color", Color("a8a498"))
-	var picked: Dictionary = Maps.get_map(cursor)
-	status_label.text = "↑ " + picked.name + " — press W or ↑ to confirm"
+	var slug: String = _slug_for(cursor)
+	thumb.texture = load(MENU + "map_%s_temple_native.png" % slug)
+	nameplate.texture = load(MENU + "map_nameplate_%s_native.png" % slug)

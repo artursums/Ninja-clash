@@ -15,7 +15,7 @@ const BG_IMAGE_PATH := "res://sprites/level-1.png"
 const PLATFORM_SRC_Y_WALKABLE := 395.0   # measured: top of opaque stone in platform.png (1536×1024)
 const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width × this
 
-const STAGE_DURATIONS: Array = [0.5, 0.8, 0.8, 0.8, 0.7]   # slower, more dramatic count (was 0.35/number)
+const STAGE_DURATIONS: Array = [2.0, 0.8, 0.8, 0.8, 0.7]   # stage 0 = "ROUND N" banner (held 2.0 s); rest = dramatic 3/2/1/FIGHT count
 const STAGE_TEXTS: Array = ["", "3", "2", "1", "FIGHT!"]
 const STAGE_SOUNDS: Array = ["", "countdown", "countdown", "countdown", "round_start"]
 # Premium stone sprites for stages 1-4 (3 / 2 / 1 / FIGHT). Stage 0 ("ROUND N") stays as text.
@@ -93,12 +93,6 @@ func _ready() -> void:
 	Combat.clash_occurred.connect(_on_clash)
 	GameState.change_state(GameState.State.TITLE)
 	print("[MAIN] _ready() complete")
-	# TEMP DEBUG (spawn-adjacency investigation): autostart an AI-vs-AI match so the bots play
-	# through several rounds headless and the [SPAWN]/[ROUND START] logs reveal the positions.
-	if OS.has_environment("NC_AUTOSTART_AIVAI"):
-		GameState.game_mode = GameState.Mode.AI_VS_AI
-		GameState.ai_difficulty = 3   # JONIN — brutal, resolves rounds fast
-		GameState.start_new_match()
 
 func _setup_input_map() -> void:
 	# P1 — DualSense only (no keyboard binds; gamepad added by _add_pad below).
@@ -126,6 +120,10 @@ func _setup_input_map() -> void:
 	# Pause — Esc on the keyboard, Start on any pad. Opens the pause overlay during a round.
 	_add_key("menu_pause", KEY_ESCAPE)
 	_add_pad_button("menu_pause", JOY_BUTTON_START, -1)
+	# Skin cycle in clan select — Square (▢) on each pad; keyboard P for the keyboard player (P2).
+	_add_pad_button("p1_skin", JOY_BUTTON_X, 0)
+	_add_pad_button("p2_skin", JOY_BUTTON_X, 1)
+	_add_key("p2_skin", KEY_P)
 
 # Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
 # PlayStation scheme. Godot uses position-based face-button names, so on a
@@ -229,11 +227,22 @@ func _build_arena() -> void:
 
 # Spawn position for a fighter slot. The free-for-all needs four; the map provides two,
 # so slots 3-4 use the upper-side platforms.
+#
+# Each slot maps to its OWN point by index — never modulo-wrapped. A modulo wrap would silently
+# put two different slots on the same point if a slot index ever exceeded the point count (e.g. a
+# stray higher-slot fighter after an FFA→duel switch), so two fighters would spawn on top of each
+# other. Instead, if there is no dedicated point for a slot, fall back to a spread position so no
+# two fighters can ever coincide.
+const FFA_SPAWNS: Array = [Vector2(230, 340), Vector2(570, 340), Vector2(220, 170), Vector2(580, 170)]
+
 func _player_spawn(slot: int) -> Vector2:
-	if GameState.num_players() >= 4:
-		var ffa: Array = [Vector2(230, 340), Vector2(570, 340), Vector2(220, 170), Vector2(580, 170)]
-		return ffa[(slot - 1) % ffa.size()]
-	return spawn_points[(slot - 1) % spawn_points.size()]
+	var pts: Array = FFA_SPAWNS if GameState.num_players() >= 4 else spawn_points
+	var idx: int = slot - 1
+	if idx >= 0 and idx < pts.size():
+		return pts[idx]
+	# More fighters than defined spawn points — spread them out so no two ever share a spot.
+	push_warning("Spawn: slot %d has no dedicated spawn (only %d points); using spread fallback" % [slot, pts.size()])
+	return Vector2(110.0 + idx * 190.0, 340.0)
 
 func _make_player(slot: int) -> CharacterBody2D:
 	var p: CharacterBody2D = CharacterBody2D.new()
@@ -403,13 +412,14 @@ func _enter_match_intro() -> void:
 		var clan = GameState.get_clan(p.slot)
 		var sprite: Sprite2D = p.get_node("Visual")
 		var sprite_name: String = clan.get("sprite", "cyan")
-		# Load both pose sheet (5 frames) and idle animation sheet (6 frames)
-		var pose_path: String = "res://sprites/ninjas/ninja_%s_native_80x16.png" % sprite_name
-		var idle_path: String = "res://sprites/ninjas/ninja_%s_idle_6frame_native_96x16.png" % sprite_name
+		# Pose sheet (5 frames) + optional idle sheet (6 frames), resolved for this slot's skin.
+		var skin_idx: int = GameState.skin_index(p.slot)
+		var pose_path: String = GameState.skin_pose_path(sprite_name, skin_idx)
+		var idle_path: String = GameState.skin_idle_path(sprite_name, skin_idx)
 		if ResourceLoader.exists(pose_path):
 			p.pose_texture = load(pose_path)
-		if ResourceLoader.exists(idle_path):
-			p.idle_texture = load(idle_path)
+		# Costume/elemental skins ship no idle sheet → null so player.gd uses the pose idle frame.
+		p.idle_texture = load(idle_path) if idle_path != "" and ResourceLoader.exists(idle_path) else null
 		# Start in pose mode (idle mode kicks in via _update_visual when truly idle)
 		sprite.texture = p.pose_texture
 		sprite.hframes = 5
@@ -450,19 +460,55 @@ func _enter_match_intro() -> void:
 		p.heart_icons  = _make_icon_row(ind_root, 5, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
 		p.stash_icons  = _make_icon_row(ind_root, 5, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
 		p.katana_icons = _make_icon_row(ind_root, 3, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
-		var spawn_target: Vector2 = _player_spawn(p.slot)
-		p.respawn(spawn_target)
+		# Guard meter bar (track + depleting fill), highest of the above-head indicators.
+		var gb_bg: ColorRect = ColorRect.new()
+		gb_bg.color = Color(0.0, 0.0, 0.0, 0.55)
+		gb_bg.size = Vector2(26.0, 4.0)
+		gb_bg.position = Vector2(-13.0, -56.0)
+		gb_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ind_root.add_child(gb_bg)
+		var gb_fill: ColorRect = ColorRect.new()
+		gb_fill.color = Color(0.4, 0.8, 1.0, 0.95)
+		gb_fill.size = Vector2(26.0, 4.0)
+		gb_fill.position = Vector2(-13.0, -56.0)
+		gb_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ind_root.add_child(gb_fill)
+		p.guard_bar_bg = gb_bg
+		p.guard_bar_fill = gb_fill
+		p.respawn(_player_spawn(p.slot))
 		p.is_bot = GameState.slot_is_bot(p.slot)
 		p.bot_difficulty = GameState.ai_difficulty
-		# TEMP DEBUG (spawn-adjacency investigation): target vs actual position right after respawn.
-		print("[SPAWN] r%d slot=%d clan=%s target=%s pos=%s alive=%s" % [
-			GameState.current_round, p.slot, GameState.get_clan(p.slot).name,
-			spawn_target, p.position, p.alive])
+	# De-overlap AT SPAWN TIME (not only at the round-start transition) so two fighters can never
+	# even appear stacked during the countdown — covers any rare upstream corruption immediately.
+	_separate_overlapping_spawns()
 	_start_countdown()
 
 func _enter_round() -> void:
 	_in_countdown = false
 	banner_label.text = ""
+
+# Safety net (runs the instant a round begins): if any two fighters are dangerously close, snap
+# EVERY fighter back to its canonical spawn point. Normally a no-op — fighters start on opposite
+# pads ~340 px apart — so this only fires if something upstream left two of them stacked, which
+# guarantees a round can never visibly begin with two ninjas on the same spot.
+func _separate_overlapping_spawns() -> void:
+	var too_close: bool = false
+	for i in players.size():
+		for j in range(i + 1, players.size()):
+			if players[i].position.distance_to(players[j].position) < 120.0:
+				too_close = true
+	if not too_close:
+		return
+	# Log the actual layout so a rare LIVE occurrence is captured with exact numbers, then snap
+	# every fighter to its canonical spawn. (Normally never fires — respawn already separates them.)
+	var report: String = ""
+	for p in players:
+		report += " slot%d=(%.0f,%.0f)" % [p.slot, p.position.x, p.position.y]
+	push_warning("Spawn safety net FIRED (round %d):%s — re-placing at canonical spawns" % [GameState.current_round, report])
+	print("[SPAWN-FIX] round %d overlap detected:%s" % [GameState.current_round, report])
+	for p in players:
+		p.position = _player_spawn(p.slot)
+		p.velocity = Vector2.ZERO
 
 func _enter_round_end() -> void:
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
@@ -605,10 +651,7 @@ func _process(_delta: float) -> void:
 			banner_label.text = ""
 			countdown_sprite.visible = false
 			round_display.visible = false
-			# TEMP DEBUG (spawn-adjacency investigation): where are they when the round actually starts?
-			for dp in players:
-				print("[ROUND START] r%d slot=%d pos=%s on_floor=%s" % [
-					GameState.current_round, dp.slot, dp.position, dp.is_on_floor()])
+			_separate_overlapping_spawns()   # safety net: never begin a round with fighters stacked
 			GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
