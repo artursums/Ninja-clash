@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bkas2x1h5iod5"
-path="res://.godot/imported/level-1.png-a50535e3e0276b257de7390378980e24.ctex"
+uid="uid://dscby4iyvx40a"
+path="res://.godot/imported/sprite_ronin_orange_native_80x16.png-1683cd53dda81ca4344f836f9eb4c6f8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/level-1.png"
-dest_files=["res://.godot/imported/level-1.png-a50535e3e0276b257de7390378980e24.ctex"]
+source_file="res://sprites/ninjas/costumes/sprite_ronin_orange_native_80x16.png"
+dest_files=["res://.godot/imported/sprite_ronin_orange_native_80x16.png-1683cd53dda81ca4344f836f9eb4c6f8.ctex"]
 
 [params]
 

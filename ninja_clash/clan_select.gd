@@ -114,6 +114,17 @@ func _build() -> void:
 	status_label.add_theme_font_size_override("font_size", 16)
 	add_child(status_label)
 
+	# Fight Setup entry hint (bottom). Bound to the global "menu_setup" action (Tab / pad Select).
+	var setup_hint := Label.new()
+	setup_hint.position = Vector2(0, 374)
+	setup_hint.size = Vector2(800, 20)
+	setup_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	setup_hint.add_theme_font_size_override("font_size", 13)
+	setup_hint.add_theme_color_override("font_color", Color("8a8ea8"))
+	setup_hint.text = "TAB / SELECT  —  FIGHT SETUP"
+	setup_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(setup_hint)
+
 func _spr(tex: Texture2D, sprite_scale: float = 1.0) -> TextureRect:
 	var tr := TextureRect.new()
 	tr.texture = tex
@@ -162,6 +173,11 @@ func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("menu_cancel"):
 		Audio.play("click")
 		GameState.change_state(GameState.State.MODE_SELECT)
+		return
+	# Fight Setup / Variants — open from any mode, at any point before lock-in. Returns here.
+	if Input.is_action_just_pressed("menu_setup"):
+		Audio.play("confirm")
+		GameState.change_state(GameState.State.MATCH_SETUP)
 		return
 	# Free-for-all: only P1 picks; the three bots take the remaining clans automatically.
 	if GameState.game_mode == GameState.Mode.FFA:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bty4gddcb23ji"
-path="res://.godot/imported/wall.png-202f71260357ef04e6e8c2cec090a94e.ctex"
+uid="uid://20kvghicqd1e"
+path="res://.godot/imported/walls.png-bbe20f5829331bbf3abd1a79ce16ded7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/wall.png"
-dest_files=["res://.godot/imported/wall.png-202f71260357ef04e6e8c2cec090a94e.ctex"]
+source_file="res://sprites/levels/neo_tokyo/walls.png"
+dest_files=["res://.godot/imported/walls.png-bbe20f5829331bbf3abd1a79ce16ded7.ctex"]
 
 [params]
 

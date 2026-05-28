@@ -11,7 +11,8 @@ const MAP_W := 800
 const MAP_H := 450
 const PLAYER_W := 20.0
 const PLAYER_H := 32.0
-const BG_IMAGE_PATH := "res://sprites/level-1.png"
+# Per-level backdrops live at res://sprites/levels/<slug>/background.png, set via each map's
+# "background" field (Maps). Absent file → gradient sky fallback.
 const PLATFORM_SRC_Y_WALKABLE := 395.0   # measured: top of opaque stone in platform.png (1536×1024)
 const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width × this
 
@@ -65,6 +66,7 @@ var spawn_points: Array = [Vector2(120, 380), Vector2(680, 380)]
 var canvas: CanvasLayer
 var title_screen: Control
 var clan_select_screen: Control
+var match_setup_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
 var hud: Control
@@ -120,6 +122,10 @@ func _setup_input_map() -> void:
 	# Pause — Esc on the keyboard, Start on any pad. Opens the pause overlay during a round.
 	_add_key("menu_pause", KEY_ESCAPE)
 	_add_pad_button("menu_pause", JOY_BUTTON_START, -1)
+	# Fight Setup — Tab on the keyboard, Select/Share (Back) on any pad. Opens the variants screen
+	# from clan select. device -1 = all connected gamepads.
+	_add_key("menu_setup", KEY_TAB)
+	_add_pad_button("menu_setup", JOY_BUTTON_BACK, -1)
 	# Skin cycle in clan select — Square (▢) on each pad; keyboard P for the keyboard player (P2).
 	_add_pad_button("p1_skin", JOY_BUTTON_X, 0)
 	_add_pad_button("p2_skin", JOY_BUTTON_X, 1)
@@ -300,6 +306,11 @@ func _build_overlays() -> void:
 	clan_select_screen.set_script(ClanSelScript)
 	canvas.add_child(clan_select_screen)
 
+	var MatchSetupScript: Script = load("res://match_setup.gd")
+	match_setup_screen = Control.new()
+	match_setup_screen.set_script(MatchSetupScript)
+	canvas.add_child(match_setup_screen)
+
 	var MapSelScript: Script = load("res://map_select.gd")
 	map_select_screen = Control.new()
 	map_select_screen.set_script(MapSelScript)
@@ -384,6 +395,7 @@ func _on_state_changed(s: int) -> void:
 	title_screen.visible = (s == S.TITLE)
 	mode_select_screen.visible = (s == S.MODE_SELECT)
 	clan_select_screen.visible = (s == S.CLAN_SELECT)
+	match_setup_screen.visible = (s == S.MATCH_SETUP)
 	map_select_screen.visible = (s == S.MAP_SELECT)
 	match_end_screen.visible = (s == S.MATCH_END)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
@@ -455,11 +467,20 @@ func _enter_match_intro() -> void:
 				child.queue_free()
 		var ind_root: Node2D = Node2D.new()
 		ind_root.name = "Indicators"
+		# Above-head HUD info must read over the arena: platforms/walls sit at z 0, so lift the whole
+		# indicator group well above them (and the decorations) so hearts/stash/katana/guard never
+		# hide behind a platform that overlaps the head.
+		ind_root.z_index = 100
 		p.add_child(ind_root)
 		var cc: Color = clan.color
-		p.heart_icons  = _make_icon_row(ind_root, 5, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
-		p.stash_icons  = _make_icon_row(ind_root, 5, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
-		p.katana_icons = _make_icon_row(ind_root, 3, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
+		# Row lengths follow the active match variants: hearts = max HP, the shuriken row spans the
+		# catch cap (hidden entirely when shurikens are off), katana marks = the granted charge count
+		# (0 when the katana is off). _make_icon_row(0) yields an empty row the updaters skip.
+		var stash_row: int = MatchConfig.STASH_CAP if MatchConfig.shurikens_enabled else 0
+		var katana_row: int = MatchConfig.effective_katana_charges()
+		p.heart_icons  = _make_icon_row(ind_root, MatchConfig.max_hp, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
+		p.stash_icons  = _make_icon_row(ind_root, stash_row, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
+		p.katana_icons = _make_icon_row(ind_root, katana_row, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
 		# Guard meter bar (track + depleting fill), highest of the above-head indicators.
 		var gb_bg: ColorRect = ColorRect.new()
 		gb_bg.color = Color(0.0, 0.0, 0.0, 0.55)
@@ -683,8 +704,8 @@ func _load_map(index: int) -> void:
 	var data: Dictionary = Maps.get_map(index)
 	spawn_points = data.spawn_points.duplicate()
 
-	# Sky: use background.png if present, else gradient fallback
-	var using_image: bool = _apply_sky_background(data.get("sky_top", data.bg_color), data.get("sky_bot", data.bg_color))
+	# Sky: use this level's background image if present, else gradient fallback
+	var using_image: bool = _apply_sky_background(data.get("sky_top", data.bg_color), data.get("sky_bot", data.bg_color), data.get("background", ""))
 
 	# Background decorations — skip when a real image is the backdrop (would clash)
 	bg_decorations.commands = [] if using_image else data.get("bg_decorations", [])
@@ -701,18 +722,50 @@ func _load_map(index: int) -> void:
 		var sprite_path: String = w.get("sprite", "")
 		var sprite_region: Rect2 = w.get("sprite_region", Rect2())
 		var sprite_mode: String = w.get("sprite_mode", "platform")
-		var body := _make_wall(w.center, w.size, data.wall_color, edge_col, transparent, sprite_path, sprite_region, sprite_mode)
+		var walkable_y: float = w.get("sprite_walkable", -1.0)
+		var body := _make_wall(w.center, w.size, data.wall_color, edge_col, transparent, sprite_path, sprite_region, sprite_mode, walkable_y)
 		current_map_nodes.append(body)
+
+	# Non-colliding scenery sprites (e.g. neon gate pillars, ladder tower) drawn behind the
+	# platforms but in front of the sky image. Pure decoration — no collision, no gameplay.
+	for d in data.get("deco_sprites", []):
+		var deco := _make_deco(d)
+		if deco != null:
+			current_map_nodes.append(deco)
 
 	print("[MAIN] Loaded map %d: %s" % [index, data.name])
 
-func _apply_sky_background(top_color: Color, bottom_color: Color) -> bool:
+func _make_deco(d: Dictionary) -> Sprite2D:
+	var path: String = d.get("sprite", "")
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var spr := Sprite2D.new()
+	spr.texture = load(path)
+	spr.centered = true
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var region: Rect2 = d.get("sprite_region", Rect2())
+	var src_h: float = spr.texture.get_height()
+	if region.size.x > 0:
+		spr.region_enabled = true
+		spr.region_rect = region
+		src_h = region.size.y
+	# Scale uniformly so the on-screen height matches the requested value (preserves aspect).
+	var screen_h: float = d.get("height", src_h)
+	var s: float = screen_h / src_h
+	spr.scale = Vector2(s, s)
+	spr.position = d.get("center", Vector2.ZERO)
+	spr.z_index = int(d.get("z", -5))
+	spr.modulate = d.get("modulate", Color.WHITE)
+	arena_root.add_child(spr)
+	return spr
+
+func _apply_sky_background(top_color: Color, bottom_color: Color, bg_path: String) -> bool:
 	# Update letterbox fallback color to match map theme
 	if sky_bg_solid:
 		sky_bg_solid.color = top_color
-	# Prefer real background image if user supplied one
-	if ResourceLoader.exists(BG_IMAGE_PATH):
-		var img: Resource = load(BG_IMAGE_PATH)
+	# Prefer this level's background image if one is present on disk
+	if bg_path != "" and ResourceLoader.exists(bg_path):
+		var img: Resource = load(bg_path)
 		if img != null and img is Texture2D:
 			sky_rect.texture = img
 			return true
@@ -749,7 +802,7 @@ func _make_icon_row(parent: Node2D, count: int, tex_path: String, frame: int, hf
 		icons.append(icon)
 	return icons
 
-func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform") -> StaticBody2D:
+func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform", walkable_y: float = -1.0) -> StaticBody2D:
 	var body: StaticBody2D = StaticBody2D.new()
 	body.position = center
 	var col: CollisionShape2D = CollisionShape2D.new()
@@ -781,7 +834,10 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 		else:  # "platform" mode (default)
 			var s: float = (size.x * PLATFORM_VISUAL_OVERHANG) / src_w
 			sprite.scale = Vector2(s, s)
-			sprite.position = Vector2(0.0, -size.y / 2.0 + s * (src_h / 2.0 - PLATFORM_SRC_Y_WALKABLE))
+			# walkable_y = source-pixel row of the deck top (within region). -1 → use the
+			# platform.png default; component platforms each pass their own measured deck row.
+			var wy: float = PLATFORM_SRC_Y_WALKABLE if walkable_y < 0.0 else walkable_y
+			sprite.position = Vector2(0.0, -size.y / 2.0 + s * (src_h / 2.0 - wy))
 		body.add_child(sprite)
 	# Priority 2: legacy solid color rendering (unused when sprite or transparent)
 	elif not transparent:

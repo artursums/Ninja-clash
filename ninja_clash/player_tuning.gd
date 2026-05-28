@@ -37,6 +37,7 @@ extends Resource
 # --- HP + katana melee ---
 @export var max_hp: int = 5
 @export var max_katana: int = 3
+@export var start_shurikens: int = 3   # shurikens a fighter spawns holding (stash cap stays 5)
 @export var hurt_iframe_s: float = 0.35
 @export var katana_swing_duration_s: float = 0.32
 @export var katana_cooldown_s: float = 0.2

@@ -17,6 +17,7 @@ enum State {
 	ROUND,
 	ROUND_END,
 	MATCH_END,
+	MATCH_SETUP,   # Fight Setup / Variants screen (opened from clan select); appended so enum values don't shift
 }
 
 # Who controls each fighter this match. FFA = P1 (human) vs three bots, free-for-all.
@@ -38,8 +39,8 @@ const CLANS: Array = [
 # Skins — an appearance STYLE layered on top of a clan's COLOUR. "base" is the classic
 # ninja; "elemental" is the colour's alternate elemental look; the rest are costume sets.
 # Every style resolves to a valid sprite for any of the four clan colours.
-const SKIN_STYLES: Array = ["base", "elemental", "chef", "cyber", "edo", "office", "pirate", "vacation"]
-const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION"]
+const SKIN_STYLES: Array = ["base", "elemental", "ronin", "chef", "cyber", "edo", "office", "pirate", "vacation"]
+const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "RONIN", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION"]
 const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "glacier", "orange": "inferno"}
 
 var current_state: int = State.TITLE

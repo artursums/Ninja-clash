@@ -28,6 +28,7 @@ wall_jump_hkick = 200.0
 wall_jump_lock_s = 0.1
 max_hp = 5
 max_katana = 3
+start_shurikens = 3
 hurt_iframe_s = 0.35
 katana_swing_duration_s = 0.32
 katana_cooldown_s = 0.2

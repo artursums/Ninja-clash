@@ -23,6 +23,7 @@ Maps="*res://maps.gd"
 Combat="*res://combat.gd"
 PlayerInput="*res://player_input_router.gd"
 Settings="*res://settings_store.gd"
+MatchConfig="*res://match_config.gd"
 
 [display]
 

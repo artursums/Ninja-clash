@@ -1,14 +1,12 @@
 # Map select. Move with stick/D-pad or A/D, confirm with Cross/Space, △/X = random map.
 # Circle / Esc: back to clan select.
 #
-# Visuals: wooden map frame (glowing "selected" variant) around a pre-rendered arena
-# thumbnail, with a carved nameplate below and flanking arrows. One arena ships today
-# (Sakura Temple); the cursor logic stays data-driven for when more are added.
+# Visuals: wooden map frame (glowing "selected" variant) framing each arena's own background
+# image as the preview, with the arena name on a wooden plate below + flanking arrows. Fully
+# data-driven over Maps — every level shows its real backdrop and name, no per-level menu art.
 extends Control
 
 const MENU := "res://sprites/menu/"
-# Arena name (Maps autoload) → sprite slug. Falls back to "sakura" for any unmapped arena.
-const SLUG_BY_NAME := {"Sakura Temple": "sakura"}
 
 const FRAME_W := 228.0
 const FRAME_H := 178.0
@@ -19,7 +17,8 @@ const THUMB_H := 134.0
 
 var cursor: int = 0
 var thumb: TextureRect
-var nameplate: TextureRect
+var name_label: Label
+var subtitle_label: Label
 var _input_lockout_until: float = 0.0
 
 func _ready() -> void:
@@ -36,10 +35,6 @@ func _on_visibility_changed() -> void:
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
 
-func _slug_for(index: int) -> String:
-	var map_name: String = Maps.get_map(index).name
-	return SLUG_BY_NAME.get(map_name, "sakura")
-
 func _build() -> void:
 	var bg: ColorRect = ColorRect.new()
 	bg.anchor_right = 1.0
@@ -51,21 +46,51 @@ func _build() -> void:
 	var header := _spr(load(MENU + "header_choose_arena_native.png"))
 	header.position = Vector2((800.0 - header.size.x) / 2.0, 16.0)
 
-	# Wooden frame first, arena thumbnail dropped into its window on top (the frame's
-	# inner panel is opaque, so the thumbnail must sit above it).
+	# Arena preview = the level's own background image, dropped into the frame window first;
+	# the wooden frame sits on top so its border tucks over the preview edges.
+	thumb = TextureRect.new()
+	thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	thumb.clip_contents = true   # crop the covered image to the window
+	thumb.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	thumb.position = Vector2(FRAME_X + (FRAME_W - THUMB_W) / 2.0, FRAME_Y + (FRAME_H - THUMB_H) / 2.0)
+	thumb.size = Vector2(THUMB_W, THUMB_H)
+	add_child(thumb)
+
 	var frame := _spr(load(MENU + "map_frame_selected_native.png"))
 	frame.position = Vector2(FRAME_X, FRAME_Y)
-
-	thumb = _spr(load(MENU + "map_sakura_temple_native.png"))
-	thumb.position = Vector2(FRAME_X + (FRAME_W - THUMB_W) / 2.0, FRAME_Y + (FRAME_H - THUMB_H) / 2.0)
 
 	var arrow_l := _spr(load(MENU + "ui_arrow_left_normal_native.png"), 2.2)
 	arrow_l.position = Vector2(FRAME_X - 20.0 * 2.2 - 18.0, FRAME_Y + FRAME_H / 2.0 - 9.0 * 2.2)
 	var arrow_r := _spr(load(MENU + "ui_arrow_right_normal_native.png"), 2.2)
 	arrow_r.position = Vector2(FRAME_X + FRAME_W + 18.0, FRAME_Y + FRAME_H / 2.0 - 9.0 * 2.2)
 
-	nameplate = _spr(load(MENU + "map_nameplate_sakura_native.png"))
-	nameplate.position = Vector2((800.0 - nameplate.size.x) / 2.0, 298.0)
+	# Name plate (reuse the wooden plank) + the arena name & subtitle as dynamic text.
+	var plate := _spr(load(MENU + "pause_button_normal_native.png"))
+	var plate_w := 300.0
+	plate.size = Vector2(214, 52)   # native; scaled below via stretch to plate_w
+	plate.scale = Vector2(plate_w / 214.0, 46.0 / 52.0)
+	plate.position = Vector2((800.0 - plate_w) / 2.0, 290.0)
+
+	name_label = Label.new()
+	name_label.position = Vector2((800.0 - plate_w) / 2.0, 290.0)
+	name_label.size = Vector2(plate_w, 46.0)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_size_override("font_size", 22)
+	name_label.add_theme_color_override("font_color", Color("d4a830"))
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(name_label)
+
+	subtitle_label = Label.new()
+	subtitle_label.position = Vector2(0, 344.0)
+	subtitle_label.size = Vector2(800, 20.0)
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.add_theme_font_size_override("font_size", 13)
+	subtitle_label.add_theme_color_override("font_color", Color("a8a498"))
+	subtitle_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(subtitle_label)
 
 	var hint := _spr(load(MENU + "ui_hint_plate_native.png"), 1.5)
 	hint.position = Vector2((800.0 - hint.size.x * 1.5) / 2.0, 392.0)
@@ -111,6 +136,8 @@ func _process(_delta: float) -> void:
 		GameState.start_new_match()
 
 func _refresh() -> void:
-	var slug: String = _slug_for(cursor)
-	thumb.texture = load(MENU + "map_%s_temple_native.png" % slug)
-	nameplate.texture = load(MENU + "map_nameplate_%s_native.png" % slug)
+	var data: Dictionary = Maps.get_map(cursor)
+	var bg_path: String = data.get("background", "")
+	thumb.texture = load(bg_path) if bg_path != "" and ResourceLoader.exists(bg_path) else null
+	name_label.text = String(data.name).to_upper()
+	subtitle_label.text = String(data.get("subtitle", ""))
