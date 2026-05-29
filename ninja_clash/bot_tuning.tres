@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BotTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://bot_tuning.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+dodge_chance = Array[float]([0.45, 0.63, 0.8])
+dodge_range = Array[float]([82.0, 98.0, 116.0])
+deflect_chance = Array[float]([0.4, 0.55, 0.7])
+guard_chance = Array[float]([0.55, 0.72, 0.88])
+reaction_s = Array[float]([0.24, 0.17, 0.11])
+throw_cd = Array[float]([0.75, 0.52, 0.34])
+near_range = Array[float]([80.5, 71.3, 62.1])
+far_range = Array[float]([253.0, 224.25, 197.8])
+rush_chance = Array[float]([0.0034, 0.00595, 0.00935])
+pickup_range = Array[float]([120.0, 150.0, 180.0])
+melee_commit_chance = Array[float]([0.0051, 0.00765, 0.01105])
+melee_windup = Array[float]([0.5, 0.42, 0.34])
+melee_recovery = Array[float]([1.1, 0.9, 0.72])
+jump_react_h = Array[float]([72.0, 58.0, 46.0])
+hop_chance = Array[float]([0.01, 0.014, 0.02])
+dash_close_chance = Array[float]([0.02, 0.032, 0.048])
+dash_air_chance = Array[float]([0.03, 0.05, 0.08])
+high_ground_chance = Array[float]([0.006, 0.011, 0.018])

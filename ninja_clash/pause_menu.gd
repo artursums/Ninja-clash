@@ -279,9 +279,13 @@ func _process_settings() -> void:
 		_settings_cursor = (_settings_cursor + 1) % ROW_COUNT
 		Audio.play("click")
 		_refresh()
-	elif _settings_cursor < SETTINGS_NAMES.size() and (_nav("left") or _nav("right")):
-		var delta: float = VOL_STEP if _nav("right") else -VOL_STEP
-		_adjust_volume(_settings_cursor, delta)
+	elif _settings_cursor < SETTINGS_NAMES.size():
+		# Resolve the direction once instead of re-querying Input three times per frame.
+		var nav_left: bool = _nav("left")
+		var nav_right: bool = _nav("right")
+		if nav_left or nav_right:
+			var delta: float = VOL_STEP if nav_right else -VOL_STEP
+			_adjust_volume(_settings_cursor, delta)
 	elif _confirm_pressed() and _settings_cursor == ROW_COUNT - 1:   # BACK
 		_page = PAGE_MENU
 		Audio.play("click")

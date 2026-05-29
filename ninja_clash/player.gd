@@ -13,6 +13,8 @@ extends CharacterBody2D
 # (PLAYER_W/H, sprite frame indices) stay as consts — they are not balance knobs.
 const TUNING_PATH := "res://player_tuning.tres"
 var tuning: PlayerTuning = null   # inject in tests; otherwise TUNING_PATH is loaded in _ready
+const BOT_TUNING_PATH := "res://bot_tuning.tres"
+var bot_tuning: BotTuning = null  # inject in tests; otherwise loaded lazily on the first _bot_think
 
 var MAX_HSPEED := 158.4
 var JUMP_STRENGTH := 480.0
@@ -88,6 +90,13 @@ const FRAME_JUMP := 3
 const FRAME_ATTACK := 4
 const WALK_CYCLE_S := 0.14   # ~7 fps gait
 
+# Movement dust (TowerFall-style scuff/puff). Feet sit half the 32px hitbox below origin.
+const DUST_FEET_OFFSET := 16.0
+const DUST_BODY_HALF := 11.0        # body half-width; puffs are pushed fully OUTSIDE this so nothing sits under the ninja
+const DUST_SCALE := 0.9             # one knob for puff size (was 1.4-1.6 — shrunk so dust reads as small scuffs)
+const RUN_DUST_INTERVAL_S := 0.16   # real-time gap between run scuffs
+const RUN_DUST_MIN_HSPEED := 40.0   # only kick up dust above this ground speed
+
 # === Per-player config ===
 var slot: int = 1
 var spawn_pos: Vector2 = Vector2.ZERO
@@ -131,6 +140,8 @@ var guard_meter: float = 4.0          # remaining guard time (seconds); GUARD_MA
 var guard_cooldown_until: float = 0.0 # while > now, guard is broken/locked out (refilling)
 var frozen_until: float = 0.0         # while > now, this fighter is in a clash hitstop (per-player, not global)
 var throw_anim_until: float = 0.0   # show ATTACK frame for ~220ms after a throw
+var _was_on_floor: bool = false     # previous-frame floor state — drives the landing dust puff
+var _next_run_dust_t: float = 0.0   # real-time gate so run scuffs spawn at intervals, not every frame
 var death_time: float = -1.0        # set on _die() — drives spin/fade timing
 var death_spin_dir: int = 0         # +1 or -1 — matches knockback horizontal direction
 var _first_tick_done: bool = false
@@ -491,9 +502,13 @@ func _physics_process(delta: float) -> void:
 			wall_jump_lock_until = t + WALL_JUMP_LOCK_S
 			is_wall_grabbing = false
 			jumps_remaining = 0  # the wall jump IS the jump — no bonus air jump (no double jump)
+			# puff against the wall (the side the ninja is pushing off), not under it
+			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -signf(wall_normal.x))
 		elif jumps_remaining > 0:
 			velocity.y = -JUMP_STRENGTH   # single jump, always full strength (coyote case included)
 			jumps_remaining -= 1
+			# kick-off puff beside the trailing foot
+			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -float(facing))
 
 	# Dash-dodge request — ONE move on L2, R2 AND Circle (slide + dodge are now unified),
 	# plus a P2-only keyboard double-tap of A/D. Double-tap is scoped to slot 2 so an
@@ -540,6 +555,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if was_falling:
 		_check_headstomp()
+	_update_movement_dust(t, was_falling)
 	_check_screen_wrap()
 	_update_visual()
 
@@ -737,35 +753,40 @@ func _bot_think(t: float) -> void:
 	_bot_pressed.clear()
 
 	var lvl: int = clampi(bot_difficulty, 1, 3)
-	# Per-tier knobs (index 0 unused). Dodge isn't a guaranteed escape — if it were,
-	# two equal bots would dodge everything and never resolve — so even JONIN lets ~20%
-	# of throws through; the tiers scale defence, fire rate, spacing and aggression.
-	var dodge_chance: float = [0.0, 0.45, 0.63, 0.80][lvl]   # chance to read an incoming shuriken
-	var dodge_range: float  = [0.0, 82.0, 98.0, 116.0][lvl]  # how far out it reacts (timed to catch)
-	var throw_cd: float     = [0.0, 0.75, 0.52, 0.34][lvl]   # min gap between throws
-	var jump_react_h: float = [0.0, 72.0, 58.0, 46.0][lvl]   # eagerness to chase a higher foe
-	# Chasing dialed back ~15% (the ×1.15 spacing) so the bot sits further out and crowds the
-	# player less — more room to breathe. Rush frequency is likewise trimmed 15% below.
-	var near_range: float   = [0.0, 70.0, 62.0, 54.0][lvl] * 1.15   # back off sooner (keep more distance)
-	var far_range: float    = [0.0, 220.0, 195.0, 172.0][lvl] * 1.15# only close when the player is further out
-	var hop_chance: float   = [0.0, 0.010, 0.014, 0.020][lvl]
-	var rush_chance: float  = [0.0, 0.004, 0.007, 0.011][lvl] * 0.85  # 15% fewer pressure rushes
+	# Per-tier knobs now live in bot_tuning.tres (BotTuning), indexed [GENIN, CHUNIN, JONIN].
+	# Lazy-load once; fall back to the resource's script defaults (= the validated numbers) so the
+	# bot behaves identically even if the .tres is missing (e.g. a headless test).
+	if bot_tuning == null:
+		bot_tuning = load(BOT_TUNING_PATH) if ResourceLoader.exists(BOT_TUNING_PATH) else BotTuning.new()
+	var ti: int = lvl - 1   # tier index: 1/2/3 → 0/1/2
+	# Dodge isn't a guaranteed escape — if it were, two equal bots would dodge everything and never
+	# resolve — so even JONIN lets ~20% of throws through; the tiers scale defence, fire rate,
+	# spacing and aggression. The historical ×1.15 (spacing) / ×0.85 (rush, melee-commit) scalars
+	# are baked into the bot_tuning defaults.
+	var dodge_chance: float = bot_tuning.dodge_chance[ti]   # chance to read an incoming shuriken
+	var dodge_range: float  = bot_tuning.dodge_range[ti]    # how far out it reacts (timed to catch)
+	var throw_cd: float     = bot_tuning.throw_cd[ti]       # min gap between throws
+	var jump_react_h: float = bot_tuning.jump_react_h[ti]   # eagerness to chase a higher foe
+	var near_range: float   = bot_tuning.near_range[ti]     # back off sooner (keep more distance)
+	var far_range: float    = bot_tuning.far_range[ti]      # only close when the player is further out
+	var hop_chance: float   = bot_tuning.hop_chance[ti]
+	var rush_chance: float  = bot_tuning.rush_chance[ti]    # per-frame pressure-rush chance
 	# Katana-duel knobs. The bot picks its moment, closes, then HOLDS a beat before each
 	# cut — deliberate pacing, never a flurry. Pauses also give the human room to read it.
-	var melee_commit_chance: float = [0.0, 0.006, 0.009, 0.013][lvl] * 0.85 # 15% less eager to start a duel (throws more instead)
-	var melee_windup: float        = [0.0, 0.50,  0.42,  0.34][lvl]  # pause before a strike (the "stare-down")
-	var melee_recovery: float      = [0.0, 1.10,  0.90,  0.72][lvl]  # rest after a strike — no spamming
+	var melee_commit_chance: float = bot_tuning.melee_commit_chance[ti] # per-frame chance to start a duel
+	var melee_windup: float        = bot_tuning.melee_windup[ti]   # pause before a strike (the "stare-down")
+	var melee_recovery: float      = bot_tuning.melee_recovery[ti] # rest after a strike — no spamming
 	# Human-like movement & defence knobs.
-	var deflect_chance: float   = [0.0, 0.40,  0.55,  0.70][lvl]  # parry an incoming shuriken with the blade
-	var dash_close_chance: float= [0.0, 0.020, 0.032, 0.048][lvl] # burst-dash to close a big gap
-	var dash_air_chance: float  = [0.0, 0.030, 0.050, 0.080][lvl] # air-dash mid-jump toward the foe
+	var deflect_chance: float   = bot_tuning.deflect_chance[ti]    # parry an incoming shuriken with the blade
+	var dash_close_chance: float= bot_tuning.dash_close_chance[ti] # burst-dash to close a big gap
+	var dash_air_chance: float  = bot_tuning.dash_air_chance[ti]   # air-dash mid-jump toward the foe
 	# Human-feel knobs (research: "start from perfect play, then add reaction lag + errors").
-	var reaction_s: float       = [0.0, 0.24,  0.17,  0.11][lvl]  # lag before it answers a NEW threat (point-blank throws beat it)
-	var pickup_range: float     = [0.0, 120.0, 150.0, 180.0][lvl] # how far it detours to grab a loose blade (stash<5)
+	var reaction_s: float       = bot_tuning.reaction_s[ti]   # lag before it answers a NEW threat (point-blank throws beat it)
+	var pickup_range: float     = bot_tuning.pickup_range[ti] # how far it detours to grab a loose blade (stash<5)
 	# Defence + positioning knobs (Phase 2). Guard is the "can't dodge → block" fallback; high-ground
 	# is the tendency to contest a perch above the foe (per-frame commit chance, like rush_chance).
-	var guard_chance: float       = [0.0, 0.55,  0.72,  0.88][lvl]  # likelihood it blocks when dodge is on cooldown under fire
-	var high_ground_chance: float = [0.0, 0.006, 0.011, 0.018][lvl] # per-frame chance to commit to a high-ground push
+	var guard_chance: float       = bot_tuning.guard_chance[ti]       # likelihood it blocks when dodge is on cooldown under fire
+	var high_ground_chance: float = bot_tuning.high_ground_chance[ti] # per-frame chance to commit to a high-ground push
 
 	var enemy: Node = _bot_nearest_enemy()
 	if enemy == null:
@@ -1326,6 +1347,55 @@ func _spawn_strike_flash(pos: Vector2) -> void:
 	fx.scale = Vector2(1.5, 1.5)
 	fx.z_index = 50
 	get_parent().add_child(fx)
+
+# TowerFall-style movement puff. kind = "run" | "jump" | "land". Spawned into the
+# world (like the other FX) so the dust stays put while the ninja keeps moving.
+# flip_x mirrors the strip so a run scuff trails the correct way.
+# foot_pos = ground contact at the player's CENTRE x; side = -1 (left) / +1 (right).
+# fx_anim centres the sprite, so we re-anchor it: inner edge pushed past the body
+# (DUST_BODY_HALF) so it sits BESIDE the ninja, and the LOWEST dust pixel (base_row,
+# since the cell's lower rows are empty padding) lands exactly on foot_pos.y — so the
+# puff rests ON the ground, not floating in the air, and nothing pokes below the floor.
+func _spawn_dust(foot_pos: Vector2, kind: String, side: float) -> void:
+	# [path, frame_count, fps, native_w, native_h, base_row]  (base_row = lowest dust pixel)
+	var info: Array = {
+		"run":  ["res://sprites/fx/dust_run_4frame_native_64x16.png", 4, 26.0, 16.0, 16.0, 14.0],
+		"jump": ["res://sprites/fx/dust_jump_5frame_native_120x24.png", 5, 24.0, 24.0, 24.0, 22.0],
+		"land": ["res://sprites/fx/dust_land_5frame_native_160x32.png", 5, 22.0, 32.0, 32.0, 26.0],
+	}.get(kind, [])
+	if info.is_empty() or not ResourceLoader.exists(info[0]):
+		return
+	var fx: Sprite2D = Sprite2D.new()
+	fx.set_script(load("res://fx_anim.gd"))
+	fx.frame_count = info[1]
+	fx.fps = info[2]
+	fx.texture = load(info[0])
+	var s: float = DUST_SCALE
+	var dir: float = -1.0 if side < 0.0 else 1.0
+	var half_w: float = info[3] * s * 0.5
+	var half_h: float = info[4] * s * 0.5
+	fx.position = Vector2(
+		foot_pos.x + dir * (DUST_BODY_HALF + half_w),
+		foot_pos.y + half_h - info[5] * s)   # drop so the lowest dust pixel sits on the floor
+	fx.scale = Vector2(dir * s, s)   # mirror so the puff drifts/leans OUTWARD
+	fx.z_index = 1   # just above the floor tiles, below combat sparks (z 50)
+	get_parent().add_child(fx)
+
+# Run scuffs + landing puff. Called once per physics step AFTER move_and_slide(),
+# so is_on_floor() and global_position reflect this frame's result.
+func _update_movement_dust(t: float, was_falling: bool) -> void:
+	var on_floor_now: bool = is_on_floor()
+	if alive:
+		var foot: Vector2 = Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET)
+		if on_floor_now and not _was_on_floor and was_falling:
+			# landing: a puff kicks out to EACH side (nothing directly under the ninja)
+			_spawn_dust(foot, "land", -1.0)
+			_spawn_dust(foot, "land", 1.0)
+		elif on_floor_now and not is_sliding and absf(velocity.x) > RUN_DUST_MIN_HSPEED:
+			if t >= _next_run_dust_t:    # periodic scuff trailing BEHIND the direction of travel
+				_next_run_dust_t = t + RUN_DUST_INTERVAL_S
+				_spawn_dust(foot, "run", -signf(velocity.x))
+	_was_on_floor = on_floor_now
 
 # aim is a NON-normalized intent vector (per-axis -1/0/+1) from _throw_aim():
 #   (±1, 0) horizontal · (0, ±1) vertical · (±1, ±1) diagonal.
