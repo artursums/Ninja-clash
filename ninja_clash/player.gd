@@ -62,6 +62,22 @@ var KATANA_HIT_KNOCKBACK := 150.0
 var KATANA_HIT_POP := 70.0
 var KATANA_HIT_RECOIL_S := 0.10
 
+# Charged katana "blade-wave" projectile (DEV-005 — optional variant, gated by MatchConfig.blade_wave_enabled).
+# Holding the katana past CHARGE_TIME then releasing fires a straight directional slash-wave instead
+# of a second swing; the release ALWAYS spends one katana charge (miss/terrain/block all cost it).
+var BLADE_WAVE_CHARGE_TIME_S := 3.0
+var BLADE_WAVE_SPEED := 340.0
+var BLADE_WAVE_DAMAGE := 1
+var BLADE_WAVE_LIFETIME_S := 2.5
+# Charge tell: up to three wave "pips" stack in front while holding. Fixed (clan-independent) colours
+# so the player learns the cue — the HOT 3rd colour means "fully charged, release now".
+const BLADE_WAVE_TELL_SHEET := "res://sprites/fx/katana_slash_5frame_native_400x80.png"
+const CHARGE_PIP_COLORS := [
+	Color(0.45, 0.75, 1.0),   # 1 — cool blue (just started)
+	Color(1.0, 0.82, 0.25),   # 2 — gold (charging)
+	Color(1.0, 0.30, 0.18),   # 3 — hot red = READY, let go now
+]
+
 # Guard mobility + bounces (L2). You can RUN while guarding (was rooted). When a blade lands
 # on a raised guard the attacker is knocked back a little; when two raised guards collide both
 # fighters are shoved apart. All sell with a spark + clash flash.
@@ -88,7 +104,10 @@ const FRAME_WALK_1 := 1
 const FRAME_WALK_2 := 2
 const FRAME_JUMP := 3
 const FRAME_ATTACK := 4
-const WALK_CYCLE_S := 0.14   # ~7 fps gait
+const WALK_CYCLE_S := 0.14   # ~7 fps gait (2-frame pose fallback)
+const WALK6_FRAME_S := 0.085 # per-frame time for the richer 6-frame run cycle (~12 fps)
+const WALK6_FRAMES := 6
+const SWING_FRAMES := 6      # frames in the katana-swing body sheet
 
 # Movement dust (TowerFall-style scuff/puff). Feet sit half the 32px hitbox below origin.
 const DUST_FEET_OFFSET := 16.0
@@ -120,6 +139,10 @@ var _reticle: Node2D = null            # aim reticle, lazily built
 var swing_start_t: float = -999.0
 var katana_cooldown_until: float = -999.0   # earliest time the next swing is allowed (0.2 s gate)
 var swing_hit_done: bool = false       # ensure one player-hit per swing
+var katana_charging: bool = false      # blade-wave variant: katana held, a directional wave charging
+var katana_charge_ready: bool = false  # held past BLADE_WAVE_CHARGE_TIME_S — releasing now fires the wave
+var katana_press_t: float = -999.0     # real-time the current katana hold began
+var _charge_pips: Array = []           # up to 3 coloured wave sprites in front, the charge tell
 var hurt_iframe_until: float = 0.0
 var jumps_remaining: int = 1   # single jump (no double jump); resets to 1 whenever on floor
 var iframe_t_end: float = 0.0
@@ -205,7 +228,9 @@ var input_defend: String = ""
 var visual: Sprite2D = null
 var pose_texture: Texture2D = null   # 80×16, 5 frames (idle/walk1/walk2/jump/attack)
 var idle_texture: Texture2D = null   # 96×16, 6 frames (neutral/inhale/exhale/blink/look-L/look-R)
-var current_visual_mode: String = "pose"   # "pose" or "idle"
+var walk_texture: Texture2D = null   # 96×16, 6 frames — richer run cycle (optional; null → pose walk1/walk2)
+var swing_texture: Texture2D = null  # 96×16, 6 frames — katana swing body anim (optional; null → pose attack)
+var current_visual_mode: String = "pose"   # "pose" | "idle" | "walk" | "swing"
 
 # === Above-head indicators (built by main.gd) ===
 var stash_icons: Array = []    # 5 shuriken icons
@@ -284,6 +309,10 @@ func _apply_tuning() -> void:
 		KATANA_HIT_KNOCKBACK = tuning.katana_hit_knockback
 		KATANA_HIT_POP = tuning.katana_hit_pop
 		KATANA_HIT_RECOIL_S = tuning.katana_hit_recoil_s
+		BLADE_WAVE_CHARGE_TIME_S = tuning.blade_wave_charge_time_s
+		BLADE_WAVE_SPEED = tuning.blade_wave_speed
+		BLADE_WAVE_DAMAGE = tuning.blade_wave_damage
+		BLADE_WAVE_LIFETIME_S = tuning.blade_wave_lifetime_s
 	SLIDE_MAX_UP_SPEED = SLIDE_SPEED * 0.7071067811865476
 
 
@@ -537,10 +566,13 @@ func _physics_process(delta: float) -> void:
 		air_dash_penalty = not (on_floor_now or on_wall_now)   # only airborne dashes pay the touch-down delay
 		_start_slide(_aim_direction(), t)
 
-	# Katana swing — start, then run hit checks while active.
-	# Once all 3 charges are spent, the katana is locked out entirely for the rest of
-	# the round (respawn refills it); pressing it does nothing until then.
-	if _pressed(input_katana) and not is_swinging and not is_defending and katana_charges > 0 and t >= katana_cooldown_until:
+	# Katana. Standard rules: a press swings instantly (zero latency). When the blade-wave variant
+	# is ON the katana becomes HOLD-TO-CHARGE: holding winds up a wave (no swing yet), a quick tap
+	# swings on release, and holding past the threshold then releasing throws the wave.
+	# Once all charges are spent the katana is locked out for the round (respawn refills it).
+	if MatchConfig.blade_wave_enabled:
+		_update_katana_charge_input(t)
+	elif _pressed(input_katana) and not is_swinging and not is_defending and katana_charges > 0 and t >= katana_cooldown_until:
 		_start_swing(t)
 	if is_swinging:
 		_process_swing(t)
@@ -1194,6 +1226,65 @@ func _start_swing(t: float) -> void:
 	katana_cooldown_until = t + KATANA_SWING_DURATION_S + KATANA_COOLDOWN_S   # 0.2 s recovery after the swing finishes (0.52 s total swing-to-swing)
 	Audio.play("dodge")   # placeholder swoosh
 
+# Blade-wave hold-to-charge input (DEV-005, only while the variant is ON). A press begins a charge
+# WITHOUT swinging — holding is the wind-up. Held past BLADE_WAVE_CHARGE_TIME_S it arms (charge tell
+# peaks); releasing while armed throws the wave, releasing before then does the normal swing. So a
+# quick tap still swings (on release) and a long hold throws. Cancels cleanly on guard/death/no
+# charges. Bots only pulse the press for one frame, so they fall straight through to the normal swing.
+func _update_katana_charge_input(t: float) -> void:
+	if _pressed(input_katana) and not katana_charging and not is_swinging and not is_defending \
+			and katana_charges > 0 and t >= katana_cooldown_until:
+		katana_charging = true
+		katana_charge_ready = false
+		katana_press_t = t
+	if not katana_charging:
+		return
+	if is_defending or katana_charges <= 0 or not alive:
+		katana_charging = false
+		katana_charge_ready = false
+		return
+	if _held(input_katana):
+		if not katana_charge_ready and t - katana_press_t >= BLADE_WAVE_CHARGE_TIME_S:
+			katana_charge_ready = true
+			Audio.play("dodge")   # "charged / ready" cue
+		return
+	# Released:
+	if katana_charge_ready:
+		_fire_blade_wave(t)            # held past the threshold → throw the wave
+	elif t >= katana_cooldown_until:
+		_start_swing(t)               # quick tap → normal swing (on release)
+	katana_charging = false
+	katana_charge_ready = false
+
+# Spawn the directional slash-wave and ALWAYS spend one katana charge (the explicit contrast with the
+# melee swing, which never wastes a charge on a whiff/clash). Direction reuses the 8-way throw aim.
+func _fire_blade_wave(t: float) -> void:
+	if katana_charges <= 0:
+		return
+	var dir: Vector2 = _throw_aim().normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2(facing, 0.0)
+	if dir.x != 0.0:
+		facing = int(signf(dir.x))   # face the wave
+	katana_charges -= 1
+	_update_katana_indicator()
+	var WaveScript: Script = load("res://blade_wave.gd")
+	var w: Area2D = Area2D.new()
+	w.set_script(WaveScript)
+	w.thrower_slot = slot
+	w.damage = BLADE_WAVE_DAMAGE
+	w.lifetime_s = BLADE_WAVE_LIFETIME_S
+	w.velocity_v = dir * BLADE_WAVE_SPEED
+	var clan: Dictionary = GameState.get_clan(slot)
+	w.tint = clan.get("secondary", Color(0.7, 0.9, 1.0))
+	w.position = global_position + dir * 18.0
+	get_parent().add_child(w)
+	Audio.play("throw")
+	throw_anim_until = t + 0.22
+	if slash_fx != null:
+		slash_fx.stop()
+	_hide_charge_pips()
+
 # Active during the swing's hit window: deflect any flying shuriken in front,
 # and deal 1 damage to one enemy (consuming a katana charge, max 3).
 func _process_swing(t: float) -> void:
@@ -1633,6 +1724,9 @@ func respawn(at_pos: Vector2) -> void:
 	guard_meter = GUARD_MAX_S
 	guard_cooldown_until = 0.0
 	katana_cooldown_until = -999.0
+	katana_charging = false
+	katana_charge_ready = false
+	katana_press_t = -999.0
 	slide_charged = true
 	slide_cooldown_until = 0.0
 	air_dash_penalty = false
@@ -1683,6 +1777,63 @@ func _ensure_slash_fx() -> void:
 	slash_fx.set_tint(clan.get("secondary", Color(0.7, 0.9, 1.0)))
 
 
+# Lazily build the three blade-wave charge "pips" — small slash crescents that sit in front of the
+# fighter while charging. Built once and then shown/hidden + recoloured each frame.
+func _ensure_charge_pips() -> void:
+	if not _charge_pips.is_empty():
+		return
+	var tex: Texture2D = null
+	if ResourceLoader.exists(BLADE_WAVE_TELL_SHEET):
+		tex = load(BLADE_WAVE_TELL_SHEET)
+	for i in 3:
+		var pip: Sprite2D = Sprite2D.new()
+		if tex != null:
+			pip.texture = tex
+			pip.hframes = 5
+			pip.frame = 2                                    # fullest crescent frame
+		pip.centered = true
+		pip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		pip.z_index = 56
+		var mat: CanvasItemMaterial = CanvasItemMaterial.new()
+		mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		pip.material = mat
+		pip.visible = false
+		add_child(pip)
+		_charge_pips.append(pip)
+
+
+# Charge tell. While holding, 1→2→3 coloured wave pips stack outward in front of the fighter; the
+# 3rd (hot-red, pulsing) only appears when fully charged — the "release now" signal. Hidden otherwise.
+func _update_charge_pips(t: float) -> void:
+	if not katana_charging or not alive or not GameState.is_round_active():
+		_hide_charge_pips()
+		return
+	_ensure_charge_pips()
+	var progress: float = clampf((t - katana_press_t) / maxf(BLADE_WAVE_CHARGE_TIME_S, 0.001), 0.0, 1.0)
+	var shown: int = 1
+	if katana_charge_ready:
+		shown = 3                # fully charged → all three, 3rd = release colour
+	elif progress >= 0.5:
+		shown = 2
+	for i in _charge_pips.size():
+		var pip: Sprite2D = _charge_pips[i]
+		if i < shown:
+			var s: float = 0.42
+			if i == 2 and katana_charge_ready:
+				s *= 0.9 + 0.16 * sin(t * 22.0)   # the ready pip pulses to draw the eye
+			pip.visible = true
+			pip.position = Vector2(facing * (13.0 + i * 11.0), -2.0)
+			pip.scale = Vector2(facing * s, s)
+			pip.modulate = CHARGE_PIP_COLORS[i]
+		else:
+			pip.visible = false
+
+
+func _hide_charge_pips() -> void:
+	for pip in _charge_pips:
+		pip.visible = false
+
+
 func _update_visual() -> void:
 	if visual == null:
 		return
@@ -1701,6 +1852,7 @@ func _update_visual() -> void:
 			katana_sprite.visible = false   # never leave a blade stuck on a corpse (died mid-swing)
 		if slash_fx != null:
 			slash_fx.stop()
+		_hide_charge_pips()
 		# Hearts/stash/katana belong to a LIVING ninja — hide them on the corpse here too
 		# (belt-and-suspenders with the _process refresh) so a dead body can never display a
 		# frozen heart row, regardless of which update path runs this frame.
@@ -1710,7 +1862,13 @@ func _update_visual() -> void:
 		return
 	# === Alive: determine state & pick texture mode + frame ===
 	var in_action: bool = is_sliding or t < throw_anim_until
-	if is_defending:
+	if is_swinging and swing_texture != null:
+		# Full-body katana slash: step the swing sheet across the swing window.
+		_set_visual_mode("swing")
+		var dur: float = maxf(KATANA_SWING_DURATION_S, 0.001)
+		var phase: float = clampf((t - swing_start_t) / dur, 0.0, 1.0)
+		visual.frame = mini(int(phase * SWING_FRAMES), SWING_FRAMES - 1)
+	elif is_defending:
 		_set_visual_mode("pose")
 		visual.frame = FRAME_IDLE   # planted brace; the raised blade (below) sells the guard
 	elif in_action:
@@ -1720,8 +1878,12 @@ func _update_visual() -> void:
 		_set_visual_mode("pose")
 		visual.frame = FRAME_JUMP
 	elif abs(velocity.x) > 15.0:
-		_set_visual_mode("pose")
-		visual.frame = FRAME_WALK_1 if (int(t / WALK_CYCLE_S) % 2 == 0) else FRAME_WALK_2
+		if walk_texture != null:
+			_set_visual_mode("walk")   # richer 6-frame run cycle
+			visual.frame = int(t / WALK6_FRAME_S) % WALK6_FRAMES
+		else:
+			_set_visual_mode("pose")   # fallback: 2-frame pose walk
+			visual.frame = FRAME_WALK_1 if (int(t / WALK_CYCLE_S) % 2 == 0) else FRAME_WALK_2
 	else:
 		# True idle on the ground — play the 6-frame breathing animation
 		if idle_texture != null:
@@ -1778,10 +1940,23 @@ func _update_visual() -> void:
 			katana_sprite.offset = Vector2(0.0, -6.0)
 			if slash_fx != null:
 				slash_fx.stop()
+		elif katana_charging:
+			# Blade-wave charge: hold the blade raised; the wind-up is read from the wave "pips" that
+			# stack up in front of the fighter (see _update_charge_pips), not a crescent at the hand.
+			katana_sprite.visible = true
+			katana_sprite.flip_h = false
+			katana_sprite.scale = Vector2(-facing * KATANA_VISUAL_SCALE, KATANA_VISUAL_SCALE)
+			katana_sprite.position = Vector2(facing * 8.0, -2.0)
+			katana_sprite.frame = 2
+			katana_sprite.offset = Vector2(0.0, -6.0)
+			if slash_fx != null:
+				slash_fx.stop()
 		else:
 			katana_sprite.visible = false
 			if slash_fx != null:
 				slash_fx.stop()
+	# Blade-wave charge tell: the 1→3 coloured wave pips in front of the fighter.
+	_update_charge_pips(t)
 	# Above-head indicators are refreshed in _process (every rendered frame, after all
 	# physics mutations), so HP / stash / katana counts can't lag behind a hit, catch,
 	# pickup or stomp that another node applied this frame.
@@ -1836,15 +2011,29 @@ func _update_guard_indicator() -> void:
 func _set_visual_mode(mode: String) -> void:
 	if visual == null or current_visual_mode == mode:
 		return
+	# Graceful fallbacks when an optional sheet is missing (costumes/elemental skins).
 	if mode == "idle" and idle_texture == null:
-		return   # graceful fallback: stay in pose mode if idle sheet missing
+		return
+	if mode == "walk" and walk_texture == null:
+		mode = "pose"
+	if mode == "swing" and swing_texture == null:
+		mode = "pose"
+	if current_visual_mode == mode:
+		return
 	current_visual_mode = mode
-	if mode == "idle":
-		visual.texture = idle_texture
-		visual.hframes = 6
-	else:
-		visual.texture = pose_texture
-		visual.hframes = 5
+	match mode:
+		"idle":
+			visual.texture = idle_texture
+			visual.hframes = 6
+		"walk":
+			visual.texture = walk_texture
+			visual.hframes = WALK6_FRAMES
+		"swing":
+			visual.texture = swing_texture
+			visual.hframes = SWING_FRAMES
+		_:
+			visual.texture = pose_texture
+			visual.hframes = 5
 	visual.frame = 0   # reset to avoid out-of-bounds when hframes changes
 
 # Compute which idle frame to display at time t, walking the IDLE_PATTERN.

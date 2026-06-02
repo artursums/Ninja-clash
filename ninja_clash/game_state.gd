@@ -39,9 +39,13 @@ const CLANS: Array = [
 # Skins — an appearance STYLE layered on top of a clan's COLOUR. "base" is the classic
 # ninja; "elemental" is the colour's alternate elemental look; the rest are costume sets.
 # Every style resolves to a valid sprite for any of the four clan colours.
-const SKIN_STYLES: Array = ["base", "elemental", "ronin", "chef", "cyber", "edo", "office", "pirate", "vacation"]
-const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "RONIN", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION"]
+const SKIN_STYLES: Array = ["base", "elemental", "ronin", "chef", "cyber", "edo", "office", "pirate", "vacation", "pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
+const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "RONIN", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION", "PIGGY", "ENDOBOT", "NEKO", "STALKER", "IRONCLAD", "BAKENEKO"]
 const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "glacier", "orange": "inferno"}
+
+# Costume styles that ship the full richer animation set (6-frame idle/walk/swing
+# alongside the 5-pose sheet), stored under costumes/<style>/<color>_*.png.
+const RICH_SKINS: Array = ["pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
 
 var current_state: int = State.TITLE
 var game_mode: int = Mode.HUMAN_VS_HUMAN
@@ -98,13 +102,29 @@ func skin_pose_path(color: String, style_idx: int) -> String:
 		return "res://sprites/ninjas/ninja_%s_native_80x16.png" % color
 	if style == "elemental":
 		return "res://sprites/ninjas/ninja_%s_%s_native_80x16.png" % [color, ELEMENTAL_BY_COLOR.get(color, "")]
-	return "res://sprites/ninjas/costumes/sprite_%s_%s_native_80x16.png" % [style, color]
+	return "res://sprites/ninjas/costumes/%s/%s_native_80x16.png" % [style, color]
 
-# Idle sheet (96×16, 6 frames) — only the base skin ships one; "" = none (player falls back to the pose idle).
-func skin_idle_path(color: String, style_idx: int) -> String:
-	if String(SKIN_STYLES[style_idx % SKIN_STYLES.size()]) == "base":
-		return "res://sprites/ninjas/ninja_%s_idle_6frame_native_96x16.png" % color
+# Resolves a 96×16 6-frame animation sheet (tag = "idle"/"walk"/"swing") for the
+# style, or "" if the style has none (player then falls back to its pose frames).
+func _skin_anim_path(color: String, style_idx: int, tag: String) -> String:
+	var style: String = String(SKIN_STYLES[style_idx % SKIN_STYLES.size()])
+	if style == "base":
+		return "res://sprites/ninjas/ninja_%s_%s_6frame_native_96x16.png" % [color, tag]
+	if style in RICH_SKINS:
+		return "res://sprites/ninjas/costumes/%s/%s_%s_6frame_native_96x16.png" % [style, color, tag]
 	return ""
+
+# Idle sheet (96×16, 6 frames) — "" = none (player falls back to the pose idle).
+func skin_idle_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "idle")
+
+# Walk sheet (96×16, 6 frames) — richer run cycle. "" = none (player falls back to the 2-frame pose walk).
+func skin_walk_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "walk")
+
+# Swing sheet (96×16, 6 frames) — full katana-slash body animation. "" = none (player falls back to the pose attack frame).
+func skin_swing_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "swing")
 
 # 2 for the duel modes, 4 for the free-for-all.
 func num_players() -> int:

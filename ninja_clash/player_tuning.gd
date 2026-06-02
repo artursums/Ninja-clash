@@ -49,3 +49,9 @@ extends Resource
 @export var katana_hit_knockback: float = 150.0
 @export var katana_hit_pop: float = 70.0
 @export var katana_hit_recoil_s: float = 0.10
+
+# --- Charged katana "blade-wave" projectile (DEV-005; optional variant, gated by MatchConfig) ---
+@export var blade_wave_charge_time_s: float = 3.0   # how long the katana must be held before a release fires a wave
+@export var blade_wave_speed: float = 340.0         # straight-line flight speed (px/s); ~shuriken effective speed
+@export var blade_wave_damage: int = 1              # hearts removed on a fighter hit
+@export var blade_wave_lifetime_s: float = 2.5      # max time aloft before it despawns (range fallback)

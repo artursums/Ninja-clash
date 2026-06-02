@@ -39,6 +39,7 @@ const MAPS: Array = [
 	{
 		"name": "Sakura Temple",
 		"subtitle": "moonlit shinobi sanctum",
+		"ambience": "sakura",   # layered atmosphere controller (sakura_ambience.gd): lantern glow, moon bloom, drifting birds
 		"background": "res://sprites/levels/sakura_temple/background.png",
 		"bg_color": Color("0a081a"),
 		"sky_top": Color("0a081a"),
@@ -88,6 +89,8 @@ const MAPS: Array = [
 	{
 		"name": "Neo Tokyo",
 		"subtitle": "neon shinobi sprawl",
+		"ambience": "neon_tokyo",   # layered atmosphere (neon_tokyo_ambience.gd): rain, sun bloom, neon flicker, lightning, mist
+		"music": "res://audio/gameplay/Rain Circuit Clash.mp3",   # per-map fight track (overrides Audio.MATCH_MUSIC_PATH)
 		"background": "res://sprites/levels/neo_tokyo/background.png",
 		"bg_color": Color("0b0a1f"),
 		"sky_top": Color("0b0a1f"),
@@ -98,6 +101,10 @@ const MAPS: Array = [
 		# ears, a long central catwalk, two outer climb pads, the spawn pads, and a bottom
 		# landing over the chasm. Long neon catwalks (BEAM) anchor the main fight lines;
 		# medium PADs make the climbing/dodge routes. All platforms ≥50 px off the walls.
+		# WYSIWYG platforms: the neon art is opaque edge-to-edge, so the visual must equal the hitbox
+		# (overhang 1.0) — at the old 1.4 the beam was drawn 40% wider than its collision and fighters
+		# fell straight through the visible-but-non-solid edges.
+		"platform_overhang": 1.0,
 		"walls": [
 			# === Side walls: neon towers, full screen height, collision past viewport ===
 			{
@@ -116,29 +123,25 @@ const MAPS: Array = [
 			},
 
 			# === Floating neon platforms (all ≥50 px from wall x-ranges 0-86, 714-800) ===
+			# Widths trimmed ~12% from the originals (160/130/220/110/175/150) for a slightly smaller feel.
 			# Tier 1 — top apex catwalk (high-ground sniping perch)
-			{"center": Vector2(400, 72),  "size": Vector2(160, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
+			{"center": Vector2(400, 72),  "size": Vector2(140, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
 			# Tier 2 — upper ears (mirrored)
-			{"center": Vector2(205, 155), "size": Vector2(130, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
-			{"center": Vector2(595, 155), "size": Vector2(130, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
+			{"center": Vector2(205, 155), "size": Vector2(114, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
+			{"center": Vector2(595, 155), "size": Vector2(114, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
 			# Tier 3 — central long catwalk (the main battle line through the middle)
-			{"center": Vector2(400, 235), "size": Vector2(220, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
+			{"center": Vector2(400, 235), "size": Vector2(194, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
 			# Tier 4 — outer climb pads (mirrored, bridge mid → spawn tiers)
-			{"center": Vector2(200, 300), "size": Vector2(110, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
-			{"center": Vector2(600, 300), "size": Vector2(110, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
+			{"center": Vector2(200, 300), "size": Vector2(96, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
+			{"center": Vector2(600, 300), "size": Vector2(96, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
 			# Tier 5 — spawn-pad catwalks (mirrored, players start 8 px above these)
-			{"center": Vector2(230, 372), "size": Vector2(175, 14), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
-			{"center": Vector2(570, 372), "size": Vector2(175, 14), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
+			{"center": Vector2(230, 372), "size": Vector2(154, 14), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
+			{"center": Vector2(570, 372), "size": Vector2(154, 14), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_BEAM, "sprite_walkable": 22.0},
 			# Bottom — central landing over the chasm
-			{"center": Vector2(400, 420), "size": Vector2(150, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
+			{"center": Vector2(400, 420), "size": Vector2(132, 12), "sprite": NEO_TOKYO_PARTS, "sprite_region": NT_PAD, "sprite_walkable": 1.0},
 		],
-		# Vertical neon landmarks behind the platforms (z = -5/-6): a ladder tower spine
-		# dead-center, flanked by two torii gate pillars. Pure scenery — no collision.
-		"deco_sprites": [
-			{"sprite": NEO_TOKYO_PARTS, "sprite_region": NT_LADDER, "center": Vector2(400, 270), "height": 380.0, "z": -5},
-			{"sprite": NEO_TOKYO_PARTS, "sprite_region": NT_GATE_L, "center": Vector2(122, 300), "height": 300.0, "z": -6},
-			{"sprite": NEO_TOKYO_PARTS, "sprite_region": NT_GATE_R, "center": Vector2(678, 300), "height": 300.0, "z": -6},
-		],
+		# No decorative landmarks: only the collidable platforms above are drawn, so every
+		# platform the player sees is one they can land on (no jump-on-the-background confusion).
 		"spawn_points": [Vector2(230, 340), Vector2(570, 340)],
 		"transparent_platforms": false,
 		"bg_decorations": [],

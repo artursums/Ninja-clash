@@ -109,10 +109,15 @@ func _setup_input_map() -> void:
 	_add_key("p2_katana",   KEY_K)
 	_add_key("p2_dodge",    KEY_SHIFT, KEY_LOCATION_RIGHT)
 	_add_key("p2_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
-	# Gamepad — TowerFall-on-PlayStation layout, appended to the keyboard binds.
-	# First connected pad → P1, second → P2 (a single DualSense drives P1).
-	_add_pad(1, 0)
-	_add_pad(2, 1)
+	# p2_skin keyboard bind goes BEFORE _rebind_gamepads: _add_key wipes an action's existing events,
+	# so binding P here first lets the pad's Square (added in _rebind) coexist instead of being erased.
+	_add_key("p2_skin",     KEY_P)         # cycle skin in clan select (keyboard P2)
+	# Gamepad — TowerFall-on-PlayStation layout, appended to the keyboard binds. The actual
+	# device ids are assigned dynamically (1st connected pad → P1, 2nd → P2) and re-bound on
+	# hot-plug, because Godot's joypad ids depend on connection order and are reused across
+	# reconnects — hardcoding device 0/1 left a second DualSense unmapped if it didn't land on id 1.
+	_rebind_gamepads()
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	# Global menu input — works from ANY keyboard or controller on every non-gameplay
 	# screen (TowerFall-style). device -1 = all connected gamepads.
 	_add_key("menu_cancel", KEY_ESCAPE)
@@ -126,10 +131,6 @@ func _setup_input_map() -> void:
 	# from clan select. device -1 = all connected gamepads.
 	_add_key("menu_setup", KEY_TAB)
 	_add_pad_button("menu_setup", JOY_BUTTON_BACK, -1)
-	# Skin cycle in clan select — Square (▢) on each pad; keyboard P for the keyboard player (P2).
-	_add_pad_button("p1_skin", JOY_BUTTON_X, 0)
-	_add_pad_button("p2_skin", JOY_BUTTON_X, 1)
-	_add_key("p2_skin", KEY_P)
 
 # Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
 # PlayStation scheme. Godot uses position-based face-button names, so on a
@@ -155,6 +156,43 @@ func _add_pad(player: int, device: int) -> void:
 	# L2 = defend (hold the katana up to guard); R2 = slide/dash. Direction comes from the stick.
 	_add_pad_axis(prefix + "_defend", JOY_AXIS_TRIGGER_LEFT,  1.0, device)  # L2 — guard
 	_add_pad_axis(prefix + "_slide",  JOY_AXIS_TRIGGER_RIGHT, 1.0, device)  # R2 — dash/dodge
+
+# Per-player gamepad actions rebound on every (re)assignment, so hot-plugging never leaves a
+# stale device binding behind. (Menu actions use device -1 and need no per-device rebinding.)
+const PAD_ACTIONS := ["left", "right", "aim_up", "aim_down", "jump", "throw", "dodge", "katana", "defend", "slide", "skin"]
+
+# Re-derive the P1/P2 gamepad bindings from the CURRENTLY connected pads: lowest device id → P1,
+# next → P2. Any prior joypad events are stripped first (keyboard binds are preserved), so this is
+# safe to call repeatedly on connect/disconnect. With two DualSense this gives each player one pad;
+# with one pad only P1 gets it (P2 keeps the keyboard); with none, no pad input (P1 has no keyboard).
+func _rebind_gamepads() -> void:
+	var pads: Array = Input.get_connected_joypads()
+	pads.sort()   # ascending device id → deterministic 1st=P1, 2nd=P2
+	# Ensure every per-player action EXISTS (clan_select & player poll p1_*/p2_* each frame even with
+	# no pad attached — a missing action errors), and strip any stale joypad events (keyboard kept).
+	for player in [1, 2]:
+		for action in PAD_ACTIONS:
+			var name: String = "p%d_%s" % [player, action]
+			if not InputMap.has_action(name):
+				InputMap.add_action(name)
+			_clear_pad_events(name)
+	if pads.size() >= 1:
+		_add_pad(1, pads[0])
+		_add_pad_button("p1_skin", JOY_BUTTON_X, pads[0])   # Square ▢ — cycle skin in clan select
+	if pads.size() >= 2:
+		_add_pad(2, pads[1])
+		_add_pad_button("p2_skin", JOY_BUTTON_X, pads[1])
+
+func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
+	_rebind_gamepads()
+
+# Erase only the joypad (button + axis) events from an action, leaving keyboard binds intact.
+func _clear_pad_events(action_name: String) -> void:
+	if not InputMap.has_action(action_name):
+		return
+	for ev in InputMap.action_get_events(action_name):
+		if ev is InputEventJoypadButton or ev is InputEventJoypadMotion:
+			InputMap.action_erase_event(action_name, ev)
 
 func _add_key(action_name: String, key: int, location: int = 0) -> void:
 	if not InputMap.has_action(action_name):
@@ -428,10 +466,15 @@ func _enter_match_intro() -> void:
 		var skin_idx: int = GameState.skin_index(p.slot)
 		var pose_path: String = GameState.skin_pose_path(sprite_name, skin_idx)
 		var idle_path: String = GameState.skin_idle_path(sprite_name, skin_idx)
+		var walk_path: String = GameState.skin_walk_path(sprite_name, skin_idx)
+		var swing_path: String = GameState.skin_swing_path(sprite_name, skin_idx)
 		if ResourceLoader.exists(pose_path):
 			p.pose_texture = load(pose_path)
 		# Costume/elemental skins ship no idle sheet → null so player.gd uses the pose idle frame.
 		p.idle_texture = load(idle_path) if idle_path != "" and ResourceLoader.exists(idle_path) else null
+		# Optional richer 6-frame run + katana-swing sheets; null → player.gd falls back to the pose frames.
+		p.walk_texture = load(walk_path) if walk_path != "" and ResourceLoader.exists(walk_path) else null
+		p.swing_texture = load(swing_path) if swing_path != "" and ResourceLoader.exists(swing_path) else null
 		# Start in pose mode (idle mode kicks in via _update_visual when truly idle)
 		sprite.texture = p.pose_texture
 		sprite.hframes = 5
@@ -473,25 +516,40 @@ func _enter_match_intro() -> void:
 		ind_root.z_index = 100
 		p.add_child(ind_root)
 		var cc: Color = clan.color
-		# Row lengths follow the active match variants: hearts = max HP, the shuriken row spans the
-		# catch cap (hidden entirely when shurikens are off), katana marks = the granted charge count
-		# (0 when the katana is off). _make_icon_row(0) yields an empty row the updaters skip.
+		# Above-head indicators stack UPWARD from just over the head, closest first:
+		#   hearts → shuriken stash → katana charges → guard bar.
+		# Each element is placed directly above the previous one with a fixed gap, so a disabled row
+		# (shurikens/katana off) leaves NO empty space — everything above slides down to fill it.
+		# Row lengths follow the active match variants: hearts = max HP (wrap at 5 so a long health
+		# bar stays compact), shuriken row = catch cap (0 = off), katana marks = granted charges (0 = off).
+		const ROW_GAP := 8.5
 		var stash_row: int = MatchConfig.STASH_CAP if MatchConfig.shurikens_enabled else 0
 		var katana_row: int = MatchConfig.effective_katana_charges()
-		p.heart_icons  = _make_icon_row(ind_root, MatchConfig.max_hp, "res://sprites/heart.svg",    -1, 1, 0.5, 7.0, -26.0, Color(0.95, 0.25, 0.30, 1.0))
-		p.stash_icons  = _make_icon_row(ind_root, stash_row, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, -36.0, Color(cc.r, cc.g, cc.b, 1.0))
-		p.katana_icons = _make_icon_row(ind_root, katana_row, kat_path,                      1, 6, 0.42, 11.0, -45.0, Color(0.85, 0.88, 0.95, 1.0))
-		# Guard meter bar (track + depleting fill), highest of the above-head indicators.
+		var y: float = -24.0
+		var hres: Dictionary = _make_icon_grid(ind_root, MatchConfig.max_hp, "res://sprites/heart.svg", -1, 1, 0.5, 7.0, ROW_GAP, 5, y, Color(0.95, 0.25, 0.30, 1.0))
+		p.heart_icons = hres["icons"]
+		y = hres["top_y"] - ROW_GAP
+		var sres: Dictionary = _make_icon_grid(ind_root, stash_row, "res://sprites/shuriken.svg", -1, 1, 0.5, 6.5, ROW_GAP, 99, y, Color(cc.r, cc.g, cc.b, 1.0))
+		p.stash_icons = sres["icons"]
+		if stash_row > 0:
+			y = sres["top_y"] - ROW_GAP
+		# Katana charges use the sheet's VERTICAL blade pose (frame 2) so the marks pack tightly.
+		var kres: Dictionary = _make_icon_grid(ind_root, katana_row, kat_path, 2, 6, 0.5, 6.0, ROW_GAP, 99, y, Color(0.85, 0.88, 0.95, 1.0))
+		p.katana_icons = kres["icons"]
+		if katana_row > 0:
+			y = kres["top_y"] - ROW_GAP
+		# Guard meter bar (track + depleting fill) sits at the top of the stack.
+		var gb_y: float = y - 1.5
 		var gb_bg: ColorRect = ColorRect.new()
 		gb_bg.color = Color(0.0, 0.0, 0.0, 0.55)
 		gb_bg.size = Vector2(26.0, 4.0)
-		gb_bg.position = Vector2(-13.0, -56.0)
+		gb_bg.position = Vector2(-13.0, gb_y)
 		gb_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ind_root.add_child(gb_bg)
 		var gb_fill: ColorRect = ColorRect.new()
 		gb_fill.color = Color(0.4, 0.8, 1.0, 0.95)
 		gb_fill.size = Vector2(26.0, 4.0)
-		gb_fill.position = Vector2(-13.0, -56.0)
+		gb_fill.position = Vector2(-13.0, gb_y)
 		gb_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ind_root.add_child(gb_fill)
 		p.guard_bar_bg = gb_bg
@@ -723,7 +781,8 @@ func _load_map(index: int) -> void:
 		var sprite_region: Rect2 = w.get("sprite_region", Rect2())
 		var sprite_mode: String = w.get("sprite_mode", "platform")
 		var walkable_y: float = w.get("sprite_walkable", -1.0)
-		var body := _make_wall(w.center, w.size, data.wall_color, edge_col, transparent, sprite_path, sprite_region, sprite_mode, walkable_y)
+		var overhang: float = data.get("platform_overhang", PLATFORM_VISUAL_OVERHANG)
+		var body := _make_wall(w.center, w.size, data.wall_color, edge_col, transparent, sprite_path, sprite_region, sprite_mode, walkable_y, overhang)
 		current_map_nodes.append(body)
 
 	# Non-colliding scenery sprites (e.g. neon gate pillars, ladder tower) drawn behind the
@@ -732,6 +791,19 @@ func _load_map(index: int) -> void:
 		var deco := _make_deco(d)
 		if deco != null:
 			current_map_nodes.append(deco)
+
+	# Optional per-map animated ambience layer (Sakura: lantern glow / moon / birds;
+	# Neo Tokyo: rain / sun bloom / neon flicker / lightning / mist).
+	var ambience: String = data.get("ambience", "")
+	var ambience_scripts := {
+		"sakura": "res://sakura_ambience.gd",
+		"neon_tokyo": "res://neon_tokyo_ambience.gd",
+	}
+	if ambience_scripts.has(ambience):
+		var amb := Node2D.new()
+		amb.set_script(load(ambience_scripts[ambience]))
+		arena_root.add_child(amb)
+		current_map_nodes.append(amb)
 
 	print("[MAIN] Loaded map %d: %s" % [index, data.name])
 
@@ -784,25 +856,37 @@ func _apply_sky_background(top_color: Color, bottom_color: Color, bg_path: Strin
 
 # Build a horizontal row of small icons centered on x=0 at the given y (relative to player).
 # frame=-1 means single-frame texture; hframes>1 selects a frame from a sprite sheet.
-func _make_icon_row(parent: Node2D, count: int, tex_path: String, frame: int, hframes: int,
-		scale: float, spacing: float, y: float, mod_color: Color) -> Array:
+# Build `count` icons above the head, wrapping at `per_row` icons per row. The BOTTOM row sits at
+# `baseline_y`; extra rows stack UPWARD (more-negative y), each centered on its own width so a
+# partial last row stays centred. Returns {"icons": Array (index order), "top_y": float} where
+# top_y is the y of the highest row — the caller stacks the next element above it with no gap.
+# count <= 0 yields an empty row and leaves top_y at baseline_y (so disabled rows take no space).
+func _make_icon_grid(parent: Node2D, count: int, tex_path: String, frame: int, hframes: int,
+		icon_scale: float, h_spacing: float, v_spacing: float, per_row: int,
+		baseline_y: float, mod_color: Color) -> Dictionary:
 	var icons: Array = []
+	if count <= 0:
+		return {"icons": icons, "top_y": baseline_y}
 	var tex: Texture2D = load(tex_path) if ResourceLoader.exists(tex_path) else null
+	var rows: int = int(ceil(float(count) / float(per_row)))
 	for i in count:
+		var row: int = i / per_row                                   # integer division → row index
+		var col: int = i % per_row
+		var in_row: int = per_row if row < rows - 1 else count - per_row * (rows - 1)  # icons in this row
 		var icon: Sprite2D = Sprite2D.new()
 		icon.texture = tex
 		if hframes > 1:
 			icon.hframes = hframes
 			icon.frame = frame
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		icon.scale = Vector2(scale, scale)
-		icon.position = Vector2((i - (count - 1) * 0.5) * spacing, y)
+		icon.scale = Vector2(icon_scale, icon_scale)
+		icon.position = Vector2((col - (in_row - 1) * 0.5) * h_spacing, baseline_y - row * v_spacing)
 		icon.modulate = mod_color
 		parent.add_child(icon)
 		icons.append(icon)
-	return icons
+	return {"icons": icons, "top_y": baseline_y - (rows - 1) * v_spacing}
 
-func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform", walkable_y: float = -1.0) -> StaticBody2D:
+func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform", walkable_y: float = -1.0, overhang: float = PLATFORM_VISUAL_OVERHANG) -> StaticBody2D:
 	var body: StaticBody2D = StaticBody2D.new()
 	body.position = center
 	var col: CollisionShape2D = CollisionShape2D.new()
@@ -832,7 +916,9 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 			sprite.scale = Vector2(s, s)
 			sprite.position = Vector2.ZERO
 		else:  # "platform" mode (default)
-			var s: float = (size.x * PLATFORM_VISUAL_OVERHANG) / src_w
+			# overhang = visual width ÷ collision width. 1.0 = WYSIWYG (visual exactly matches the
+			# hitbox, no falling through visible edges); >1 draws the art wider than you can stand on.
+			var s: float = (size.x * overhang) / src_w
 			sprite.scale = Vector2(s, s)
 			# walkable_y = source-pixel row of the deck top (within region). -1 → use the
 			# platform.png default; component platforms each pass their own measured deck row.

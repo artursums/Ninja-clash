@@ -29,6 +29,7 @@ var start_shurikens: int = 3          # shurikens held at spawn (0..STASH_CAP)
 var infinite_shurikens: bool = false  # throws never deplete the stash
 var max_hp: int = 5                   # hits to kill
 var target_score: int = 5             # rounds to win the match
+var blade_wave_enabled: bool = false  # DEV-005: hold-katana → directional slash-wave projectile (OFF = standard rules)
 
 # --- Captured factory defaults (data-driven; restored by reset_to_defaults) ---
 var _def_katana_charges: int = 3
@@ -85,6 +86,11 @@ func set_katana_recharge(on: bool) -> void:
 	save_to(DEFAULT_PATH)
 
 
+func set_blade_wave_enabled(on: bool) -> void:
+	blade_wave_enabled = on
+	save_to(DEFAULT_PATH)
+
+
 func set_katana_charges(n: int) -> void:
 	katana_charges = clampi(n, 0, MAX_KATANA_CHARGES)
 	save_to(DEFAULT_PATH)
@@ -119,6 +125,7 @@ func set_target_score(n: int) -> void:
 func reset_to_defaults() -> void:
 	katana_enabled = true
 	katana_recharge = true
+	blade_wave_enabled = false
 	shurikens_enabled = true
 	infinite_shurikens = false
 	capture_defaults()   # restores numeric values to the data-driven defaults
@@ -134,6 +141,7 @@ func load_from(path: String) -> void:
 		return   # no file yet → keep the captured defaults
 	katana_enabled = bool(cfg.get_value(SECTION, "katana_enabled", katana_enabled))
 	katana_recharge = bool(cfg.get_value(SECTION, "katana_recharge", katana_recharge))
+	blade_wave_enabled = bool(cfg.get_value(SECTION, "blade_wave_enabled", blade_wave_enabled))
 	katana_charges = clampi(int(cfg.get_value(SECTION, "katana_charges", katana_charges)), 0, MAX_KATANA_CHARGES)
 	shurikens_enabled = bool(cfg.get_value(SECTION, "shurikens_enabled", shurikens_enabled))
 	start_shurikens = clampi(int(cfg.get_value(SECTION, "start_shurikens", start_shurikens)), 0, STASH_CAP)
@@ -146,6 +154,7 @@ func save_to(path: String) -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value(SECTION, "katana_enabled", katana_enabled)
 	cfg.set_value(SECTION, "katana_recharge", katana_recharge)
+	cfg.set_value(SECTION, "blade_wave_enabled", blade_wave_enabled)
 	cfg.set_value(SECTION, "katana_charges", katana_charges)
 	cfg.set_value(SECTION, "shurikens_enabled", shurikens_enabled)
 	cfg.set_value(SECTION, "start_shurikens", start_shurikens)

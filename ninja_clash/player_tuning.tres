@@ -40,3 +40,7 @@ katana_visual_scale = 1.0
 katana_hit_knockback = 150.0
 katana_hit_pop = 70.0
 katana_hit_recoil_s = 0.1
+blade_wave_charge_time_s = 3.0
+blade_wave_speed = 340.0
+blade_wave_damage = 1
+blade_wave_lifetime_s = 2.5

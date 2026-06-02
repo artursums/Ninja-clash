@@ -7,8 +7,8 @@ extends Control
 
 const ROW_X := 210.0
 const VALUE_X := 500.0
-const ROW_Y0 := 92.0
-const ROW_H := 30.0
+const ROW_Y0 := 80.0
+const ROW_H := 28.0
 const HILITE_X := 176.0
 const HILITE_W := 448.0
 
@@ -107,6 +107,11 @@ func _build_rows() -> void:
 			func() -> int: return MatchConfig.katana_charges,
 			func(v: int) -> void: MatchConfig.set_katana_charges(v),
 			0, MatchConfig.MAX_KATANA_CHARGES,
+			func() -> bool: return MatchConfig.katana_enabled),
+		_toggle("BLADE WAVE",
+			func() -> bool: return MatchConfig.blade_wave_enabled,
+			func(v: bool) -> void: MatchConfig.set_blade_wave_enabled(v),
+			"ON", "OFF",
 			func() -> bool: return MatchConfig.katana_enabled),
 		_toggle("SHURIKENS",
 			func() -> bool: return MatchConfig.shurikens_enabled,

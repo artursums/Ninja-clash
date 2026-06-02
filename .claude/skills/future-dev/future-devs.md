@@ -10,3 +10,5 @@ Logged ideas to implement later. Each row links to a self-contained task file wh
 | DEV-003 | Platform/wall collision must match the full visible art (no untouchable edges) | level / gameplay | P2 | 🔵 Backlog | [DEV-003](tasks/DEV-003-platform-collision-matches-art.md) |
 | DEV-004 | Character redesign + fuller animation set, separate katana, film-style slash-trail VFX | art / VFX / gameplay | P2 | 🔵 Backlog | [DEV-004](tasks/DEV-004-character-redesign-animation-and-slash-vfx.md) |
 | DEV-005 | Charged katana "blade-wave" projectile (hold-to-throw slash) + config toggle | gameplay / VFX | P2 | 🔵 Backlog | [DEV-005](tasks/DEV-005-charged-katana-blade-wave-projectile.md) |
+| DEV-006 | Pre-round controls / tutorial modal (TowerFall-style button legend) | UI / gameplay | P2 | 🔵 Backlog | [DEV-006](tasks/DEV-006-pre-round-controls-tutorial-modal.md) |
+| DEV-007 | Rebuild Sakura Temple as a TowerFall-style stone arena from the new component sheet | level / gameplay | P2 | 🔵 Backlog | [DEV-007](tasks/DEV-007-rebuild-sakura-temple-stone-arena.md) |
