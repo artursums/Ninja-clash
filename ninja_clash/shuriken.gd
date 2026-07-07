@@ -52,6 +52,10 @@ var velocity_v: Vector2 = Vector2.ZERO
 var max_fall: float = TERMINAL   # per-shuriken vertical-speed cap; a straight-down throw raises it
 var stuck: bool = false
 var thrower_slot: int = 0
+# Online (ADR-0003): the host tags every blade with a net_id for the snapshot stream; on the
+# client each blade is a PUPPET — pure visuals driven by apply_net, no collisions, no pickups.
+var net_id: int = 0
+var puppet: bool = false
 var throw_time: float = 0.0
 var consumed: bool = false              # picked up / caught exactly once (guards the deferred-free race)
 var ricocheted: bool = false            # bounced in a clash → spent: can't damage, only be caught/passed through
@@ -62,13 +66,21 @@ var _pos_history: Array = []            # recent global positions, index 0 = mos
 var _spin_t: float = 0.0                # accumulated scaled flight-time → spin frame
 
 func _ready() -> void:
+	_setup_visuals()
+	if puppet:
+		# Client-side visual ghost: never collides, never joins the sim's "shurikens" group
+		# (bots and katana deflects must not react to it — the host owns all outcomes).
+		monitoring = false
+		monitorable = false
+		return
 	add_to_group("shurikens")
+	if Net.is_host():
+		net_id = Net.next_id()
 	var col: CollisionShape2D = CollisionShape2D.new()
 	var rect: RectangleShape2D = RectangleShape2D.new()
 	rect.size = HITBOX_SIZE
 	col.shape = rect
 	add_child(col)
-	_setup_visuals()
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)   # shuriken-vs-shuriken clashes
 
@@ -112,6 +124,9 @@ func _physics_process(delta: float) -> void:
 	# Freeze during non-round states (countdown, round-end pause)
 	if not GameState.is_round_active():
 		return
+	if puppet:
+		_puppet_tick(delta)
+		return
 	if stuck:
 		_check_pickup()
 		return
@@ -122,9 +137,14 @@ func _physics_process(delta: float) -> void:
 	velocity_v.y = min(velocity_v.y, max_fall)
 	_apply_aim_assist(dt)
 	position += velocity_v * dt
-	# Screen wrap — shurikens wrap too, so nothing is lost in the chasm. Clearing
-	# the path history on a wrap stops the comet trail from streaking across the
-	# whole screen between the old and new sides.
+	# Screen wrap. Clearing the path history on a wrap stops the comet trail from streaking
+	# across the whole screen between the old and new sides.
+	if position.x < -16.0:
+		position.x = 816.0
+		_pos_history.clear()
+	elif position.x > 816.0:
+		position.x = -16.0
+		_pos_history.clear()
 	if position.y > 470.0:
 		position.y = -16.0
 		_pos_history.clear()
@@ -134,6 +154,34 @@ func _physics_process(delta: float) -> void:
 	_advance_spin(dt)
 	_record_history()
 	_update_trail()
+
+# Online-client frame: dead-reckon the flight between 30 Hz snapshots (same scaled-time arc as
+# the host sim) and keep the spin + comet trail alive locally. apply_net re-syncs authority.
+func _puppet_tick(delta: float) -> void:
+	if stuck:
+		return
+	var dt: float = delta * FLIGHT_TIME_SCALE
+	velocity_v.y += GRAVITY * dt
+	velocity_v.y = min(velocity_v.y, max_fall)
+	position += velocity_v * dt
+	_advance_spin(dt)
+	_record_history()
+	_update_trail()
+
+# Apply one host snapshot row (NetCodec.S layout) onto this puppet blade.
+func apply_net(arr: Array) -> void:
+	position = Vector2(arr[NetCodec.S.X], arr[NetCodec.S.Y])
+	velocity_v = Vector2(arr[NetCodec.S.VX], arr[NetCodec.S.VY])
+	ricocheted = bool(arr[NetCodec.S.RICOCHET])
+	thrower_slot = int(arr[NetCodec.S.THROWER])
+	var now_stuck: bool = bool(arr[NetCodec.S.STUCK])
+	if now_stuck and not stuck:
+		_hide_trail()
+		if _sprite != null and _sprite.hframes > 1:
+			_sprite.frame = IMPACT_FRAME
+	elif stuck and not now_stuck:
+		_pos_history.clear()   # deflected back into flight — restart the comet trail
+	stuck = now_stuck
 
 # Cycle the head blade through the 4 spin frames (in scaled flight-time).
 func _advance_spin(dt: float) -> void:
@@ -305,6 +353,7 @@ func _spawn_clash_spark(pos: Vector2) -> void:
 	fx.scale = Vector2(1.1, 1.1)
 	fx.z_index = 60
 	get_parent().add_child(fx)
+	Net.relay_strip_fx(path, 5, 16.0, pos, fx.scale, 60)
 
 func _check_pickup() -> void:
 	if consumed:

@@ -90,7 +90,7 @@ func _build() -> void:
 
 	hint_label = _label(0, 414, 800, 22, 12)
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.text = "↑/↓ select     ✕ / Space confirm     ◯ / Esc — main menu"
+	hint_label.text = "↑/↓ select     ✕ / Space / Enter confirm     ◯ / Esc — highlight main menu"
 	hint_label.add_theme_color_override("font_color", Color("6a6e88"))
 
 
@@ -129,16 +129,25 @@ func _refresh() -> void:
 
 	var parts: PackedStringArray = PackedStringArray()
 	for slot in range(1, GameState.num_players() + 1):
-		parts.append("%s %d" % [GameState.get_clan(slot).name, Combat.scores.get(slot, 0)])
+		# "P<N> CLAN score" — a first-timer shouldn't have to remember which clan they picked;
+		# the winner's row gets a star so the big headline maps to a line at a glance.
+		var mark: String = "★ " if slot == winner_slot else ""
+		parts.append("%sP%d %s %d" % [mark, slot, GameState.get_clan(slot).name, Combat.scores.get(slot, 0)])
 	tally_label.text = "    ·    ".join(parts)
 
 	for i in plates.size():
 		var sel: bool = (i == _cursor)
 		plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
 		opt_labels[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
+		# Online guest: the options belong to the host — shown dimmed, watch-only.
+		plates[i].modulate.a = 0.4 if Net.is_client() else 1.0
+		opt_labels[i].modulate.a = 0.4 if Net.is_client() else 1.0
 
 	var cy: float = PLATE_TOP + _cursor * PLATE_STEP
 	cursor_rect.position = Vector2(PLATE_CX - 38.0, cy + (PLATE_H - 32.0) / 2.0)
+	cursor_rect.visible = not Net.is_client()
+	if Net.is_client():
+		hint_label.text = "P1 (host) chooses what happens next      ESC / ◯ — leave the session"
 
 
 func _nav(suffix: String) -> bool:
@@ -150,9 +159,19 @@ func _process(_delta: float) -> void:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
+	# Online guest: the host drives the rematch flow; the guest may only leave the session.
+	if Net.is_client():
+		if Input.is_action_just_pressed("menu_cancel"):
+			Audio.play("click")
+			Net.leave("")
+			GameState.change_state(GameState.State.ONLINE_MENU)
+		return
 	if Input.is_action_just_pressed("menu_cancel"):
+		# Esc no longer discards the results instantly (an accidental press right after the
+		# fanfare used to throw the match screen away) — it highlights MAIN MENU; confirm executes.
 		Audio.play("click")
-		GameState.change_state(GameState.State.TITLE)
+		_cursor = OPT_TEXT.size() - 1
+		_refresh()
 		return
 	if _nav("aim_up"):
 		_cursor = (_cursor + OPT_TEXT.size() - 1) % OPT_TEXT.size()
@@ -162,6 +181,7 @@ func _process(_delta: float) -> void:
 		_cursor = (_cursor + 1) % OPT_TEXT.size()
 		Audio.play("click")
 		_refresh()
-	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
+	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
+			or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm"):
 		Audio.play("confirm")
 		GameState.change_state(_option_state(_cursor))

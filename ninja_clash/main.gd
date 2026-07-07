@@ -69,6 +69,7 @@ var clan_select_screen: Control
 var match_setup_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
+var online_menu_screen: Control   # ONLINE host/join screen (ADR-0003)
 var hud: Control
 var mode_select_screen: Control
 var banner_label: Label
@@ -76,6 +77,7 @@ var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites durin
 var round_display: Node2D        # composed "ROUND N" (wordmark + digit sprites) at countdown stage 0
 var win_display: Node2D          # composed "P<N> WINS" shown at ROUND_END for the round's winner
 var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
+var tutorial_overlay: Control   # HOW TO PLAY (tutorial_overlay.gd) — shown before the round-1 countdown
 
 var _in_countdown: bool = false
 var _countdown_stage: int = 0
@@ -90,32 +92,76 @@ func _ready() -> void:
 	_setup_input_map()
 	_build_arena()
 	_build_overlays()
+	Net.register_main(self)   # online layer needs the arena root + player list for snapshots/FX
 	GameState.state_changed.connect(_on_state_changed)
 	Combat.kill_logged.connect(_on_kill_logged)
 	Combat.clash_occurred.connect(_on_clash)
 	GameState.change_state(GameState.State.TITLE)
+	_handle_dev_args()
 	print("[MAIN] _ready() complete")
 
+# Dev/CI launch shortcuts (after `--` on the command line):
+#   --host             host an online session immediately
+#   --join=<ip>        join a host immediately
+#   --online-autotest  attach the scripted online smoke-driver (see dev_online_autotest.gd)
+func _handle_dev_args() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--host":
+			var err: String = Net.host_game()
+			print("[DEV] host_game: ", "ok" if err == "" else err)
+			GameState.change_state(GameState.State.ONLINE_MENU)
+		elif arg.begins_with("--join="):
+			var err: String = Net.join_game(arg.substr(7))
+			print("[DEV] join_game: ", "ok" if err == "" else err)
+			GameState.change_state(GameState.State.ONLINE_MENU)
+		elif arg == "--online-autotest":
+			var driver := Node.new()
+			driver.set_script(load("res://dev_online_autotest.gd"))
+			add_child(driver)
+
 func _setup_input_map() -> void:
-	# P1 — DualSense only (no keyboard binds; gamepad added by _add_pad below).
-	# P2 — keyboard: WASD move/aim, Space jump, L throw, K katana, Right Shift dodge.
-	#      Dash is double-tap A/D (P2-only, handled in player.gd).
-	_add_key("p2_left",     KEY_A)
-	_add_key("p2_right",    KEY_D)
-	_add_key("p2_aim_up",   KEY_W)         # aims throw upward
-	_add_key("p2_aim_down", KEY_S)         # aims throw downward + menu "back"
-	_add_key("p2_jump",     KEY_SPACE)
-	_add_key("p2_throw",    KEY_L)
-	_add_key("p2_katana",   KEY_K)
-	_add_key("p2_dodge",    KEY_SHIFT, KEY_LOCATION_RIGHT)
-	_add_key("p2_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
-	# p2_skin keyboard bind goes BEFORE _rebind_gamepads: _add_key wipes an action's existing events,
-	# so binding P here first lets the pad's Square (added in _rebind) coexist instead of being erased.
-	_add_key("p2_skin",     KEY_P)         # cycle skin in clan select (keyboard P2)
-	# Gamepad — TowerFall-on-PlayStation layout, appended to the keyboard binds. The actual
-	# device ids are assigned dynamically (1st connected pad → P1, 2nd → P2) and re-bound on
-	# hot-plug, because Godot's joypad ids depend on connection order and are reused across
-	# reconnects — hardcoding device 0/1 left a second DualSense unmapped if it didn't land on id 1.
+	# P1 — MAIN keyboard scheme (the solo/testing player): WASD move/aim, Space jump,
+	#      L throw, K katana, J guard, Left Shift dash. Dash is ALSO double-tap W/A/S/D
+	#      (handled in player.gd). Enter = menu lock-in/confirm, P = skin cycle.
+	_add_key("p1_left",     KEY_A)
+	_add_key("p1_right",    KEY_D)
+	_add_key("p1_aim_up",   KEY_W)         # aims throw upward
+	_add_key("p1_aim_down", KEY_S)         # aims throw downward + menu "back"
+	_add_key("p1_jump",     KEY_SPACE)
+	_add_key("p1_throw",    KEY_L)
+	_add_key("p1_katana",   KEY_K)
+	_add_key("p1_dodge",    KEY_SHIFT, KEY_LOCATION_LEFT)
+	_add_key("p1_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
+	# P2 — NUMPAD scheme (wide-keyboard couch second player; needs Num Lock ON):
+	#      4/6 move, 8/5 aim up/down, 0 jump, 1 throw, 2 katana, 3 guard, + dash,
+	#      numpad-Enter = menu confirm, 7 = skin cycle. Dash also double-tap 4/8/5/6.
+	# Future LAN note: on a remote match each machine hosts ONE local player, so the WASD
+	# scheme should then bind to whichever slot is local — the numpad scheme is couch-only.
+	_add_key("p2_left",     KEY_KP_4)
+	_add_key("p2_right",    KEY_KP_6)
+	_add_key("p2_aim_up",   KEY_KP_8)
+	_add_key("p2_aim_down", KEY_KP_5)
+	_add_key("p2_jump",     KEY_KP_0)
+	_add_key("p2_throw",    KEY_KP_1)
+	_add_key("p2_katana",   KEY_KP_2)
+	_add_key("p2_defend",   KEY_KP_3)
+	_add_key("p2_dodge",    KEY_KP_ADD)
+	# Skin keyboard binds go BEFORE _rebind_gamepads: _add_key wipes an action's existing events,
+	# so binding them here first lets the pad's Square (added in _rebind) coexist instead of being erased.
+	_add_key("p1_skin",     KEY_P)         # cycle skin in clan select (keyboard P1)
+	_add_key("p2_skin",     KEY_KP_7)      # cycle skin in clan select (numpad P2)
+	# Arrow keys double as a second P1 movement set — so every menu (and P1 gameplay)
+	# also answers to the arrows. Appended, not _add_key, so WASD stays bound.
+	_append_key("p1_left",     KEY_LEFT)
+	_append_key("p1_right",    KEY_RIGHT)
+	_append_key("p1_aim_up",   KEY_UP)
+	_append_key("p1_aim_down", KEY_DOWN)
+	# Gamepad — TowerFall-on-PlayStation layout (positional buttons, so Xbox pads work the
+	# same: Cross=A, Circle=B, Square=X, Triangle=Y), appended to the keyboard binds. The
+	# actual device ids are assigned dynamically (1st connected pad → P1, 2nd → P2, up to
+	# 4 pads → P4) and re-bound on hot-plug, because Godot's joypad ids depend on connection
+	# order and are reused across reconnects — hardcoding device 0/1 left a second DualSense
+	# unmapped if it didn't land on id 1.
 	_rebind_gamepads()
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	# Global menu input — works from ANY keyboard or controller on every non-gameplay
@@ -131,6 +177,10 @@ func _setup_input_map() -> void:
 	# from clan select. device -1 = all connected gamepads.
 	_add_key("menu_setup", KEY_TAB)
 	_add_pad_button("menu_setup", JOY_BUTTON_BACK, -1)
+	# Menu lock-in/confirm — P1 = main Enter, P2 = numpad Enter. Menu-only actions
+	# (gameplay jump is untouched); every menu accepts jump OR confirm.
+	_add_key("p1_confirm", KEY_ENTER)
+	_add_key("p2_confirm", KEY_KP_ENTER)
 
 # Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
 # PlayStation scheme. Godot uses position-based face-button names, so on a
@@ -161,27 +211,26 @@ func _add_pad(player: int, device: int) -> void:
 # stale device binding behind. (Menu actions use device -1 and need no per-device rebinding.)
 const PAD_ACTIONS := ["left", "right", "aim_up", "aim_down", "jump", "throw", "dodge", "katana", "defend", "slide", "skin"]
 
-# Re-derive the P1/P2 gamepad bindings from the CURRENTLY connected pads: lowest device id → P1,
-# next → P2. Any prior joypad events are stripped first (keyboard binds are preserved), so this is
-# safe to call repeatedly on connect/disconnect. With two DualSense this gives each player one pad;
-# with one pad only P1 gets it (P2 keeps the keyboard); with none, no pad input (P1 has no keyboard).
+# Re-derive the gamepad bindings from the CURRENTLY connected pads: lowest device id → P1,
+# next → P2, and so on up to P4 (DualSense, Xbox and any SDL-mapped pad — Godot's button
+# constants are positional, so the same layout works on all of them). Any prior joypad events
+# are stripped first (keyboard binds are preserved), so this is safe to call repeatedly on
+# connect/disconnect. With one pad only P1 gets it (P2 keeps the numpad scheme); with none,
+# both keyboard schemes still drive P1/P2.
 func _rebind_gamepads() -> void:
 	var pads: Array = Input.get_connected_joypads()
-	pads.sort()   # ascending device id → deterministic 1st=P1, 2nd=P2
+	pads.sort()   # ascending device id → deterministic 1st=P1, 2nd=P2, …
 	# Ensure every per-player action EXISTS (clan_select & player poll p1_*/p2_* each frame even with
 	# no pad attached — a missing action errors), and strip any stale joypad events (keyboard kept).
-	for player in [1, 2]:
+	for player in [1, 2, 3, 4]:
 		for action in PAD_ACTIONS:
 			var name: String = "p%d_%s" % [player, action]
 			if not InputMap.has_action(name):
 				InputMap.add_action(name)
 			_clear_pad_events(name)
-	if pads.size() >= 1:
-		_add_pad(1, pads[0])
-		_add_pad_button("p1_skin", JOY_BUTTON_X, pads[0])   # Square ▢ — cycle skin in clan select
-	if pads.size() >= 2:
-		_add_pad(2, pads[1])
-		_add_pad_button("p2_skin", JOY_BUTTON_X, pads[1])
+	for i in mini(pads.size(), 4):
+		_add_pad(i + 1, pads[i])
+		_add_pad_button("p%d_skin" % (i + 1), JOY_BUTTON_X, pads[i])   # Square ▢ — cycle skin in clan select
 
 func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
 	_rebind_gamepads()
@@ -204,6 +253,15 @@ func _add_key(action_name: String, key: int, location: int = 0) -> void:
 	ev.keycode = key
 	if location != 0:
 		ev.location = location
+	InputMap.action_add_event(action_name, ev)
+
+# Append an EXTRA key to an action without clearing its existing binds (contrast _add_key).
+func _append_key(action_name: String, key: int) -> void:
+	if not InputMap.has_action(action_name):
+		InputMap.add_action(action_name)
+	var ev: InputEventKey = InputEventKey.new()
+	ev.physical_keycode = key
+	ev.keycode = key
 	InputMap.action_add_event(action_name, ev)
 
 # Append a gamepad button to an existing action (does not clear keyboard binds).
@@ -359,6 +417,11 @@ func _build_overlays() -> void:
 	match_end_screen.set_script(MatchEndScript)
 	canvas.add_child(match_end_screen)
 
+	var OnlineScript: Script = load("res://online_menu.gd")
+	online_menu_screen = Control.new()
+	online_menu_screen.set_script(OnlineScript)
+	canvas.add_child(online_menu_screen)
+
 	var HudScript: Script = load("res://hud.gd")
 	hud = Control.new()
 	hud.set_script(HudScript)
@@ -405,13 +468,24 @@ func _build_overlays() -> void:
 	pause_menu.set_script(load("res://pause_menu.gd"))
 	pause_layer.add_child(pause_menu)
 
+	# HOW TO PLAY overlay — its own top layer (above HUD/banners) so nothing draws over it.
+	# Opened by _enter_match_intro on round 1 (when Settings.show_tutorial); the countdown
+	# starts only once it closes.
+	var tutorial_layer: CanvasLayer = CanvasLayer.new()
+	tutorial_layer.layer = 15
+	add_child(tutorial_layer)
+	tutorial_overlay = Control.new()
+	tutorial_overlay.set_script(load("res://tutorial_overlay.gd"))
+	tutorial_layer.add_child(tutorial_overlay)
+	tutorial_overlay.closed.connect(_start_countdown)
+
 	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
 	mode_label = Label.new()
 	mode_label.position = Vector2(540, 6)
 	mode_label.size = Vector2(254, 18)
 	mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	mode_label.add_theme_font_size_override("font_size", 11)
-	mode_label.add_theme_color_override("font_color", Color("8a8ea8"))
+	mode_label.add_theme_font_size_override("font_size", 13)
+	mode_label.add_theme_color_override("font_color", Color("aab0c8"))
 	mode_label.visible = false
 	canvas.add_child(mode_label)
 
@@ -422,6 +496,9 @@ func _update_mode_label() -> void:
 	var txt: String = names[GameState.game_mode]
 	if GameState.game_mode != GameState.Mode.HUMAN_VS_HUMAN:
 		txt += "  ·  " + GameState.DIFFICULTY_NAMES[GameState.ai_difficulty]
+	# Online: remind each side which fighter is theirs (host = P1, guest = P2).
+	if Net.is_online():
+		txt = "ONLINE — YOU ARE %s" % ("P1" if Net.is_host() else "P2")
 	mode_label.text = txt
 
 func _on_state_changed(s: int) -> void:
@@ -436,6 +513,7 @@ func _on_state_changed(s: int) -> void:
 	match_setup_screen.visible = (s == S.MATCH_SETUP)
 	map_select_screen.visible = (s == S.MAP_SELECT)
 	match_end_screen.visible = (s == S.MATCH_END)
+	online_menu_screen.visible = (s == S.ONLINE_MENU)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
 	mode_label.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
@@ -560,11 +638,21 @@ func _enter_match_intro() -> void:
 	# De-overlap AT SPAWN TIME (not only at the round-start transition) so two fighters can never
 	# even appear stacked during the countdown — covers any rare upstream corruption immediately.
 	_separate_overlapping_spawns()
-	_start_countdown()
+	# HOW TO PLAY before the first countdown of a match (rounds 2+ go straight to the count).
+	# The countdown starts from the overlay's `closed` signal; players hold their spawn columns
+	# for as long as the overlay is up (see player.gd's MATCH_INTRO freeze).
+	if GameState.current_round == 1 and Settings.show_tutorial:
+		tutorial_overlay.open()
+	else:
+		_start_countdown()
 
 func _enter_round() -> void:
 	_in_countdown = false
 	banner_label.text = ""
+	# Online client: ROUND arrives from the host, possibly while the local countdown visuals are
+	# still up (clock drift / host tutorial) — clear them so nothing lingers over live play.
+	countdown_sprite.visible = false
+	round_display.visible = false
 
 # Safety net (runs the instant a round begins): if any two fighters are dangerously close, snap
 # EVERY fighter back to its canonical spawn point. Normally a no-op — fighters start on opposite
@@ -716,6 +804,7 @@ func _spawn_fx(tex_path: String, frame_count: int, pos: Vector2, fps: float, sca
 	fx.scale = Vector2(scale, scale)
 	fx.z_index = 60
 	arena_root.add_child(fx)
+	Net.relay_strip_fx(tex_path, frame_count, fps, pos, fx.scale, 60)
 
 func _process(_delta: float) -> void:
 	var t: float = Time.get_ticks_msec() / 1000.0
@@ -730,11 +819,14 @@ func _process(_delta: float) -> void:
 			banner_label.text = ""
 			countdown_sprite.visible = false
 			round_display.visible = false
-			_separate_overlapping_spawns()   # safety net: never begin a round with fighters stacked
-			GameState.change_state(GameState.State.ROUND)
+			# Online client: the countdown is a local visual only — the authoritative
+			# MATCH_INTRO → ROUND transition arrives from the host (Net state relay).
+			if not Net.is_client():
+				_separate_overlapping_spawns()   # safety net: never begin a round with fighters stacked
+				GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
-	if GameState.current_state == GameState.State.ROUND_END:
+	if GameState.current_state == GameState.State.ROUND_END and not Net.is_client():
 		if t >= _round_end_until:
 			GameState.advance_round_or_end_match()
 
@@ -745,6 +837,13 @@ func _input(event: InputEvent) -> void:
 		# Esc during a live ROUND opens the pause overlay (pause_menu.gd owns it, not handled here).
 		# In the brief countdown / round-end transitions, Esc still bails to the title screen.
 		if event.keycode == KEY_ESCAPE:
+			# While the HOW TO PLAY overlay is up, Esc belongs to it (closes it → countdown).
+			if s == S.MATCH_INTRO and tutorial_overlay != null and tutorial_overlay.visible:
+				return
+			# Online: never bail to title from a transition — leaving the session is a
+			# deliberate act that lives in the pause menu (QUIT) instead.
+			if Net.is_online():
+				return
 			if s == S.MATCH_INTRO or s == S.ROUND_END:
 				print("[MAIN] ESC during transition -> TITLE")
 				GameState.change_state(S.TITLE)
@@ -798,6 +897,7 @@ func _load_map(index: int) -> void:
 	var ambience_scripts := {
 		"sakura": "res://sakura_ambience.gd",
 		"neon_tokyo": "res://neon_tokyo_ambience.gd",
+		"verdant_cistern": "res://verdant_cistern_ambience.gd",
 	}
 	if ambience_scripts.has(ambience):
 		var amb := Node2D.new()

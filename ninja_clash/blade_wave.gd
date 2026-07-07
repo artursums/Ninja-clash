@@ -30,6 +30,10 @@ var damage: int = 1
 var lifetime_s: float = 2.5
 var tint: Color = Color(0.7, 0.9, 1.0)
 
+# Online (ADR-0003): host tags each wave for the snapshot stream; client waves are visual puppets.
+var net_id: int = 0
+var puppet: bool = false
+
 var _age: float = 0.0
 var _dead: bool = false                  # guards the deferred queue_free against a double-hit
 var _sprite: Sprite2D = null             # head crescent
@@ -38,13 +42,21 @@ var _pos_history: Array = []             # recent global positions, index 0 = mo
 
 
 func _ready() -> void:
+	_setup_visuals()
+	if puppet:
+		# Client-side visual ghost — no collisions, no group (the host owns all hits/despawns;
+		# the Net snapshot registry frees us when the host's wave dies).
+		monitoring = false
+		monitorable = false
+		return
 	add_to_group("blade_waves")
+	if Net.is_host():
+		net_id = Net.next_id()
 	var col: CollisionShape2D = CollisionShape2D.new()
 	var rect: RectangleShape2D = RectangleShape2D.new()
 	rect.size = HITBOX_SIZE
 	col.shape = rect
 	add_child(col)
-	_setup_visuals()
 	body_entered.connect(_on_body_entered)
 
 
@@ -95,8 +107,16 @@ func _physics_process(delta: float) -> void:
 	_age += delta
 	_record_history()
 	_update_trail()
+	if puppet:
+		return   # lifetime/offscreen despawns are the host's call (registry frees us)
 	if _age >= lifetime_s or _offscreen():
 		_despawn()
+
+
+# Apply one host snapshot row (NetCodec.W layout) onto this puppet wave.
+func apply_net(arr: Array) -> void:
+	position = Vector2(arr[NetCodec.W.X], arr[NetCodec.W.Y])
+	velocity_v = Vector2(arr[NetCodec.W.VX], arr[NetCodec.W.VY])
 
 
 func _offscreen() -> bool:

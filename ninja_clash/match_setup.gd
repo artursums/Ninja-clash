@@ -189,7 +189,7 @@ func _process(_delta: float) -> void:
 		_adjust(-1)
 	elif _nav("right"):
 		_adjust(1)
-	elif _nav("jump"):
+	elif _nav("jump") or _nav("confirm"):
 		_activate()
 
 

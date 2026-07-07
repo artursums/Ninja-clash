@@ -31,6 +31,9 @@ const BTN_TEX := {
 	"start":   ["res://sprites/menu/button_start_normal_native.png",
 				"res://sprites/menu/button_start_hover_native.png",
 				"res://sprites/menu/button_start_pressed_native.png"],
+	"online":  ["res://sprites/menu/button_online_normal_native.png",
+				"res://sprites/menu/button_online_hover_native.png",
+				"res://sprites/menu/button_online_pressed_native.png"],
 	"options": ["res://sprites/menu/button_options_normal_native.png",
 				"res://sprites/menu/button_options_hover_native.png",
 				"res://sprites/menu/button_options_pressed_native.png"],
@@ -41,7 +44,7 @@ const BTN_TEX := {
 				"res://sprites/menu/button_quit_hover_native.png",
 				"res://sprites/menu/button_quit_pressed_native.png"],
 }
-const BUTTON_SLUGS: Array = ["start", "options", "credits", "quit"]
+const BUTTON_SLUGS: Array = ["start", "online", "options", "credits", "quit"]
 
 # native bg is 480×270 → viewport is 800×450, a uniform 5/3 scale.
 const S := 800.0 / 480.0          # 1.6667 — native-bg → viewport scale
@@ -50,8 +53,8 @@ const KATANA_SCALE := 0.756 * S   # ≈1.26 — katanas sweep a little wider tha
 const SUB_SCALE := S              # ≈1.667
 const BTN_SCALE := S              # ≈1.667
 const TITLE_TOP := 18.0           # 0.04 × 450
-const BTN_TOP := 178.0            # first button top
-const BTN_STEP := 51.0            # vertical step (planks overlap, TowerFall-chunky)
+const BTN_TOP := 158.0            # first button top (5 buttons since ONLINE joined the stack)
+const BTN_STEP := 46.0            # vertical step (planks overlap, TowerFall-chunky)
 const PRESS_FLASH_S := 0.12       # how long the "pressed" sprite shows before the action fires
 
 # Overlay sub-states.
@@ -59,7 +62,7 @@ const OVERLAY_NONE := 0
 const OVERLAY_OPTIONS := 1
 const OVERLAY_CREDITS := 2
 
-const OPT_ROWS: Array = ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "BACK"]
+const OPT_ROWS: Array = ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "TUTORIAL", "BACK"]
 const VOL_STEP := 0.1
 const BAR_SEGMENTS := 10
 
@@ -142,6 +145,17 @@ func _build() -> void:
 		btn.position = Vector2(bx, BTN_TOP + i * BTN_STEP)
 		add_child(btn)
 		_buttons.append(btn)
+
+	# Navigation hint — the landing screen teaches its own controls (every overlay already does).
+	var nav_hint := Label.new()
+	nav_hint.text = "W/S · ↕ — SELECT      ENTER / SPACE / ✕ — CONFIRM"
+	nav_hint.position = Vector2(0, 430)
+	nav_hint.size = Vector2(800, 18)
+	nav_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nav_hint.add_theme_font_size_override("font_size", 12)
+	nav_hint.add_theme_color_override("font_color", COL_DIM)
+	nav_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(nav_hint)
 
 	_build_options_panel()
 	_build_credits_panel()
@@ -279,7 +293,8 @@ func _nav(suffix: String) -> bool:
 
 
 func _confirm() -> bool:
-	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump")
+	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
+		or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm")
 
 
 func _process(_delta: float) -> void:
@@ -330,10 +345,12 @@ func _do_action(action: int) -> void:
 		0:
 			GameState.change_state(GameState.State.MODE_SELECT)
 		1:
-			_set_overlay(OVERLAY_OPTIONS)
+			GameState.change_state(GameState.State.ONLINE_MENU)
 		2:
-			_set_overlay(OVERLAY_CREDITS)
+			_set_overlay(OVERLAY_OPTIONS)
 		3:
+			_set_overlay(OVERLAY_CREDITS)
+		4:
 			get_tree().quit()
 
 
@@ -355,18 +372,24 @@ func _process_options() -> void:
 		if _options_cursor < 3:
 			var delta: float = VOL_STEP if right else -VOL_STEP
 			_adjust_volume(_options_cursor, delta)
-		elif _options_cursor == 3:
-			Settings.set_fullscreen(not Settings.fullscreen)
-			Audio.play("click")
-			_refresh_options()
+		elif _options_cursor == 3 or _options_cursor == 4:
+			_flip_toggle(_options_cursor)
 	elif _confirm():
-		if _options_cursor == 3:
-			Settings.set_fullscreen(not Settings.fullscreen)
-			Audio.play("click")
-			_refresh_options()
+		if _options_cursor == 3 or _options_cursor == 4:
+			_flip_toggle(_options_cursor)
 		elif _options_cursor == OPT_ROWS.size() - 1:   # BACK
 			Audio.play("click")
 			_set_overlay(OVERLAY_NONE)
+
+
+# Row 3 = FULLSCREEN, row 4 = TUTORIAL (the HOW TO PLAY overlay before each match).
+func _flip_toggle(row: int) -> void:
+	if row == 3:
+		Settings.set_fullscreen(not Settings.fullscreen)
+	else:
+		Settings.set_show_tutorial(not Settings.show_tutorial)
+	Audio.play("click")
+	_refresh_options()
 
 
 func _process_credits() -> void:
@@ -423,6 +446,9 @@ func _refresh_options() -> void:
 		elif i == 3:
 			var on: String = "ON" if Settings.fullscreen else "OFF"
 			text = "%s   ◄ %s ►" % [_pad_name("FULLSCREEN"), on]
+		elif i == 4:
+			var t_on: String = "ON" if Settings.show_tutorial else "OFF"
+			text = "%s   ◄ %s ►" % [_pad_name("TUTORIAL"), t_on]
 		else:
 			text = "BACK"
 		label.text = ("▶  " if sel else "    ") + text

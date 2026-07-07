@@ -137,7 +137,8 @@ func _process(_delta: float) -> void:
 		diff = clampi(diff - 1, 1, 3)
 		Audio.play("click")
 		_refresh()
-	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
+	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
+			or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm"):
 		GameState.game_mode = MODES[cursor].mode
 		GameState.ai_difficulty = diff
 		Audio.play("confirm")
@@ -149,12 +150,14 @@ func _refresh() -> void:
 		var sel: bool = (i == cursor)
 		tiles[i].texture = load(MENU + "mode_%s%s_native.png" % [slug, "_selected" if sel else ""])
 
+	# The difficulty row exists only for AI modes — HIDDEN (not dimmed) otherwise, so a
+	# P1-vs-P2 player never wonders what the inert stamps and dead Up/Down inputs are for.
 	var ai: bool = _ai_mode()
-	var dim: Color = Color(1, 1, 1, 1) if ai else Color(1, 1, 1, 0.28)
-	diff_label.add_theme_color_override("font_color", Color("d4a830") if ai else Color("4a4e60"))
-	diff_label.text = "AI DIFFICULTY" if ai else "— no AI in this mode —"
+	diff_label.visible = ai
+	diff_label.add_theme_color_override("font_color", Color("d4a830"))
+	diff_label.text = "AI DIFFICULTY   (▲/▼ change)"
 	for i in diff_stamps.size():
-		diff_stamps[i].modulate = dim
+		diff_stamps[i].visible = ai
 	# Place / show the selection frame around the active difficulty stamp.
 	diff_frame.visible = ai
 	if ai:

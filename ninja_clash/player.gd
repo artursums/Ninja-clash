@@ -151,8 +151,10 @@ var slide_dir: Vector2 = Vector2.ZERO   # normalized dash direction (8-way), set
 var slide_charged: bool = true          # L2/R2 dash charge — spent on dash, restored on floor/wall contact
 var slide_cooldown_until: float = 0.0   # earliest time the charge may refill (base cooldown + any air refresh)
 var air_dash_penalty: bool = false      # set when a dash is taken airborne — adds the touch-down delay once
-var last_left_tap_t: float = -999.0     # P2 keyboard double-tap-to-dash timing (slot 2 only)
+var last_left_tap_t: float = -999.0     # keyboard double-tap-to-dash timing (any human slot, 4-way)
 var last_right_tap_t: float = -999.0
+var last_up_tap_t: float = -999.0
+var last_down_tap_t: float = -999.0
 var wall_jump_lock_until: float = -999.0
 var stomp_cooldown_until: float = -999.0     # stomper can't head-stomp again until this real-time
 var stomp_bounce_lock_until: float = -999.0  # holds the sideways stomp bounce against movement input
@@ -168,6 +170,15 @@ var _next_run_dust_t: float = 0.0   # real-time gate so run scuffs spawn at inte
 var death_time: float = -1.0        # set on _die() — drives spin/fade timing
 var death_spin_dir: int = 0         # +1 or -1 — matches knockback horizontal direction
 var _first_tick_done: bool = false
+
+# === Online puppet state (ADR-0003) ===
+# On the online CLIENT every fighter is a puppet: the host owns the simulation and Net applies
+# its snapshots onto these fields (via NetCodec.apply_player). _puppet_tick dead-reckons between
+# snapshots and blends toward the latest authoritative position.
+var net_target_pos: Vector2 = Vector2.ZERO   # latest host position for this fighter
+var net_has_target: bool = false
+const PUPPET_SNAP_DIST := 90.0      # beyond this, teleport (spawn / screen wrap), don't lerp
+const PUPPET_BLEND := 0.35          # per-tick pull toward the authoritative position
 
 # Pure bot decision helpers. preload (not a class_name) so it resolves on a fresh headless boot
 # without depending on the editor's global class cache being regenerated first.
@@ -320,7 +331,7 @@ func _ready() -> void:
 	add_to_group("players")
 	_apply_tuning()   # data-driven balance: load player_tuning.tres (or use the injected resource)
 	_spawn_collision_layer = collision_layer   # remember our solid layer so respawn restores it
-	var prefix = "p1" if slot == 1 else "p2"
+	var prefix = "p%d" % slot   # every slot reads ITS OWN action set (pads 3/4 bind to p3_/p4_)
 	input_left = prefix + "_left"
 	input_right = prefix + "_right"
 	input_jump = prefix + "_jump"
@@ -342,6 +353,10 @@ func _physics_process(delta: float) -> void:
 	if not _first_tick_done:
 		_first_tick_done = true
 		print("[PLAYER ", slot, "] first tick. pos=", position, " on_floor=", is_on_floor())
+	# Online client: puppet mode — render the host's snapshots, never simulate or read input.
+	if Net.is_client():
+		_puppet_tick(delta)
+		return
 	# Dead body physics — carries knockback impulse + gravity until it lands, then FREEZES
 	# in place forever. Once settled we stop calling move_and_slide entirely: a kinematic
 	# body that isn't driven can't be pushed, so the corpse can never be shoved around.
@@ -540,22 +555,21 @@ func _physics_process(delta: float) -> void:
 			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -float(facing))
 
 	# Dash-dodge request — ONE move on L2, R2 AND Circle (slide + dodge are now unified),
-	# plus a P2-only keyboard double-tap of A/D. Double-tap is scoped to slot 2 so an
-	# analog stick can't trigger it.
+	# plus a keyboard double-tap of any move/aim direction (W/A/S/D or numpad 8/4/5/6) for
+	# every HUMAN slot. The dash fires toward the held aim, so the second tap's held key
+	# already points it the right way. (A pad stick crossing the deadzone twice inside the
+	# window also counts — accepted: the dash still costs the charge + cooldown.)
 	var dash_requested: bool = not is_defending and (_pressed(input_slide) or _pressed(input_dodge))
-	if slot == 2:
-		if _pressed(input_left):
-			if t - last_left_tap_t <= DOUBLE_TAP_WINDOW_S:
-				dash_requested = true
-				last_left_tap_t = -999.0
-			else:
-				last_left_tap_t = t
-		if _pressed(input_right):
-			if t - last_right_tap_t <= DOUBLE_TAP_WINDOW_S:
-				dash_requested = true
-				last_right_tap_t = -999.0
-			else:
-				last_right_tap_t = t
+	if not is_bot:
+		last_left_tap_t = _tap_check(input_left, last_left_tap_t, t)
+		last_right_tap_t = _tap_check(input_right, last_right_tap_t, t)
+		last_up_tap_t = _tap_check(input_aim_up, last_up_tap_t, t)
+		last_down_tap_t = _tap_check(input_aim_down, last_down_tap_t, t)
+		if last_left_tap_t == TAP_FIRED or last_right_tap_t == TAP_FIRED \
+				or last_up_tap_t == TAP_FIRED or last_down_tap_t == TAP_FIRED:
+			dash_requested = true
+			last_left_tap_t = -999.0; last_right_tap_t = -999.0
+			last_up_tap_t = -999.0;   last_down_tap_t = -999.0
 
 	# Dash-dodge — fires toward the held aim (8-way) with brief i-frames that catch an
 	# incoming shuriken. Spends the charge; in the air you get exactly one until you touch
@@ -590,6 +604,40 @@ func _physics_process(delta: float) -> void:
 	_update_movement_dust(t, was_falling)
 	_check_screen_wrap()
 	_update_visual()
+
+# Online-client frame: move with the snapshot velocity through the real level colliders (so
+# is_on_floor() and the run/jump poses read correctly), then blend toward the authoritative
+# position. All state fields were set by NetCodec.apply_player; this only renders them.
+func _puppet_tick(delta: float) -> void:
+	if not alive:
+		_hide_reticle()
+		if net_has_target:
+			position = net_target_pos   # corpses just track the host exactly (they barely move)
+		_update_visual()
+		return
+	if not is_sliding:
+		velocity.y += GRAVITY * delta   # dead-reckon the arc between 30 Hz snapshots
+		velocity.y = minf(velocity.y, PLAYER_TERMINAL_FALL_SPEED)
+	move_and_slide()
+	if net_has_target:
+		if position.distance_to(net_target_pos) > PUPPET_SNAP_DIST:
+			position = net_target_pos   # spawn / screen-wrap jump — snap, never streak across
+		else:
+			position = position.lerp(net_target_pos, PUPPET_BLEND)
+	_check_screen_wrap()
+	_update_aim_reticle()
+	_update_visual()
+
+# Double-tap detection for one direction action. Returns the updated "last tap" timestamp:
+# TAP_FIRED when this press completed a double-tap (caller dashes and resets all four),
+# the press time on a first tap, or the old value when the action wasn't pressed this tick.
+const TAP_FIRED := -1.0
+func _tap_check(action: String, last_t: float, t: float) -> float:
+	if not _pressed(action):
+		return last_t
+	if t - last_t <= DOUBLE_TAP_WINDOW_S:
+		return TAP_FIRED
+	return t
 
 # The dash IS the dodge: a directional burst (8-way) with brief invincibility frames that
 # catch an incoming shuriken. L2 / R2 / Circle all trigger this one move.
@@ -1423,6 +1471,7 @@ func _spawn_clash_burst(pos: Vector2) -> void:
 	fx.scale = Vector2(1.5, 1.5)
 	fx.z_index = 55
 	get_parent().add_child(fx)
+	Net.relay_strip_fx(path, 5, 20.0, pos, fx.scale, 55)
 
 # Drop a quick 4-frame spark burst at a successful katana hit.
 func _spawn_strike_flash(pos: Vector2) -> void:
@@ -1438,6 +1487,7 @@ func _spawn_strike_flash(pos: Vector2) -> void:
 	fx.scale = Vector2(1.5, 1.5)
 	fx.z_index = 50
 	get_parent().add_child(fx)
+	Net.relay_strip_fx(path, 4, 22.0, pos, fx.scale, 50)
 
 # TowerFall-style movement puff. kind = "run" | "jump" | "land". Spawned into the
 # world (like the other FX) so the dust stays put while the ninja keeps moving.
@@ -1471,6 +1521,7 @@ func _spawn_dust(foot_pos: Vector2, kind: String, side: float) -> void:
 	fx.scale = Vector2(dir * s, s)   # mirror so the puff drifts/leans OUTWARD
 	fx.z_index = 1   # just above the floor tiles, below combat sparks (z 50)
 	get_parent().add_child(fx)
+	Net.relay_strip_fx(info[0], info[1], info[2], fx.position, fx.scale, 1)
 
 # Run scuffs + landing puff. Called once per physics step AFTER move_and_slide(),
 # so is_on_floor() and global_position reflect this frame's result.
@@ -1759,8 +1810,12 @@ func respawn(at_pos: Vector2) -> void:
 	_update_katana_indicator()
 
 func _check_screen_wrap() -> void:
-	# TowerFall-style: fall off bottom → appear at top; rise above top → appear at bottom.
-	# X is PRESERVED so a wall-slide stays on the wall continuously through the wrap.
+	# TowerFall-style arena wrap. The tunnel gaps in the side walls are authored as readable
+	# wrap routes, so fighters and thrown blades must use both axes consistently.
+	if position.x < -PLAYER_W:
+		position.x = 800.0 + PLAYER_W
+	elif position.x > 800.0 + PLAYER_W:
+		position.x = -PLAYER_W
 	if position.y > 470.0:
 		position.y = -30.0
 	elif position.y < -60.0:

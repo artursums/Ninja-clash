@@ -102,6 +102,11 @@ func play(snd_name: String) -> void:
 	add_child(p)
 	p.play()
 	p.finished.connect(func() -> void: p.queue_free())
+	# Online host: mirror in-match combat SFX to the client (Net filters keys + screens;
+	# no-op offline and on the client, so this can never echo back).
+	var net: Node = get_node_or_null("/root/Net")
+	if net != null:
+		net.relay_sfx(snd_name)
 
 func play_win_fanfare() -> void:
 	play("win_1")
@@ -132,7 +137,7 @@ func _on_state_changed(new_state: int) -> void:
 	var menu_states := [
 		GameState.State.TITLE, GameState.State.MODE_SELECT,
 		GameState.State.CLAN_SELECT, GameState.State.MAP_SELECT,
-		GameState.State.MATCH_END,
+		GameState.State.MATCH_END, GameState.State.ONLINE_MENU,
 	]
 	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
 	if new_state in menu_states:

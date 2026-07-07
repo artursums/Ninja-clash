@@ -14,9 +14,11 @@ const PAGE_MENU := 0
 const PAGE_SETTINGS := 1
 
 const MENU_ITEMS: Array = ["RESUME", "RESTART MATCH", "SETTINGS", "QUIT TO MENU"]
-const SETTINGS_NAMES: Array = ["MASTER", "MUSIC", "SFX"]   # rows 0-2; row 3 = BACK
+const SETTINGS_NAMES: Array = ["MASTER", "MUSIC", "SFX"]   # rows 0-2; row 3 = TUTORIAL, row 4 = BACK
 const VOL_STEP := 0.1
-const ROW_COUNT := 4
+const ROW_COUNT := 4        # menu page rows (and the plates both pages share)
+const SET_ROW_COUNT := 5    # settings page rows: 3 volumes + TUTORIAL + BACK
+const TUT_ROW := 3          # settings row index of the TUTORIAL toggle
 
 const COL_SEL := Color("d4a830")    # highlighted row (matches the menu accent)
 const COL_DIM := Color("f0eee8")    # idle button text — cream, readable on the wood plate
@@ -44,6 +46,7 @@ var _menu_labels: Array = []   # 4 Label — menu page item text
 var _set_names: Array = []     # 3 Label — MASTER/MUSIC/SFX
 var _bars: Array = []          # 3 Dictionaries { "segs": Array[TextureRect] }
 var _pcts: Array = []          # 3 Label — "80%"
+var _tut_label: Label          # settings row 3 — "TUTORIAL      ◄ ON ►"
 var _back_label: Label
 var _cursor: TextureRect
 
@@ -87,15 +90,16 @@ func _build() -> void:
 	_hdr_settings = _tex_native(load(MENU + "pause_header_settings_native.png"))
 	_hdr_settings.position = Vector2((800.0 - _hdr_settings.size.x) / 2.0, 44.0)
 
-	for i in ROW_COUNT:
+	# 5 plates: the menu page uses 0-3; the settings page uses all 5 (TUTORIAL + BACK rows).
+	for i in SET_ROW_COUNT:
 		var plate := _tex_sized(load(MENU + "pause_button_normal_native.png"),
 				PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H)
 		_plates.append(plate)
-
-		var lbl := _label(PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H, 22)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.text = String(MENU_ITEMS[i])
-		_menu_labels.append(lbl)
+		if i < ROW_COUNT:
+			var lbl := _label(PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H, 22)
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lbl.text = String(MENU_ITEMS[i])
+			_menu_labels.append(lbl)
 
 	# Settings widgets (rows 0-2 = volume; row 3 reuses plate 3 as BACK).
 	for i in SETTINGS_NAMES.size():
@@ -117,7 +121,10 @@ func _build() -> void:
 		var pct := _label(PLATE_CX + PLATE_W + 6.0, plate_y, 46.0, PLATE_H, 13)
 		_pcts.append(pct)
 
-	_back_label = _label(PLATE_CX, PLATE_TOP + 3 * PLATE_STEP, PLATE_W, PLATE_H, 22)
+	_tut_label = _label(PLATE_CX + 16.0, PLATE_TOP + TUT_ROW * PLATE_STEP, PLATE_W - 32.0, PLATE_H, 18)
+	_tut_label.text = "TUTORIAL"
+
+	_back_label = _label(PLATE_CX, PLATE_TOP + 4 * PLATE_STEP, PLATE_W, PLATE_H, 22)
 	_back_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_back_label.text = "BACK"
 
@@ -165,7 +172,12 @@ func _open() -> void:
 	_page = PAGE_MENU
 	_menu_cursor = 0
 	visible = true
-	get_tree().paused = true
+	# Online the match keeps running (a real pause would freeze the opponent's game too) —
+	# instead this machine's gameplay input is muted so menu keys can't steer the fighter.
+	if Net.is_online():
+		PlayerInput.suppress_local = true
+	else:
+		get_tree().paused = true
 	_lockout()
 	Audio.play("confirm")
 	_refresh()
@@ -177,6 +189,8 @@ func _resume() -> void:
 
 
 func _restart() -> void:
+	if Net.is_client():
+		return   # only the host may restart an online match (row shown dimmed)
 	Audio.play("confirm")
 	_close()
 	GameState.start_new_match()   # round 1, same mode/clans/map; emits MATCH_INTRO
@@ -185,13 +199,18 @@ func _restart() -> void:
 func _quit_to_menu() -> void:
 	Audio.play("click")
 	_close()
-	GameState.change_state(GameState.State.TITLE)
+	if Net.is_online():
+		Net.leave("")   # ends the session for both sides
+		GameState.change_state(GameState.State.ONLINE_MENU)
+	else:
+		GameState.change_state(GameState.State.TITLE)
 
 
 func _close() -> void:
 	_paused = false
 	visible = false
 	get_tree().paused = false
+	PlayerInput.suppress_local = false
 
 
 func _on_state_changed(_s: int) -> void:
@@ -233,7 +252,8 @@ func _nav(suffix: String) -> bool:
 
 
 func _confirm_pressed() -> bool:
-	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump")
+	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
+		or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm")
 
 
 func _process_menu() -> void:
@@ -272,11 +292,11 @@ func _process_settings() -> void:
 		_refresh()
 		return
 	if _nav("aim_up"):
-		_settings_cursor = (_settings_cursor + ROW_COUNT - 1) % ROW_COUNT
+		_settings_cursor = (_settings_cursor + SET_ROW_COUNT - 1) % SET_ROW_COUNT
 		Audio.play("click")
 		_refresh()
 	elif _nav("aim_down"):
-		_settings_cursor = (_settings_cursor + 1) % ROW_COUNT
+		_settings_cursor = (_settings_cursor + 1) % SET_ROW_COUNT
 		Audio.play("click")
 		_refresh()
 	elif _settings_cursor < SETTINGS_NAMES.size():
@@ -286,7 +306,12 @@ func _process_settings() -> void:
 		if nav_left or nav_right:
 			var delta: float = VOL_STEP if nav_right else -VOL_STEP
 			_adjust_volume(_settings_cursor, delta)
-	elif _confirm_pressed() and _settings_cursor == ROW_COUNT - 1:   # BACK
+	elif _settings_cursor == TUT_ROW:
+		if _nav("left") or _nav("right") or _confirm_pressed():
+			Settings.set_show_tutorial(not Settings.show_tutorial)
+			Audio.play("click")
+			_refresh()
+	elif _confirm_pressed() and _settings_cursor == SET_ROW_COUNT - 1:   # BACK
 		_page = PAGE_MENU
 		Audio.play("click")
 		_lockout()
@@ -311,8 +336,10 @@ func _refresh() -> void:
 	_hdr_paused.visible = menu_page
 	_hdr_settings.visible = not menu_page
 
-	for i in ROW_COUNT:
+	# Plate 4 (the settings page's BACK row) exists only on the settings page.
+	for i in SET_ROW_COUNT:
 		var sel: bool = (i == cursor_row)
+		_plates[i].visible = (i < ROW_COUNT) or not menu_page
 		_plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
 
 	# Menu page: centred item labels. Settings page: hide them.
@@ -321,6 +348,9 @@ func _refresh() -> void:
 		if menu_page:
 			var sel: bool = (i == _menu_cursor)
 			_menu_labels[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
+	# Online guest: RESTART belongs to the host — show that row disabled.
+	if menu_page:
+		_menu_labels[1].modulate.a = 0.4 if Net.is_client() else 1.0
 
 	# Settings widgets.
 	var vols: Array = [Settings.master_volume, Settings.music_volume, Settings.sfx_volume]
@@ -339,9 +369,16 @@ func _refresh() -> void:
 			_pcts[i].text = "%d%%" % int(round(float(vols[i]) * 100.0))
 			_pcts[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
 
+	# TUTORIAL toggle row (settings page only).
+	_tut_label.visible = not menu_page
+	if not menu_page:
+		var tut_sel: bool = (_settings_cursor == TUT_ROW)
+		_tut_label.text = "TUTORIAL          ◄ %s ►" % ("ON" if Settings.show_tutorial else "OFF")
+		_tut_label.add_theme_color_override("font_color", COL_SEL if tut_sel else COL_DIM)
+
 	_back_label.visible = not menu_page
 	if not menu_page:
-		_back_label.add_theme_color_override("font_color", COL_SEL if _settings_cursor == ROW_COUNT - 1 else COL_DIM)
+		_back_label.add_theme_color_override("font_color", COL_SEL if _settings_cursor == SET_ROW_COUNT - 1 else COL_DIM)
 
 	# Pointer cursor beside the active row.
 	var plate_y: float = PLATE_TOP + cursor_row * PLATE_STEP

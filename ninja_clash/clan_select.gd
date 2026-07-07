@@ -1,6 +1,8 @@
-# Clan select. Both players pick. Same-clan pick is blocked (other player rejected).
-# P1 = controller (D-pad move, Cross confirm, down un-confirm).
-# P2 = keyboard (A/D move, Space confirm, S un-confirm).
+# Clan select. Both players pick in P1 vs P2 / AI vs AI / online; in the solo modes
+# (P1 vs AI, FFA) only P1 picks — the bots' clans are auto-assigned on confirm.
+# Same-clan pick is blocked (other player rejected).
+# P1 = WASD keyboard (A/D move, Enter / Space confirm, S un-confirm) or pad 1 (D-pad, Cross).
+# P2 = numpad (4/6 move, numpad-Enter / 0 confirm, 5 un-confirm) or pad 2.
 # Circle / Esc (menu_cancel): back to mode select.
 #
 # Visuals: each clan banner sprite bakes its sigil + name (normal + glowing "selected"
@@ -45,6 +47,11 @@ func _ready() -> void:
 	_build()
 	GameState.state_changed.connect(_on_state_changed)
 	visibility_changed.connect(_on_visibility_changed)
+	# Online lobby sync (ADR-0003): host edits the P1 side, the guest edits P2 — each side's
+	# pick streams to the other machine; the host validates clan conflicts.
+	Net.lobby_peer_pick.connect(_on_remote_pick)
+	Net.lobby_host_state.connect(_on_host_pick)
+	Net.lobby_pick_rejected.connect(_on_pick_rejected)
 	_refresh()
 
 func _on_visibility_changed() -> void:
@@ -54,6 +61,8 @@ func _on_visibility_changed() -> void:
 		p1_confirmed = false
 		p2_confirmed = false
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
+		if Net.is_online():
+			_send_local_pick()   # both sides announce their pick on entry, so each sees the other
 		_refresh()
 
 func _on_state_changed(_s: int) -> void:
@@ -114,14 +123,24 @@ func _build() -> void:
 	status_label.add_theme_font_size_override("font_size", 16)
 	add_child(status_label)
 
-	# Fight Setup entry hint (bottom). Bound to the global "menu_setup" action (Tab / pad Select).
+	# Control hints (bottom). This is the busiest two-player screen, so it teaches every
+	# control it accepts — move, lock, un-lock, skin cycle — plus the Fight Setup entry.
+	var controls_hint := Label.new()
+	controls_hint.position = Vector2(0, 356)
+	controls_hint.size = Vector2(800, 18)
+	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_hint.add_theme_font_size_override("font_size", 12)
+	controls_hint.add_theme_color_override("font_color", Color("8a8ea8"))
+	controls_hint.text = "◄ ► move      ✕ / Enter / Space — lock in      ▼ — un-lock      ▢ / P / 7 — skin"
+	controls_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(controls_hint)
 	var setup_hint := Label.new()
-	setup_hint.position = Vector2(0, 374)
-	setup_hint.size = Vector2(800, 20)
+	setup_hint.position = Vector2(0, 376)
+	setup_hint.size = Vector2(800, 18)
 	setup_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	setup_hint.add_theme_font_size_override("font_size", 13)
+	setup_hint.add_theme_font_size_override("font_size", 12)
 	setup_hint.add_theme_color_override("font_color", Color("8a8ea8"))
-	setup_hint.text = "TAB / SELECT  —  FIGHT SETUP"
+	setup_hint.text = "TAB / SELECT  —  FIGHT SETUP (rules & variants)"
 	setup_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(setup_hint)
 
@@ -172,15 +191,30 @@ func _process(_delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("menu_cancel"):
 		Audio.play("click")
-		GameState.change_state(GameState.State.MODE_SELECT)
+		if Net.is_online():
+			# Backing out of the online lobby ends the session for both sides.
+			Net.leave("")
+			GameState.change_state(GameState.State.ONLINE_MENU)
+		else:
+			GameState.change_state(GameState.State.MODE_SELECT)
 		return
 	# Fight Setup / Variants — open from any mode, at any point before lock-in. Returns here.
+	# Online only the HOST owns the ruleset (it ships to the guest in the match bundle).
 	if Input.is_action_just_pressed("menu_setup"):
-		Audio.play("confirm")
-		GameState.change_state(GameState.State.MATCH_SETUP)
+		if Net.is_client():
+			status_label.text = "the host sets the fight rules"
+			status_label.add_theme_color_override("font_color", Color("a8a498"))
+		else:
+			Audio.play("confirm")
+			GameState.change_state(GameState.State.MATCH_SETUP)
+			return
+	if Net.is_online():
+		_process_online()
 		return
-	# Free-for-all: only P1 picks; the three bots take the remaining clans automatically.
-	if GameState.game_mode == GameState.Mode.FFA:
+	# Solo-pick modes: only P1 chooses, the bots are assigned automatically on confirm.
+	# FFA — the three bots split the remaining clans; P1 vs AI — the bot takes a random
+	# other clan. (AI vs AI keeps manual confirms — you're staging both sides of the demo.)
+	if GameState.game_mode == GameState.Mode.FFA or GameState.game_mode == GameState.Mode.HUMAN_VS_AI:
 		if Input.is_action_just_pressed("p1_skin"):
 			GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
 			Audio.play("click"); _refresh()
@@ -190,12 +224,16 @@ func _process(_delta: float) -> void:
 		elif Input.is_action_just_pressed("p1_right"):
 			p1_cursor = (p1_cursor + 1) % 4
 			Audio.play("click"); _refresh()
-		elif Input.is_action_just_pressed("p1_jump"):
+		elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p1_confirm"):
 			GameState.p1_clan = p1_cursor
-			GameState.assign_ffa_clans()
+			if GameState.game_mode == GameState.Mode.FFA:
+				GameState.assign_ffa_clans()
+			else:
+				GameState.p2_clan = (p1_cursor + 1 + randi() % 3) % 4
 			Audio.play("confirm")
 			GameState.change_state(GameState.State.MAP_SELECT)
 		return
+
 	if not p1_confirmed:
 		if Input.is_action_just_pressed("p1_skin"):
 			GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
@@ -209,7 +247,7 @@ func _process(_delta: float) -> void:
 			p1_cursor = (p1_cursor + 1) % 4
 			Audio.play("click")
 			_refresh()
-		elif Input.is_action_just_pressed("p1_jump"):
+		elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p1_confirm"):
 			if p2_confirmed and p2_cursor == p1_cursor:
 				status_label.text = "P2 already picked %s — choose another" % GameState.CLANS[p1_cursor].name
 				status_label.add_theme_color_override("font_color", Color("c03030"))
@@ -238,7 +276,7 @@ func _process(_delta: float) -> void:
 			p2_cursor = (p2_cursor + 1) % 4
 			Audio.play("click")
 			_refresh()
-		elif Input.is_action_just_pressed("p2_jump"):
+		elif Input.is_action_just_pressed("p2_jump") or Input.is_action_just_pressed("p2_confirm"):
 			if p1_confirmed and p1_cursor == p2_cursor:
 				status_label.text = "P1 already picked %s — choose another" % GameState.CLANS[p2_cursor].name
 				status_label.add_theme_color_override("font_color", Color("c03030"))
@@ -257,20 +295,125 @@ func _process(_delta: float) -> void:
 	if p1_confirmed and p2_confirmed:
 		GameState.change_state(GameState.State.MAP_SELECT)
 
+# === Online lobby (ADR-0003) ================================================
+
+# Any LOCAL device — online there is one human per machine, so both keyboard schemes and any
+# pad drive that machine's side of the lobby.
+func _act(suffix: String) -> bool:
+	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+
+# Online frame: edit MY side with local input, mirror the remote side from Net signals.
+# The host validates conflicts and is the only one who advances to map select.
+func _process_online() -> void:
+	var host: bool = Net.is_host()
+	var my_confirmed: bool = p1_confirmed if host else p2_confirmed
+	var changed: bool = false
+	if not my_confirmed:
+		if _act("skin"):
+			if host:
+				GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
+			else:
+				GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
+			Audio.play("click")
+			changed = true
+		if _act("left") or _act("right"):
+			var step: int = 1 if _act("right") else 3
+			if host:
+				p1_cursor = (p1_cursor + step) % 4
+			else:
+				p2_cursor = (p2_cursor + step) % 4
+			Audio.play("click")
+			changed = true
+		elif _act("jump") or _act("confirm"):
+			var my_cursor: int = p1_cursor if host else p2_cursor
+			var other_confirmed: bool = p2_confirmed if host else p1_confirmed
+			var other_cursor: int = p2_cursor if host else p1_cursor
+			if other_confirmed and other_cursor == my_cursor:
+				status_label.text = "%s is already taken — choose another" % GameState.CLANS[my_cursor].name
+				status_label.add_theme_color_override("font_color", Color("c03030"))
+				Audio.play("hit")
+			else:
+				if host:
+					p1_confirmed = true
+					GameState.p1_clan = p1_cursor
+				else:
+					p2_confirmed = true
+					GameState.p2_clan = p2_cursor   # preview; the host's bundle is authoritative
+				Audio.play("confirm")
+				changed = true
+	elif _act("aim_down"):
+		if host:
+			p1_confirmed = false
+		else:
+			p2_confirmed = false
+		Audio.play("click")
+		changed = true
+	if changed:
+		_send_local_pick()
+		_refresh()
+	# Only the host starts the match flow; the guest follows via the state relay.
+	if host and p1_confirmed and p2_confirmed:
+		GameState.change_state(GameState.State.MAP_SELECT)
+
+# Push MY side's current pick to the other machine.
+func _send_local_pick() -> void:
+	if Net.is_host():
+		Net.send_host_pick(p1_cursor, GameState.p1_skin, p1_confirmed)
+	elif Net.is_client():
+		Net.send_client_pick(p2_cursor, GameState.p2_skin, p2_confirmed)
+
+# Host ← guest: the P2 side changed. Validate a confirm against the host's own lock.
+func _on_remote_pick(cursor: int, skin: int, confirmed: bool) -> void:
+	if not visible or not Net.is_host():
+		return
+	p2_cursor = clampi(cursor, 0, 3)
+	GameState.p2_skin = skin % GameState.skin_count()
+	if confirmed and p1_confirmed and p2_cursor == p1_cursor:
+		p2_confirmed = false
+		Net.send_pick_rejected("P1 already picked %s — choose another" % GameState.CLANS[p1_cursor].name)
+	else:
+		p2_confirmed = confirmed
+		if confirmed:
+			GameState.p2_clan = p2_cursor
+	_refresh()
+
+# Guest ← host: the P1 side changed.
+func _on_host_pick(cursor: int, skin: int, confirmed: bool) -> void:
+	if not visible or not Net.is_client():
+		return
+	p1_cursor = clampi(cursor, 0, 3)
+	GameState.p1_skin = skin % GameState.skin_count()
+	p1_confirmed = confirmed
+	_refresh()
+
+# Guest ← host: my confirm was refused (clan taken on the host's authoritative view).
+func _on_pick_rejected(reason: String) -> void:
+	if not visible or not Net.is_client():
+		return
+	p2_confirmed = false
+	Audio.play("hit")
+	_send_local_pick()
+	_refresh()
+	# After _refresh so the standard status text can't paint over the rejection.
+	status_label.text = reason
+	status_label.add_theme_color_override("font_color", Color("c03030"))
+
 func _refresh() -> void:
-	var ffa: bool = (GameState.game_mode == GameState.Mode.FFA)
+	# Solo-pick modes hide the whole P2 side — the bot's clan is assigned on confirm.
+	var solo: bool = (GameState.game_mode == GameState.Mode.FFA) \
+		or (GameState.game_mode == GameState.Mode.HUMAN_VS_AI and not Net.is_online())
 	for i in 4:
 		# A banner glows (selected sprite) when a player hovers or has locked it.
-		var attended: bool = (i == p1_cursor) or (not ffa and i == p2_cursor)
+		var attended: bool = (i == p1_cursor) or (not solo and i == p2_cursor)
 		banners[i].texture = load(MENU + "clan_%s%s_native.png" % [CLAN_SLUGS[i], "_selected" if attended else ""])
-		var locked: bool = (p1_confirmed and i == p1_cursor) or (not ffa and p2_confirmed and i == p2_cursor)
+		var locked: bool = (p1_confirmed and i == p1_cursor) or (not solo and p2_confirmed and i == p2_cursor)
 		stamps[i].visible = locked
 
 		# Exactly ONE character per flag — never duplicated when two players share it (the chips
 		# above show who's there, TowerFall-style). Skin: a player hovering alone previews their own
 		# skin; a shared or unattended flag shows the base skin. Hidden only under the locked-in stamp.
 		var p1_here: bool = (i == p1_cursor and not p1_confirmed)
-		var p2_here: bool = (not ffa and i == p2_cursor and not p2_confirmed)
+		var p2_here: bool = (not solo and i == p2_cursor and not p2_confirmed)
 		var skin_to_show: int = 0   # base ("CLASSIC")
 		if p1_here and not p2_here:
 			skin_to_show = GameState.p1_skin
@@ -286,7 +429,7 @@ func _refresh() -> void:
 		name_labels[i].add_theme_color_override("font_color", GameState.CLANS[i].color)
 
 	# Chips above the hovered banners; nudge apart when both players share a banner.
-	var same: bool = (not ffa and p1_cursor == p2_cursor)
+	var same: bool = (not solo and p1_cursor == p2_cursor)
 	var chip_w: float = 28.0 * CHIP_SCALE
 	var chip_h: float = 22.0 * CHIP_SCALE
 	var chip_y: float = BANNER_Y - chip_h - 2.0
@@ -294,19 +437,34 @@ func _refresh() -> void:
 	var centre2: float = _banner_x(p2_cursor) + (BANNER_W - chip_w) / 2.0
 	p1_chip.position = Vector2(centre1 + (-16.0 if same else 0.0), chip_y)
 	p2_chip.position = Vector2(centre2 + (16.0 if same else 0.0), chip_y)
-	p2_chip.visible = not ffa
+	p2_chip.visible = not solo
 
 	# Skin readouts — current skin name + cycle button, tinted to the hovered clan.
-	p1_skin_label.text = "P1  □  %s" % GameState.skin_label(GameState.p1_skin)
+	p1_skin_label.text = "P1  □/P  %s" % GameState.skin_label(GameState.p1_skin)
 	p1_skin_label.add_theme_color_override("font_color", GameState.CLANS[p1_cursor].color)
-	p2_skin_label.visible = not ffa
-	if not ffa:
-		p2_skin_label.text = "P2  P  %s" % GameState.skin_label(GameState.p2_skin)
+	p2_skin_label.visible = not solo
+	if not solo:
+		p2_skin_label.text = "P2  □/7  %s" % GameState.skin_label(GameState.p2_skin)
 		p2_skin_label.add_theme_color_override("font_color", GameState.CLANS[p2_cursor].color)
 
-	if ffa:
-		status_label.text = "P1: pick your clan — the 3 bots take the rest"
+	if solo:
+		if GameState.game_mode == GameState.Mode.FFA:
+			status_label.text = "P1: pick your clan — the 3 bots take the rest"
+		else:
+			status_label.text = "P1: pick your clan — the bot takes another"
 		status_label.add_theme_color_override("font_color", Color("a8a498"))
+		return
+	if Net.is_online():
+		var my_locked: bool = p1_confirmed if Net.is_host() else p2_confirmed
+		if p1_confirmed and p2_confirmed:
+			status_label.text = "starting..."
+			status_label.add_theme_color_override("font_color", Color("d4a830"))
+		elif my_locked:
+			status_label.text = "locked in — waiting for your opponent…"
+			status_label.add_theme_color_override("font_color", Color("a8a498"))
+		else:
+			status_label.text = "ONLINE — you are %s" % ("P1 (host)" if Net.is_host() else "P2 (guest)")
+			status_label.add_theme_color_override("font_color", Color("a8a498"))
 		return
 	if p1_confirmed and p2_confirmed:
 		status_label.text = "starting..."

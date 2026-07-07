@@ -35,7 +35,77 @@ const NT_LADDER := Rect2(786, 47, 228, 575)   # vertical ladder tower — decora
 const NT_GATE_L := Rect2(35, 672, 418, 696)   # torii gate pillar — decoration only
 const NT_GATE_R := Rect2(579, 672, 428, 699)  # torii gate pillar — decoration only
 
+const VC_PARTS := "res://sprites/levels/verdant_cistern/components.png"
+const VC_FLOOR := Rect2(0, 0, 800, 56)
+const VC_CEILING := Rect2(0, 64, 800, 34)
+const VC_SIDE_TOP := Rect2(0, 112, 86, 116)
+const VC_SIDE_MID := Rect2(96, 112, 86, 112)
+const VC_SIDE_LOW := Rect2(192, 112, 86, 54)
+const VC_BRIDGE := Rect2(0, 240, 228, 32)
+const VC_PAD_WIDE := Rect2(240, 240, 168, 30)
+const VC_PAD_MED := Rect2(420, 240, 128, 28)
+
+# Sky Temple component atlas (Higgsfield z_image, chroma-keyed to alpha). Pieces measured
+# from the built atlas; "walkable" = the source-pixel row of the grassy deck top within each
+# region (aligns to the collision top for WYSIWYG). Towers render in "fill" mode.
+const ST_PARTS := "res://sprites/levels/sky_temple/components.png"
+const ST_FLOOR := Rect2(0, 0, 800, 52)      # full floor strip; deck row 2
+const ST_TOWER := Rect2(804, 0, 86, 450)    # full-height side tower (fill mode)
+const ST_CAP   := Rect2(0, 100, 210, 46)    # corner ceiling-cap block; deck row 2
+const ST_APEX  := Rect2(0, 60, 200, 34)     # wide central platform; deck row 9
+const ST_LEDGE := Rect2(210, 60, 160, 34)   # side ledge; deck row 0
+const ST_PAD   := Rect2(380, 60, 170, 34)   # spawn pad; deck row 0
+
 const MAPS: Array = [
+	{
+		"name": "Verdant Cistern",
+		"subtitle": "moss-lit wrap tunnels",
+		"ambience": "verdant_cistern",
+		"background": "res://sprites/levels/verdant_cistern/background.png",
+		"bg_color": Color("10222a"),
+		"sky_top": Color("0b1a1d"),
+		"sky_bot": Color("183a3f"),
+		"wall_color": Color("245348"),
+		"wall_edge_color": Color("a3e589"),
+		"platform_overhang": 1.0,
+		# Mirror-symmetric 5-tier arena (matches the proven Neo Tokyo template) but keeps the
+		# cistern identity: solid top/bottom caps + segmented side walls that leave two clean
+		# wrap-tunnel openings per side. Earlier revision crammed 21 thick bodies in here — pieces
+		# overlapped and two 17 px gaps were narrower than the 20 px player. This layout keeps every
+		# platform spaced (each tier ≤71 px below the next, within the ~82 px jump apex) with no
+		# overlaps and every opening ≥44 px (player is 32 px tall). WYSIWYG: collision heights equal
+		# the source-art heights so the walkable deck is exactly where it's drawn.
+		"walls": [
+			# Top cap + bottom floor — the cistern is fully enclosed (no chasm).
+			{"center": Vector2(400, 17), "size": Vector2(800, 34), "sprite": VC_PARTS, "sprite_region": VC_CEILING, "sprite_walkable": 0.0},
+			{"center": Vector2(400, 422), "size": Vector2(800, 56), "sprite": VC_PARTS, "sprite_region": VC_FLOOR, "sprite_walkable": 0.0},
+
+			# Segmented side walls: openings at y133–184 (51 px) and y296–340 (44 px) form the
+			# left/right wrap tunnels. Collision extends full segment height; no lips clutter them.
+			{"center": Vector2(43, 75), "size": Vector2(86, 116), "sprite": VC_PARTS, "sprite_region": VC_SIDE_TOP, "sprite_walkable": 0.0},
+			{"center": Vector2(757, 75), "size": Vector2(86, 116), "sprite": VC_PARTS, "sprite_region": VC_SIDE_TOP, "sprite_walkable": 0.0},
+			{"center": Vector2(43, 240), "size": Vector2(86, 112), "sprite": VC_PARTS, "sprite_region": VC_SIDE_MID, "sprite_walkable": 0.0},
+			{"center": Vector2(757, 240), "size": Vector2(86, 112), "sprite": VC_PARTS, "sprite_region": VC_SIDE_MID, "sprite_walkable": 0.0},
+			{"center": Vector2(43, 367), "size": Vector2(86, 54), "sprite": VC_PARTS, "sprite_region": VC_SIDE_LOW, "sprite_walkable": 0.0},
+			{"center": Vector2(757, 367), "size": Vector2(86, 54), "sprite": VC_PARTS, "sprite_region": VC_SIDE_LOW, "sprite_walkable": 0.0},
+
+			# Tier 1 — apex bridge (high-ground perch).
+			{"center": Vector2(400, 100), "size": Vector2(228, 32), "sprite": VC_PARTS, "sprite_region": VC_BRIDGE, "sprite_walkable": 0.0},
+			# Tier 2 — upper ears (mirrored).
+			{"center": Vector2(200, 168), "size": Vector2(128, 28), "sprite": VC_PARTS, "sprite_region": VC_PAD_MED, "sprite_walkable": 0.0},
+			{"center": Vector2(600, 168), "size": Vector2(128, 28), "sprite": VC_PARTS, "sprite_region": VC_PAD_MED, "sprite_walkable": 0.0},
+			# Tier 3 — central catwalk (main battle line through the middle).
+			{"center": Vector2(400, 236), "size": Vector2(168, 30), "sprite": VC_PARTS, "sprite_region": VC_PAD_WIDE, "sprite_walkable": 0.0},
+			# Tier 4 — outer climb pads (mirrored; bridge mid → spawn tiers).
+			{"center": Vector2(195, 300), "size": Vector2(128, 28), "sprite": VC_PARTS, "sprite_region": VC_PAD_MED, "sprite_walkable": 0.0},
+			{"center": Vector2(605, 300), "size": Vector2(128, 28), "sprite": VC_PARTS, "sprite_region": VC_PAD_MED, "sprite_walkable": 0.0},
+			# Tier 5 — spawn pads (mirrored; players start 8 px above these decks).
+			{"center": Vector2(230, 372), "size": Vector2(168, 30), "sprite": VC_PARTS, "sprite_region": VC_PAD_WIDE, "sprite_walkable": 0.0},
+			{"center": Vector2(570, 372), "size": Vector2(168, 30), "sprite": VC_PARTS, "sprite_region": VC_PAD_WIDE, "sprite_walkable": 0.0},
+		],
+		"spawn_points": [Vector2(230, 340), Vector2(570, 340)],
+		"transparent_platforms": false,
+	},
 	{
 		"name": "Sakura Temple",
 		"subtitle": "moonlit shinobi sanctum",
@@ -143,6 +213,45 @@ const MAPS: Array = [
 		# No decorative landmarks: only the collidable platforms above are drawn, so every
 		# platform the player sees is one they can land on (no jump-on-the-background confusion).
 		"spawn_points": [Vector2(230, 340), Vector2(570, 340)],
+		"transparent_platforms": false,
+		"bg_decorations": [],
+		"fg_decorations": [],
+	},
+	{
+		"name": "Sky Temple",
+		"subtitle": "open sanctuary above the clouds",
+		# TODO(art): dedicated ambience later. Falls back to no atmosphere controller for now.
+		"ambience": "",
+		# Higgsfield art wired in (see sky_temple/ART_SPEC.md). Frame + platforms draw from the
+		# component atlas; the backdrop is the full-frame 800x450 image.
+		"background": "res://sprites/levels/sky_temple/background.png",
+		"bg_color": Color("1a2b3a"),
+		"sky_top": Color("6fb7d8"),        # open TowerFall-temple blue sky
+		"sky_bot": Color("bfe3ea"),
+		"wall_color": Color("2f5a4a"),     # mossy green stone
+		"wall_edge_color": Color("a3e589"),
+		"platform_overhang": 1.0,          # WYSIWYG: visual width == hitbox once art is in
+		# OPEN, full-frame TowerFall arena. Half the platform count of Verdant Cistern: the entire
+		# central column stays open sky. Frame (floor + corner ceiling caps + full-height side
+		# towers) uses color-fill until art arrives; the 5 floating platforms use the generic sprite.
+		# Verified: every floating platform >=50 px off the wall x-ranges (0-86, 714-800); intended
+		# jump gaps <=~82 px apex (floor->spawn 71 px; other routes use wall-jumps off the towers).
+		"walls": [
+			# --- Frame: full floor, open-center corner ceiling caps, solid side towers ---
+			{"center": Vector2(400, 432), "size": Vector2(800, 36), "sprite": ST_PARTS, "sprite_region": ST_FLOOR, "sprite_walkable": 2.0},   # floor (walkable top ~414)
+			{"center": Vector2(72, 20),   "size": Vector2(210, 40), "sprite": ST_PARTS, "sprite_region": ST_CAP, "sprite_walkable": 2.0},    # ceiling cap L (corner)
+			{"center": Vector2(728, 20),  "size": Vector2(210, 40), "sprite": ST_PARTS, "sprite_region": ST_CAP, "sprite_walkable": 2.0},    # ceiling cap R (corner)
+			{"center": Vector2(43, 225),  "size": Vector2(86, 450), "sprite": ST_PARTS, "sprite_region": ST_TOWER, "sprite_mode": "fill"},   # side tower L (full height)
+			{"center": Vector2(757, 225), "size": Vector2(86, 450), "sprite": ST_PARTS, "sprite_region": ST_TOWER, "sprite_mode": "fill"},   # side tower R (full height)
+			# --- Sparse floating platforms: center-top and mid stay open sky ---
+			{"center": Vector2(175, 350), "size": Vector2(150, 14), "sprite": ST_PARTS, "sprite_region": ST_PAD, "sprite_walkable": 0.0},    # spawn pad L
+			{"center": Vector2(625, 350), "size": Vector2(150, 14), "sprite": ST_PARTS, "sprite_region": ST_PAD, "sprite_walkable": 0.0},    # spawn pad R
+			{"center": Vector2(215, 250), "size": Vector2(130, 14), "sprite": ST_PARTS, "sprite_region": ST_LEDGE, "sprite_walkable": 0.0},  # side ledge L
+			{"center": Vector2(585, 250), "size": Vector2(130, 14), "sprite": ST_PARTS, "sprite_region": ST_LEDGE, "sprite_walkable": 0.0},  # side ledge R
+			{"center": Vector2(400, 165), "size": Vector2(170, 14), "sprite": ST_PARTS, "sprite_region": ST_APEX, "sprite_walkable": 9.0},   # central apex
+		],
+		# Players start ~30 px above the spawn-pad decks (feet on the pad).
+		"spawn_points": [Vector2(175, 320), Vector2(625, 320)],
 		"transparent_platforms": false,
 		"bg_decorations": [],
 		"fg_decorations": [],

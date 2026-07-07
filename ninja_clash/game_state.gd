@@ -18,6 +18,7 @@ enum State {
 	ROUND_END,
 	MATCH_END,
 	MATCH_SETUP,   # Fight Setup / Variants screen (opened from clan select); appended so enum values don't shift
+	ONLINE_MENU,   # Online host/join screen (ADR-0003); appended so enum values don't shift
 }
 
 # Who controls each fighter this match. FFA = P1 (human) vs three bots, free-for-all.
@@ -71,6 +72,12 @@ func change_state(s: int) -> void:
 	current_state = s
 	print("[STATE] -> ", State.keys()[s])
 	state_changed.emit(s)
+	# Online: the host mirrors every screen change to the client (no-op offline / on the client;
+	# safe lookup so headless unit tests without autoloads keep working).
+	if is_inside_tree():
+		var net: Node = get_node_or_null("/root/Net")
+		if net != null:
+			net.on_local_state_changed(s)
 
 func get_clan(slot: int) -> Dictionary:
 	return CLANS[clan_index(slot)]

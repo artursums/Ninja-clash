@@ -27,12 +27,23 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	visibility_changed.connect(_on_visibility_changed)
+	# Online: the HOST browses; the guest's screen mirrors the host's cursor live.
+	Net.map_cursor_changed.connect(_on_remote_cursor)
 	_refresh()
 
 func _on_visibility_changed() -> void:
 	if visible:
 		cursor = GameState.selected_map_index
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
+		if Net.is_host():
+			Net.send_map_cursor(cursor)
+		_refresh()
+
+# Guest ← host: the host moved to another arena preview.
+func _on_remote_cursor(c: int) -> void:
+	if visible and Net.is_client():
+		cursor = c % Maps.count()
+		Audio.play("click")
 		_refresh()
 
 func _build() -> void:
@@ -112,6 +123,9 @@ func _process(_delta: float) -> void:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
+	# Online guest: watch only — the host picks the arena (the cursor mirrors live).
+	if Net.is_client():
+		return
 	if Input.is_action_just_pressed("menu_cancel"):
 		GameState.change_state(GameState.State.CLAN_SELECT)
 		return
@@ -125,12 +139,15 @@ func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p2_left"):
 		cursor = (cursor + count - 1) % count
 		Audio.play("click")
+		Net.send_map_cursor(cursor)
 		_refresh()
 	elif Input.is_action_just_pressed("p1_right") or Input.is_action_just_pressed("p2_right"):
 		cursor = (cursor + 1) % count
 		Audio.play("click")
+		Net.send_map_cursor(cursor)
 		_refresh()
-	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump"):
+	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
+			or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm"):
 		GameState.selected_map_index = cursor
 		Audio.play("confirm")
 		GameState.start_new_match()
@@ -141,3 +158,5 @@ func _refresh() -> void:
 	thumb.texture = load(bg_path) if bg_path != "" and ResourceLoader.exists(bg_path) else null
 	name_label.text = String(data.name).to_upper()
 	subtitle_label.text = String(data.get("subtitle", ""))
+	if Net.is_client():
+		subtitle_label.text = "P1 (host) is choosing the arena…"
