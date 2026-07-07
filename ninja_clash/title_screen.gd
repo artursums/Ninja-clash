@@ -46,6 +46,17 @@ const BTN_TEX := {
 }
 const BUTTON_SLUGS: Array = ["start", "online", "options", "credits", "quit"]
 
+# Buttons actually shown on THIS platform. The web build hides ONLINE: the netcode is ENet/UDP
+# (ADR-0003), which browsers can't open — showing a button that can only fail is worse than
+# not offering it. QUIT is also meaningless inside a browser tab.
+func _platform_slugs() -> Array:
+	if OS.has_feature("web"):
+		var slugs: Array = BUTTON_SLUGS.duplicate()
+		slugs.erase("online")
+		slugs.erase("quit")
+		return slugs
+	return BUTTON_SLUGS
+
 # native bg is 480×270 → viewport is 800×450, a uniform 5/3 scale.
 const S := 800.0 / 480.0          # 1.6667 — native-bg → viewport scale
 const TITLE_SCALE := 0.72 * S     # ≈1.2  — title downscaled a touch so the layout breathes
@@ -71,7 +82,8 @@ const COL_DIM := Color("a8a498")   # muted — unselected
 const COL_HEAD := Color("f0eee8")  # near-white — headers
 
 var cursor: int = 0
-var _buttons: Array = []           # TextureRect per button, in BUTTON_SLUGS order
+var _slugs: Array = []             # buttons shown on this platform (see _platform_slugs)
+var _buttons: Array = []           # TextureRect per button, in _slugs order
 var _input_lockout_until: float = 0.0
 var _press_until: float = 0.0
 var _press_action: int = -1
@@ -129,11 +141,12 @@ func _build() -> void:
 	var sw := TEX_SUBTITLE.get_width() * SUB_SCALE
 	sub.position = Vector2((800.0 - sw) / 2.0, TITLE_TOP + title_h - 10.0)
 
-	# Four stacked wooden buttons.
+	# The stacked wooden buttons (per-platform set — web hides ONLINE and QUIT).
+	_slugs = _platform_slugs()
 	var bw := 188.0 * BTN_SCALE
 	var bx := (800.0 - bw) / 2.0
-	for i in BUTTON_SLUGS.size():
-		var slug: String = BUTTON_SLUGS[i]
+	for i in _slugs.size():
+		var slug: String = _slugs[i]
 		var btn := TextureRect.new()
 		btn.texture = load(BTN_TEX[slug][0])
 		btn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -326,11 +339,11 @@ func _process(_delta: float) -> void:
 
 func _process_main_menu(t: float) -> void:
 	if _nav("aim_up"):
-		cursor = (cursor + BUTTON_SLUGS.size() - 1) % BUTTON_SLUGS.size()
+		cursor = (cursor + _slugs.size() - 1) % _slugs.size()
 		Audio.play("click")
 		_refresh()
 	elif _nav("aim_down"):
-		cursor = (cursor + 1) % BUTTON_SLUGS.size()
+		cursor = (cursor + 1) % _slugs.size()
 		Audio.play("click")
 		_refresh()
 	elif _confirm():
@@ -341,16 +354,17 @@ func _process_main_menu(t: float) -> void:
 
 
 func _do_action(action: int) -> void:
-	match action:
-		0:
+	# Resolve by SLUG, not index — the button set varies per platform (web drops rows).
+	match String(_slugs[action]):
+		"start":
 			GameState.change_state(GameState.State.MODE_SELECT)
-		1:
+		"online":
 			GameState.change_state(GameState.State.ONLINE_MENU)
-		2:
+		"options":
 			_set_overlay(OVERLAY_OPTIONS)
-		3:
+		"credits":
 			_set_overlay(OVERLAY_CREDITS)
-		4:
+		"quit":
 			get_tree().quit()
 
 
@@ -424,7 +438,7 @@ func _set_overlay(kind: int) -> void:
 
 func _refresh() -> void:
 	for i in _buttons.size():
-		var slug: String = BUTTON_SLUGS[i]
+		var slug: String = _slugs[i]
 		var state: int
 		if _press_until > 0.0 and _press_action == i:
 			state = 2   # pressed
