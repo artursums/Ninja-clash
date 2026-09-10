@@ -47,6 +47,14 @@ Export presets and the web deploy pipeline: [`ninja_clash/EXPORT.md`](ninja_clas
     -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json
 ```
 
+The menu integration check covers selection, previews, mouse input, modal blocking,
+and pause/resume:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
+    -s res://tests/integration/menu_flow.gd
+```
+
 ## Documentation
 
 | Document | What it covers |

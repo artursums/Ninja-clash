@@ -11,6 +11,8 @@
 # jump/Enter, ◯/Esc = back/cancel. Reuses the pause-menu sprite kit for a consistent look.
 extends Control
 
+const UI = preload("res://menu_ui.gd")
+
 const MENU := "res://sprites/menu/"
 
 const ROWS: Array = ["HOST GAME", "JOIN GAME", "BACK"]
@@ -79,13 +81,11 @@ func _on_session_ended(reason: String) -> void:
 
 
 func _build() -> void:
-	var bg: ColorRect = ColorRect.new()
-	bg.anchor_right = 1.0
-	bg.anchor_bottom = 1.0
-	bg.color = Color("0d0d1a")
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-
+	UI.backdrop(self, 0.82)
+	UI.panel(self, Rect2(192, 96, 416, 288))
+	var menu_theme := Theme.new()
+	menu_theme.default_font = UI.FONT
+	theme = menu_theme
 	var head := Label.new()
 	head.text = "ONLINE"
 	head.position = Vector2(0, 26)
@@ -106,15 +106,7 @@ func _build() -> void:
 
 	for i in ROWS.size():
 		var y: float = _row_y(i)
-		var plate := TextureRect.new()
-		plate.texture = load(MENU + "pause_button_normal_native.png")
-		plate.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		plate.stretch_mode = TextureRect.STRETCH_SCALE
-		plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		plate.position = Vector2(PLATE_CX, y)
-		plate.size = Vector2(PLATE_W, PLATE_H)
-		add_child(plate)
+		var plate := UI.button(self, "", Rect2(PLATE_CX, y, PLATE_W, PLATE_H), _mouse_activate.bind(i))
 		plates.append(plate)
 		var lbl := Label.new()
 		lbl.text = String(ROWS[i])
@@ -290,10 +282,12 @@ func _refresh() -> void:
 	var idle: bool = (_mode == Mode.IDLE)
 	for i in ROWS.size():
 		var sel: bool = idle and i == _cursor
-		plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
+		UI.select(plates[i], sel)
+		plates[i].disabled = not idle and i != ROW_BACK
 		row_labels[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
-		plates[i].modulate.a = 1.0 if idle else 0.35
-		row_labels[i].modulate.a = 1.0 if idle else 0.35
+		plates[i].modulate.a = 1.0 if idle or i == ROW_BACK else 0.35
+		row_labels[i].modulate.a = 1.0 if idle or i == ROW_BACK else 0.35
+		row_labels[i].text = "CANCEL" if i == ROW_BACK and not idle else ROWS[i]
 	cursor_rect.visible = idle
 	cursor_rect.position = Vector2(PLATE_CX - 38.0, _row_y(_cursor) + (PLATE_H - 32.0) / 2.0)
 	ip_caption.modulate.a = 1.0 if idle else 0.35
@@ -310,3 +304,17 @@ func _refresh() -> void:
 		hint_label.text = "↑/↓ — SELECT      ENTER / SPACE / ✕ — CONFIRM      ESC / ◯ — BACK"
 	else:
 		hint_label.text = "ESC / ◯ — CANCEL"
+
+func _mouse_activate(row: int) -> void:
+	if _mode != Mode.IDLE:
+		if row == ROW_BACK:
+			Net.leave("")
+			_mode = Mode.IDLE
+			status_label.text = ""
+			_refresh()
+		return
+	_cursor = row
+	match row:
+		ROW_HOST: _start_host()
+		ROW_JOIN: _start_join()
+		ROW_BACK: GameState.change_state(GameState.State.TITLE)

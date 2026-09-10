@@ -1,14 +1,6 @@
-# In-match pause overlay. Freezes the tree (get_tree().paused) during a ROUND and shows a menu:
-#   PAUSED  → Resume · Restart Match · Settings · Quit to Menu
-#   SETTINGS → Master / Music / SFX volume sliders + Back
-#
-# Runs with PROCESS_MODE_ALWAYS so it keeps processing input while everything else is frozen.
-# All pause input lives here (main.gd no longer quits to title on Esc during a round).
-#
-# Visuals are the sprites/menu/ pause kit: a starfield backdrop, a bamboo scroll panel
-# (9-patched so it stretches to a portrait scroll), wooden button plates with overlaid text,
-# a pointer cursor, and a segmented volume bar (track + filled/empty segments).
 extends Control
+
+const UI = preload("res://menu_ui.gd")
 
 const PAGE_MENU := 0
 const PAGE_SETTINGS := 1
@@ -20,18 +12,15 @@ const ROW_COUNT := 4        # menu page rows (and the plates both pages share)
 const SET_ROW_COUNT := 5    # settings page rows: 3 volumes + TUTORIAL + BACK
 const TUT_ROW := 3          # settings row index of the TUTORIAL toggle
 
-const COL_SEL := Color("d4a830")    # highlighted row (matches the menu accent)
-const COL_DIM := Color("f0eee8")    # idle button text — cream, readable on the wood plate
+const COL_SEL := UI.GOLD    # highlighted row (matches the menu accent)
+const COL_DIM := UI.IVORY
 
-const MENU := "res://sprites/menu/"
 const SEG_COUNT := 10
 const PLATE_W := 300.0
 const PLATE_H := 46.0
-const PLATE_STEP := 62.0
-const PLATE_TOP := 126.0
+const PLATE_STEP := 52.0
+const PLATE_TOP := 110.0
 const PLATE_CX := (800.0 - PLATE_W) / 2.0   # 250
-const SCROLL_POS := Vector2(190, 18)
-const SCROLL_SIZE := Vector2(420, 414)
 
 var _paused: bool = false
 var _page: int = PAGE_MENU
@@ -39,16 +28,16 @@ var _menu_cursor: int = 0
 var _settings_cursor: int = 0
 var _input_lockout_until: float = 0.0
 
-var _hdr_paused: TextureRect
-var _hdr_settings: TextureRect
-var _plates: Array = []        # 4 TextureRect button plates (shared by both pages)
+var _hdr_paused: Label
+var _hdr_settings: Label
+var _plates: Array[Button] = []
 var _menu_labels: Array = []   # 4 Label — menu page item text
 var _set_names: Array = []     # 3 Label — MASTER/MUSIC/SFX
-var _bars: Array = []          # 3 Dictionaries { "segs": Array[TextureRect] }
+var _bars: Array = []
 var _pcts: Array = []          # 3 Label — "80%"
 var _tut_label: Label          # settings row 3 — "TUTORIAL      ◄ ON ►"
 var _back_label: Label
-var _cursor: TextureRect
+var _cursor: Label
 
 
 func _ready() -> void:
@@ -63,107 +52,52 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var backdrop := TextureRect.new()
-	backdrop.texture = load(MENU + "pause_backdrop_native.png")
-	backdrop.anchor_right = 1.0
-	backdrop.anchor_bottom = 1.0
-	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
-	backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(backdrop)
-
-	var scroll := NinePatchRect.new()
-	scroll.texture = load(MENU + "pause_scroll_panel_native.png")
-	scroll.patch_margin_left = 26
-	scroll.patch_margin_right = 26
-	scroll.patch_margin_top = 70
-	scroll.patch_margin_bottom = 70
-	scroll.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	scroll.position = SCROLL_POS
-	scroll.size = SCROLL_SIZE
-	add_child(scroll)
-
-	_hdr_paused = _tex_native(load(MENU + "pause_header_paused_native.png"))
-	_hdr_paused.position = Vector2((800.0 - _hdr_paused.size.x) / 2.0, 44.0)
-	_hdr_settings = _tex_native(load(MENU + "pause_header_settings_native.png"))
-	_hdr_settings.position = Vector2((800.0 - _hdr_settings.size.x) / 2.0, 44.0)
-
-	# 5 plates: the menu page uses 0-3; the settings page uses all 5 (TUTORIAL + BACK rows).
+	UI.fill(self, Rect2(0, 0, 800, 450), Color(0.02, 0.025, 0.06, 0.88))
+	UI.panel(self, Rect2(200, 30, 400, 388), UI.GOLD)
+	_hdr_paused = UI.label(self, "PAUSED", Rect2(200, 49, 400, 40), 34, UI.GOLD, true)
+	_hdr_settings = UI.label(self, "SETTINGS", Rect2(200, 49, 400, 40), 34, UI.GOLD, true)
 	for i in SET_ROW_COUNT:
-		var plate := _tex_sized(load(MENU + "pause_button_normal_native.png"),
-				PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H)
+		var plate := UI.button(self, "", Rect2(PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H), _mouse_activate.bind(i))
+		plate.mouse_entered.connect(_mouse_hover.bind(i))
 		_plates.append(plate)
 		if i < ROW_COUNT:
-			var lbl := _label(PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H, 22)
-			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			lbl.text = String(MENU_ITEMS[i])
-			_menu_labels.append(lbl)
-
-	# Settings widgets (rows 0-2 = volume; row 3 reuses plate 3 as BACK).
-	for i in SETTINGS_NAMES.size():
-		var plate_y: float = PLATE_TOP + i * PLATE_STEP
-		var name_lbl := _label(PLATE_CX + 16.0, plate_y, 80.0, PLATE_H, 18)
-		name_lbl.text = String(SETTINGS_NAMES[i])
-		_set_names.append(name_lbl)
-
-		# Segmented bar: track recess + 10 segments laid over it.
-		var track := _tex_sized(load(MENU + "pause_volume_track_native.png"),
-				PLATE_CX + 96.0, plate_y + (PLATE_H - 26.0) / 2.0, 188.0, 26.0)
+			_menu_labels.append(UI.label(self, MENU_ITEMS[i], Rect2(PLATE_CX, PLATE_TOP + i * PLATE_STEP, PLATE_W, PLATE_H), 22, UI.IVORY, true))
+	for i in 3:
+		var y := PLATE_TOP + i * PLATE_STEP
+		_set_names.append(UI.label(self, SETTINGS_NAMES[i], Rect2(PLATE_CX + 12, y, 90, PLATE_H), 18))
 		var segs: Array = []
-		for s in SEG_COUNT:
-			var seg := _tex_sized(load(MENU + "pause_volume_segment_empty_native.png"),
-					PLATE_CX + 104.0 + s * 17.0, plate_y + (PLATE_H - 15.0) / 2.0, 15.0, 15.0)
-			segs.append(seg)
-		_bars.append({"track": track, "segs": segs})
+		var track := UI.fill(self, Rect2(PLATE_CX + 131, y + 16, 100, 14), UI.INK)
+		for j in SEG_COUNT:
+			segs.append(UI.fill(self, Rect2(PLATE_CX + 133 + j * 10, y + 18, 7, 10), UI.GOLD))
+		var minus := UI.button(_plates[i], "-", Rect2(101, 9, 26, 28), _adjust_volume.bind(i, -0.1), 18)
+		var plus := UI.button(_plates[i], "+", Rect2(235, 9, 26, 28), _adjust_volume.bind(i, 0.1), 18)
+		_bars.append({"track": track, "segs": segs, "minus": minus, "plus": plus})
+		_pcts.append(UI.label(self, "", Rect2(PLATE_CX + 263, y, 36, PLATE_H), 12))
+	_tut_label = UI.label(self, "", Rect2(PLATE_CX, PLATE_TOP + 3 * PLATE_STEP, PLATE_W, PLATE_H), 18, UI.IVORY, true)
+	_back_label = UI.label(self, "BACK", Rect2(PLATE_CX, PLATE_TOP + 4 * PLATE_STEP, PLATE_W, PLATE_H), 22, UI.IVORY, true)
+	_cursor = UI.label(self, ">", Rect2(0, 0, 28, 32), 24, UI.GOLD)
+	UI.label(self, "ESC / START  RESUME    LEFT/RIGHT  ADJUST", Rect2(210, 383, 380, 24), 14, UI.MUTED, true)
 
-		var pct := _label(PLATE_CX + PLATE_W + 6.0, plate_y, 46.0, PLATE_H, 13)
-		_pcts.append(pct)
+func _mouse_hover(row: int) -> void:
+	if _page == PAGE_MENU:
+		_menu_cursor = mini(row, ROW_COUNT - 1)
+	else:
+		_settings_cursor = row
+	_refresh()
 
-	_tut_label = _label(PLATE_CX + 16.0, PLATE_TOP + TUT_ROW * PLATE_STEP, PLATE_W - 32.0, PLATE_H, 18)
-	_tut_label.text = "TUTORIAL"
-
-	_back_label = _label(PLATE_CX, PLATE_TOP + 4 * PLATE_STEP, PLATE_W, PLATE_H, 22)
-	_back_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_back_label.text = "BACK"
-
-	_cursor = _tex_sized(load(MENU + "pause_cursor_native.png"), 0, 0, 28, 32)
-
-
-# --- Node helpers ---------------------------------------------------------
-
-func _tex_sized(tex: Texture2D, x: float, y: float, w: float, h: float) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.position = Vector2(x, y)
-	tr.size = Vector2(w, h)
-	add_child(tr)
-	return tr
-
-func _tex_native(tex: Texture2D) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.size = Vector2(tex.get_size())
-	add_child(tr)
-	return tr
-
-func _label(x: float, y: float, w: float, h: float, font_size: int) -> Label:
-	var lbl := Label.new()
-	lbl.position = Vector2(x, y)
-	lbl.size = Vector2(w, h)
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	return lbl
-
+func _mouse_activate(row: int) -> void:
+	if _page == PAGE_MENU:
+		match row:
+			0: _resume()
+			1: _restart()
+			2: _enter_settings()
+			3: _quit_to_menu()
+	elif row == TUT_ROW:
+		Settings.set_show_tutorial(not Settings.show_tutorial)
+		_refresh()
+	elif row == SET_ROW_COUNT - 1:
+		_page = PAGE_MENU
+		_refresh()
 
 # --- Open / close ---------------------------------------------------------
 
@@ -340,7 +274,8 @@ func _refresh() -> void:
 	for i in SET_ROW_COUNT:
 		var sel: bool = (i == cursor_row)
 		_plates[i].visible = (i < ROW_COUNT) or not menu_page
-		_plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
+		UI.select(_plates[i], sel)
+		_plates[i].disabled = menu_page and i == 1 and Net.is_client()
 
 	# Menu page: centred item labels. Settings page: hide them.
 	for i in ROW_COUNT:
@@ -359,11 +294,13 @@ func _refresh() -> void:
 		_set_names[i].visible = not menu_page
 		_pcts[i].visible = not menu_page
 		_bars[i]["track"].visible = not menu_page
+		_bars[i]["minus"].visible = not menu_page
+		_bars[i]["plus"].visible = not menu_page
 		var segs: Array = _bars[i]["segs"]
 		var filled: int = clampi(int(round(float(vols[i]) * SEG_COUNT)), 0, SEG_COUNT)
 		for s in SEG_COUNT:
 			segs[s].visible = not menu_page
-			segs[s].texture = load(MENU + "pause_volume_segment_%s_native.png" % ("filled" if s < filled else "empty"))
+			segs[s].color = UI.GOLD if s < filled else UI.EDGE
 		if not menu_page:
 			_set_names[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
 			_pcts[i].text = "%d%%" % int(round(float(vols[i]) * 100.0))

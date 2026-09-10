@@ -1,27 +1,16 @@
-# Clan select. Both players pick in P1 vs P2 / AI vs AI / online; in the solo modes
-# (P1 vs AI, FFA) only P1 picks — the bots' clans are auto-assigned on confirm.
-# Same-clan pick is blocked (other player rejected).
-# P1 = WASD keyboard (A/D move, Enter / Space confirm, S un-confirm) or pad 1 (D-pad, Cross).
-# P2 = numpad (4/6 move, numpad-Enter / 0 confirm, 5 un-confirm) or pad 2.
-# Circle / Esc (menu_cancel): back to mode select.
-#
-# Visuals: each clan banner sprite bakes its sigil + name (normal + glowing "selected"
-# variants). Player chips (ui_chip_p*) mark who hovers which banner; the LOCKED IN stamp
-# overlays a confirmed pick.
 extends Control
 
-const MENU := "res://sprites/menu/"
-const CLAN_SLUGS: Array = ["shadow", "storm", "frost", "fire"]   # by GameState.CLANS index
+const UI = preload("res://menu_ui.gd")
+const STANDARDS = preload("res://sprites/menu/clan_standards.webp")
 
-const BANNER_W := 100.0
-const BANNER_H := 150.0
-const BANNER_GAP := 40.0
-const BANNER_Y := 124.0
+const BANNER_W := 164.0
+const BANNER_H := 184.0
+const BANNER_GAP := 24.0
+const BANNER_Y := 120.0
 const CHIP_SCALE := 1.6
-const STAMP_SCALE := 0.95
 const NINJA_SIZE := 72.0       # skin preview on the hovered banner (16×16 frame, scaled up)
-const NINJA_Y_OFF := 42.0      # ninja top, relative to BANNER_Y — centred on the (now empty) flag body
-const NAME_Y := 264.0          # clan-name label row, just below the flags
+const NINJA_Y_OFF := 82.0
+const NAME_Y := 304.0          # clan-name label row, just below the flags
 
 var p1_cursor: int = 3
 var p2_cursor: int = 1
@@ -29,15 +18,16 @@ var p1_confirmed: bool = false
 var p2_confirmed: bool = false
 
 var banners: Array = []        # TextureRect per clan
-var stamps: Array = []         # locked-in TextureRect per clan (hidden unless confirmed)
+var stamps: Array[Label] = []
 var clan_ninjas: Array = []    # base-skin preview ON EVERY flag (so all 4 clan colours are visible at once)
 var name_labels: Array = []    # clan name shown BELOW each flag
-var p1_chip: TextureRect
-var p2_chip: TextureRect
-var p1_skin_label: Label       # "P1  □  CHEF" — current skin + cycle button
-var p2_skin_label: Label
+var p1_chip: Label
+var p2_chip: Label
 var status_label: Label
-var _last_state_seen: int = -1
+var _mouse_slot := 1
+var _card_buttons: Array[Button] = []
+var _player_buttons: Array[Button] = []
+var _skin_buttons: Array[Button] = []
 var _input_lockout_until: float = 0.0
 
 func _ready() -> void:
@@ -45,7 +35,6 @@ func _ready() -> void:
 	anchor_bottom = 1.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
-	GameState.state_changed.connect(_on_state_changed)
 	visibility_changed.connect(_on_visibility_changed)
 	# Online lobby sync (ADR-0003): host edits the P1 side, the guest edits P2 — each side's
 	# pick streams to the other machine; the host validates clan conflicts.
@@ -60,101 +49,125 @@ func _on_visibility_changed() -> void:
 		p2_cursor = GameState.p2_clan
 		p1_confirmed = false
 		p2_confirmed = false
+		_mouse_slot = 1
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		if Net.is_online():
 			_send_local_pick()   # both sides announce their pick on entry, so each sees the other
 		_refresh()
-
-func _on_state_changed(_s: int) -> void:
-	_last_state_seen = _s
 
 func _banner_x(i: int) -> float:
 	var total: float = 4.0 * BANNER_W + 3.0 * BANNER_GAP
 	return (800.0 - total) / 2.0 + i * (BANNER_W + BANNER_GAP)
 
 func _build() -> void:
-	var bg: ColorRect = ColorRect.new()
-	bg.anchor_right = 1.0
-	bg.anchor_bottom = 1.0
-	bg.color = Color("0d0d1a")
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-
-	var header := _spr(load(MENU + "header_choose_your_clan_native.png"), 0.85)
-	header.position = Vector2((800.0 - header.size.x * 0.85) / 2.0, 10.0)
-
+	UI.backdrop(self, 0.78)
+	UI.header(self, "CHOOSE YOUR CLAN", 1)
 	for i in 4:
-		var banner := _spr(load(MENU + "clan_%s_native.png" % CLAN_SLUGS[i]))
-		banner.position = Vector2(_banner_x(i), BANNER_Y)
+		var card := UI.button(self, "", Rect2(_banner_x(i), BANNER_Y, BANNER_W, 212), _mouse_pick.bind(i))
+		_card_buttons.append(card)
+		var atlas := AtlasTexture.new()
+		atlas.atlas = STANDARDS
+		atlas.region = Rect2(i * 384, 0, 384, 1024)
+		var banner := UI.image(self, atlas, Rect2(_banner_x(i) + 10, BANNER_Y + 2, 144, BANNER_H))
+		banner.stretch_mode = TextureRect.STRETCH_SCALE
 		banners.append(banner)
-
-		var stamp := _spr(load(MENU + "ui_locked_in_stamp_native.png"), STAMP_SCALE)
-		var sw: float = 90.0 * STAMP_SCALE
-		stamp.position = Vector2(_banner_x(i) + (BANNER_W - sw) / 2.0, BANNER_Y + (BANNER_H - sw) / 2.0)
-		stamp.visible = false
-		stamps.append(stamp)
-
-		# Base-skin character centred on every flag — lets you compare all four clan colours at once.
 		var cn := _ninja_rect()
 		cn.position = Vector2(_banner_x(i) + (BANNER_W - NINJA_SIZE) / 2.0, BANNER_Y + NINJA_Y_OFF)
 		clan_ninjas.append(cn)
+		var stamp := UI.label(self, "LOCKED", Rect2(_banner_x(i), BANNER_Y + 126, BANNER_W, 30), 24, UI.GOLD, true)
+		stamps.append(stamp)
+		name_labels.append(UI.label(self, "", Rect2(_banner_x(i), NAME_Y, BANNER_W, 24), 21, UI.IVORY, true))
+	p1_chip = UI.label(self, "P1", Rect2(0, 0, 45, 27), 22, UI.IVORY, true)
+	p2_chip = UI.label(self, "P2", Rect2(0, 0, 45, 27), 22, UI.IVORY, true)
+	for slot in [1, 2]:
+		var x := 32 if slot == 1 else 426
+		_player_buttons.append(UI.button(self, "", Rect2(x, 344, 180, 30), _mouse_lock.bind(slot), 16))
+		_skin_buttons.append(UI.button(self, "", Rect2(x + 188, 344, 154, 30), _mouse_skin.bind(slot), 14))
+	status_label = UI.label(self, "", Rect2(150, 379, 470, 24), 14, UI.MUTED, true)
+	UI.button(self, "< BACK", Rect2(32, 380, 100, 25), _back, 14)
+	UI.button(self, "TAB  RULES", Rect2(650, 380, 118, 25), _setup, 14)
+	UI.footer(self, "P1  A/D + ENTER    P2  NUM 4/6 + 0    DOWN  UNLOCK    P / 7  SKIN    ESC  BACK")
 
-		# Clan name BELOW the flag (the flag art no longer bakes it in).
-		var nm := Label.new()
-		nm.position = Vector2(_banner_x(i) - 20.0, NAME_Y)
-		nm.size = Vector2(BANNER_W + 40.0, 22.0)
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		nm.add_theme_font_size_override("font_size", 16)
-		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(nm)
-		name_labels.append(nm)
+func _solo() -> bool:
+	return not Net.is_online() and GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]
 
-	p1_chip = _spr(load(MENU + "ui_chip_p1_native.png"), CHIP_SCALE)
-	p2_chip = _spr(load(MENU + "ui_chip_p2_native.png"), CHIP_SCALE)
+func _mouse_ready() -> bool:
+	return visible and Time.get_ticks_msec() / 1000.0 >= _input_lockout_until
 
-	p1_skin_label = _skin_label_node(80.0, HORIZONTAL_ALIGNMENT_LEFT)
-	p2_skin_label = _skin_label_node(440.0, HORIZONTAL_ALIGNMENT_RIGHT)
+func _mouse_pick(index: int) -> void:
+	if not _mouse_ready():
+		return
+	var slot := (1 if Net.is_host() else 2) if Net.is_online() else _mouse_slot
+	if slot == 1 and not p1_confirmed:
+		p1_cursor = index
+	elif slot == 2 and not p2_confirmed:
+		p2_cursor = index
+	Audio.play("click")
+	_send_local_pick()
+	_refresh()
 
-	status_label = Label.new()
-	status_label.position = Vector2(0, 292)
-	status_label.size = Vector2(800, 26)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 16)
-	add_child(status_label)
+func _mouse_skin(slot: int) -> void:
+	if not _mouse_ready() or (Net.is_online() and slot != (1 if Net.is_host() else 2)):
+		return
+	if slot == 1 and not p1_confirmed:
+		GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
+	elif slot == 2 and not p2_confirmed:
+		GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
+	Audio.play("click")
+	_send_local_pick()
+	_refresh()
 
-	# Control hints (bottom). This is the busiest two-player screen, so it teaches every
-	# control it accepts — move, lock, un-lock, skin cycle — plus the Fight Setup entry.
-	var controls_hint := Label.new()
-	controls_hint.position = Vector2(0, 356)
-	controls_hint.size = Vector2(800, 18)
-	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	controls_hint.add_theme_font_size_override("font_size", 12)
-	controls_hint.add_theme_color_override("font_color", Color("8a8ea8"))
-	controls_hint.text = "◄ ► move      ✕ / Enter / Space — lock in      ▼ — un-lock      ▢ / P / 7 — skin"
-	controls_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(controls_hint)
-	var setup_hint := Label.new()
-	setup_hint.position = Vector2(0, 376)
-	setup_hint.size = Vector2(800, 18)
-	setup_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	setup_hint.add_theme_font_size_override("font_size", 12)
-	setup_hint.add_theme_color_override("font_color", Color("8a8ea8"))
-	setup_hint.text = "TAB / SELECT  —  FIGHT SETUP (rules & variants)"
-	setup_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(setup_hint)
+func _mouse_lock(slot: int) -> void:
+	if not _mouse_ready() or (Net.is_online() and slot != (1 if Net.is_host() else 2)):
+		return
+	_mouse_slot = slot
+	var mine := p1_cursor if slot == 1 else p2_cursor
+	var other := p2_cursor if slot == 1 else p1_cursor
+	var other_locked := p2_confirmed if slot == 1 else p1_confirmed
+	var locked := p1_confirmed if slot == 1 else p2_confirmed
+	if not locked and not _solo() and mine == other and other_locked:
+		status_label.text = "CLAN TAKEN - CHOOSE ANOTHER"
+		Audio.play("hit")
+		return
+	if _solo():
+		GameState.p1_clan = p1_cursor
+		if GameState.game_mode == GameState.Mode.FFA:
+			GameState.assign_ffa_clans()
+		else:
+			GameState.p2_clan = (p1_cursor + randi_range(1, 3)) % 4
+		Audio.play("confirm")
+		GameState.change_state(GameState.State.MAP_SELECT)
+		return
+	if slot == 1:
+		p1_confirmed = not locked
+		GameState.p1_clan = p1_cursor
+		if p1_confirmed and not Net.is_online():
+			_mouse_slot = 2
+	else:
+		p2_confirmed = not locked
+		GameState.p2_clan = p2_cursor
+	Audio.play("confirm")
+	_send_local_pick()
+	_refresh()
+	if p1_confirmed and p2_confirmed and not Net.is_client():
+		GameState.change_state(GameState.State.MAP_SELECT)
 
-func _spr(tex: Texture2D, sprite_scale: float = 1.0) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.size = Vector2(tex.get_size())
-	tr.scale = Vector2(sprite_scale, sprite_scale)
-	add_child(tr)
-	return tr
+func _back() -> void:
+	Audio.play("click")
+	if Net.is_online():
+		Net.leave("")
+		GameState.change_state(GameState.State.ONLINE_MENU)
+	else:
+		GameState.change_state(GameState.State.MODE_SELECT)
+
+func _setup() -> void:
+	if Net.is_client():
+		status_label.text = "THE HOST SETS THE FIGHT RULES"
+		return
+	GameState.p1_clan = p1_cursor
+	GameState.p2_clan = p2_cursor
+	Audio.play("confirm")
+	GameState.change_state(GameState.State.MATCH_SETUP)
 
 func _ninja_rect() -> TextureRect:
 	var tr := TextureRect.new()
@@ -165,16 +178,6 @@ func _ninja_rect() -> TextureRect:
 	tr.size = Vector2(NINJA_SIZE, NINJA_SIZE)
 	add_child(tr)
 	return tr
-
-func _skin_label_node(x: float, align: int) -> Label:
-	var lbl := Label.new()
-	lbl.position = Vector2(x, 330)
-	lbl.size = Vector2(280, 26)
-	lbl.horizontal_alignment = align
-	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	return lbl
 
 # Frame-0 idle-pose texture for a clan colour + skin style.
 func _ninja_atlas(clan_idx: int, skin_idx: int) -> AtlasTexture:
@@ -190,24 +193,11 @@ func _process(_delta: float) -> void:
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
 	if Input.is_action_just_pressed("menu_cancel"):
-		Audio.play("click")
-		if Net.is_online():
-			# Backing out of the online lobby ends the session for both sides.
-			Net.leave("")
-			GameState.change_state(GameState.State.ONLINE_MENU)
-		else:
-			GameState.change_state(GameState.State.MODE_SELECT)
+		_back()
 		return
-	# Fight Setup / Variants — open from any mode, at any point before lock-in. Returns here.
-	# Online only the HOST owns the ruleset (it ships to the guest in the match bundle).
 	if Input.is_action_just_pressed("menu_setup"):
-		if Net.is_client():
-			status_label.text = "the host sets the fight rules"
-			status_label.add_theme_color_override("font_color", Color("a8a498"))
-		else:
-			Audio.play("confirm")
-			GameState.change_state(GameState.State.MATCH_SETUP)
-			return
+		_setup()
+		return
 	if Net.is_online():
 		_process_online()
 		return
@@ -399,13 +389,18 @@ func _on_pick_rejected(reason: String) -> void:
 	status_label.add_theme_color_override("font_color", Color("c03030"))
 
 func _refresh() -> void:
+	if not Net.is_online():
+		if p1_confirmed and not p2_confirmed:
+			_mouse_slot = 2
+		elif p2_confirmed and not p1_confirmed:
+			_mouse_slot = 1
 	# Solo-pick modes hide the whole P2 side — the bot's clan is assigned on confirm.
 	var solo: bool = (GameState.game_mode == GameState.Mode.FFA) \
 		or (GameState.game_mode == GameState.Mode.HUMAN_VS_AI and not Net.is_online())
 	for i in 4:
-		# A banner glows (selected sprite) when a player hovers or has locked it.
 		var attended: bool = (i == p1_cursor) or (not solo and i == p2_cursor)
-		banners[i].texture = load(MENU + "clan_%s%s_native.png" % [CLAN_SLUGS[i], "_selected" if attended else ""])
+		UI.select(_card_buttons[i], attended, GameState.CLANS[i].color)
+		banners[i].modulate = Color.WHITE if attended else Color(0.55, 0.55, 0.65)
 		var locked: bool = (p1_confirmed and i == p1_cursor) or (not solo and p2_confirmed and i == p2_cursor)
 		stamps[i].visible = locked
 
@@ -431,22 +426,23 @@ func _refresh() -> void:
 	# Chips above the hovered banners; nudge apart when both players share a banner.
 	var same: bool = (not solo and p1_cursor == p2_cursor)
 	var chip_w: float = 28.0 * CHIP_SCALE
-	var chip_h: float = 22.0 * CHIP_SCALE
-	var chip_y: float = BANNER_Y - chip_h - 2.0
+	var chip_y: float = BANNER_Y - 27.0
 	var centre1: float = _banner_x(p1_cursor) + (BANNER_W - chip_w) / 2.0
 	var centre2: float = _banner_x(p2_cursor) + (BANNER_W - chip_w) / 2.0
 	p1_chip.position = Vector2(centre1 + (-16.0 if same else 0.0), chip_y)
 	p2_chip.position = Vector2(centre2 + (16.0 if same else 0.0), chip_y)
 	p2_chip.visible = not solo
 
-	# Skin readouts — current skin name + cycle button, tinted to the hovered clan.
-	p1_skin_label.text = "P1  □/P  %s" % GameState.skin_label(GameState.p1_skin)
-	p1_skin_label.add_theme_color_override("font_color", GameState.CLANS[p1_cursor].color)
-	p2_skin_label.visible = not solo
-	if not solo:
-		p2_skin_label.text = "P2  □/7  %s" % GameState.skin_label(GameState.p2_skin)
-		p2_skin_label.add_theme_color_override("font_color", GameState.CLANS[p2_cursor].color)
-
+	for slot in [1, 2]:
+		var locked: bool = p1_confirmed if slot == 1 else p2_confirmed
+		var local: bool = not Net.is_online() or slot == (1 if Net.is_host() else 2)
+		_player_buttons[slot - 1].visible = slot == 1 or not solo
+		_skin_buttons[slot - 1].visible = slot == 1 or not solo
+		_player_buttons[slot - 1].disabled = not local
+		_skin_buttons[slot - 1].disabled = not local or locked
+		_player_buttons[slot - 1].text = "P%d  %s" % [slot, "UNLOCK" if locked else "LOCK IN"]
+		_skin_buttons[slot - 1].text = "%s  >" % GameState.skin_label(GameState.p1_skin if slot == 1 else GameState.p2_skin)
+		UI.select(_player_buttons[slot - 1], _mouse_slot == slot)
 	if solo:
 		if GameState.game_mode == GameState.Mode.FFA:
 			status_label.text = "P1: pick your clan — the 3 bots take the rest"
@@ -476,4 +472,4 @@ func _refresh() -> void:
 		status_label.text = "waiting for P1 to lock..."
 		status_label.add_theme_color_override("font_color", Color("a8a498"))
 	else:
-		status_label.text = ""   # no idle instruction text (removed for a cleaner screen)
+		status_label.text = "P%d: CHOOSE A CLAN, THEN LOCK IN" % _mouse_slot

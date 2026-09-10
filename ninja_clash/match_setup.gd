@@ -5,6 +5,8 @@ extends Control
 ## action row, back (Esc / pad Select) returns to clan select. Every change persists immediately
 ## via MatchConfig's setters; defaults reproduce the standard game, so an untouched setup is a no-op.
 
+const UI = preload("res://menu_ui.gd")
+
 const ROW_X := 210.0
 const VALUE_X := 500.0
 const ROW_Y0 := 80.0
@@ -37,13 +39,11 @@ func _on_visibility_changed() -> void:
 
 
 func _build() -> void:
-	var bg := ColorRect.new()
-	bg.anchor_right = 1.0
-	bg.anchor_bottom = 1.0
-	bg.color = Color("0d0d1a")
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-
+	UI.backdrop(self, 0.88)
+	UI.panel(self, Rect2(166, 70, 470, 326))
+	var menu_theme := Theme.new()
+	menu_theme.default_font = UI.FONT
+	theme = menu_theme
 	var header := Label.new()
 	header.position = Vector2(0, 26)
 	header.size = Vector2(800, 40)
@@ -64,6 +64,14 @@ func _build() -> void:
 	_build_rows()
 	for i in rows.size():
 		var y: float = ROW_Y0 + i * ROW_H
+		var hit := Button.new()
+		hit.position = Vector2(HILITE_X, y)
+		hit.size = Vector2(HILITE_W, ROW_H)
+		hit.flat = true
+		hit.focus_mode = Control.FOCUS_NONE
+		hit.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		hit.pressed.connect(_mouse_activate.bind(i))
+		add_child(hit)
 		var lbl := Label.new()
 		lbl.position = Vector2(ROW_X, y)
 		lbl.size = Vector2(VALUE_X - ROW_X - 10.0, ROW_H)
@@ -257,3 +265,12 @@ func _refresh() -> void:
 				row_values[i].text = ("< %d >" % v) if (sel and active) else str(v)
 			"action":
 				row_values[i].text = ""
+
+func _mouse_activate(index: int) -> void:
+	if Net.is_client():
+		return
+	cursor = index
+	var active: Callable = rows[cursor].active
+	if active.is_null() or bool(active.call()):
+		_activate()
+	_refresh()

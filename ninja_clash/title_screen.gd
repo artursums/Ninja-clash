@@ -1,483 +1,202 @@
-# Main menu / title screen.
-#
-# Premium pixel-art menu composed from sprites/menu/: a 4-layer parallax backdrop
-# (sky → mountains → pagoda → foreground), the FOUR CLANS stone wordmark with
-# crossed katanas + a "shinobi arena" wooden sign, and four wooden buttons.
-#
-# Navigation matches the rest of the menus (mode_select / pause_menu):
-#   aim_up / aim_down (either pad or keyboard) — move the cursor
-#   p1_jump / p2_jump (Cross / Space)          — confirm
-#   menu_cancel (Circle / Esc)                 — back out of an overlay
-#
-# Buttons:
-#   START   → MODE_SELECT (normal match-setup flow)
-#   OPTIONS → settings overlay (Master / Music / SFX volume + Fullscreen), bound to Settings
-#   CREDITS → credits overlay
-#   QUIT    → exit the game
-
 extends Control
 
-# --- Menu sprites (native res; scaled up to the 800×450 viewport) ---
-const TEX_SKY := preload("res://sprites/menu/bg_sky_native.png")
-const TEX_MOUNTAINS := preload("res://sprites/menu/bg_mountains_native.png")
-const TEX_PAGODA := preload("res://sprites/menu/bg_pagoda_native.png")
-const TEX_FOREGROUND := preload("res://sprites/menu/bg_foreground_native.png")
-const TEX_TITLE := preload("res://sprites/menu/title_four_clans_native.png")
-const TEX_KATANAS := preload("res://sprites/menu/title_katanas_native.png")
-const TEX_SUBTITLE := preload("res://sprites/menu/title_subtitle_native.png")
-
-# Button textures: [normal, hover, pressed] per slug.
-const BTN_TEX := {
-	"start":   ["res://sprites/menu/button_start_normal_native.png",
-				"res://sprites/menu/button_start_hover_native.png",
-				"res://sprites/menu/button_start_pressed_native.png"],
-	"online":  ["res://sprites/menu/button_online_normal_native.png",
-				"res://sprites/menu/button_online_hover_native.png",
-				"res://sprites/menu/button_online_pressed_native.png"],
-	"options": ["res://sprites/menu/button_options_normal_native.png",
-				"res://sprites/menu/button_options_hover_native.png",
-				"res://sprites/menu/button_options_pressed_native.png"],
-	"credits": ["res://sprites/menu/button_credits_normal_native.png",
-				"res://sprites/menu/button_credits_hover_native.png",
-				"res://sprites/menu/button_credits_pressed_native.png"],
-	"quit":    ["res://sprites/menu/button_quit_normal_native.png",
-				"res://sprites/menu/button_quit_hover_native.png",
-				"res://sprites/menu/button_quit_pressed_native.png"],
-}
-const BUTTON_SLUGS: Array = ["start", "online", "options", "credits", "quit"]
-
-# Buttons actually shown on THIS platform. The web build hides ONLINE: the netcode is ENet/UDP
-# (ADR-0003), which browsers can't open — showing a button that can only fail is worse than
-# not offering it. QUIT is also meaningless inside a browser tab.
-func _platform_slugs() -> Array:
-	if OS.has_feature("web"):
-		var slugs: Array = BUTTON_SLUGS.duplicate()
-		slugs.erase("online")
-		slugs.erase("quit")
-		return slugs
-	return BUTTON_SLUGS
-
-# native bg is 480×270 → viewport is 800×450, a uniform 5/3 scale.
-const S := 800.0 / 480.0          # 1.6667 — native-bg → viewport scale
-const TITLE_SCALE := 0.72 * S     # ≈1.2  — title downscaled a touch so the layout breathes
-const KATANA_SCALE := 0.756 * S   # ≈1.26 — katanas sweep a little wider than the title
-const SUB_SCALE := S              # ≈1.667
-const BTN_SCALE := S              # ≈1.667
-const TITLE_TOP := 18.0           # 0.04 × 450
-const BTN_TOP := 158.0            # first button top (5 buttons since ONLINE joined the stack)
-const BTN_STEP := 46.0            # vertical step (planks overlap, TowerFall-chunky)
-const PRESS_FLASH_S := 0.12       # how long the "pressed" sprite shows before the action fires
-
-# Overlay sub-states.
+const UI = preload("res://menu_ui.gd")
+const BUTTON_SLUGS := ["start", "online", "options", "credits", "quit"]
+const BUTTON_NAMES := {"start": "LOCAL PLAY", "online": "ONLINE DUEL", "options": "OPTIONS", "credits": "CREDITS", "quit": "QUIT"}
+const DESCRIPTIONS := {"start": "Couch rivals. Relentless bots. Four clans.", "online": "Challenge a friend over LAN or internet.", "options": "Make yourself at home.", "credits": "The people behind the arena.", "quit": "Until the next duel."}
+const OPT_ROWS := ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "TUTORIAL", "BACK"]
 const OVERLAY_NONE := 0
 const OVERLAY_OPTIONS := 1
 const OVERLAY_CREDITS := 2
 
-const OPT_ROWS: Array = ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "TUTORIAL", "BACK"]
-const VOL_STEP := 0.1
-const BAR_SEGMENTS := 10
+var cursor := 0
+var _slugs: Array = []
+var _buttons: Array[Button] = []
+var _input_lockout_until := 0.0
+var _overlay := OVERLAY_NONE
+var _options_cursor := 0
+var _options_panel: Control
+var _credits_panel: Control
+var _opt_rows: Array[Button] = []
+var _opt_values: Array[Label] = []
+var _description: Label
+var _sparks: Array[ColorRect] = []
+var _elapsed := 0.0
 
-const COL_SEL := Color("d4a830")   # gold — selected
-const COL_DIM := Color("a8a498")   # muted — unselected
-const COL_HEAD := Color("f0eee8")  # near-white — headers
-
-var cursor: int = 0
-var _slugs: Array = []             # buttons shown on this platform (see _platform_slugs)
-var _buttons: Array = []           # TextureRect per button, in _slugs order
-var _input_lockout_until: float = 0.0
-var _press_until: float = 0.0
-var _press_action: int = -1
-
-var _overlay: int = OVERLAY_NONE
-var _options_panel: Control = null
-var _credits_panel: Control = null
-var _opt_rows: Array = []          # Label per OPT_ROWS entry
-var _options_cursor: int = 0
-
+func _platform_slugs() -> Array:
+	return ["start", "options", "credits"] if OS.has_feature("web") else BUTTON_SLUGS.duplicate()
 
 func _ready() -> void:
-	anchor_right = 1.0
-	anchor_bottom = 1.0
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	visibility_changed.connect(_on_visibility_changed)
-	_refresh()
-
+	_on_visibility_changed()
 
 func _on_visibility_changed() -> void:
 	if visible:
-		# Returning from a match (or first boot): reset to START, drop any overlay,
-		# and lock input briefly so the press that brought us here can't leak through.
-		cursor = 0
-		_press_until = 0.0
-		_press_action = -1
 		_set_overlay(OVERLAY_NONE)
-		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
-
-
-# --- Build -----------------------------------------------------------------
 
 func _build() -> void:
-	_add_layer(TEX_SKY)
-	_add_layer(TEX_MOUNTAINS)
-	_add_layer(TEX_PAGODA)
-	_add_layer(TEX_FOREGROUND)
-
-	# Crossed katanas sweep BEHIND the wordmark, centred on the title's midline.
-	var katanas := _add_sprite(TEX_KATANAS, KATANA_SCALE)
-	var kw := TEX_KATANAS.get_width() * KATANA_SCALE
-	var kh := TEX_KATANAS.get_height() * KATANA_SCALE
-	var title_h := TEX_TITLE.get_height() * TITLE_SCALE
-	katanas.position = Vector2((800.0 - kw) / 2.0, TITLE_TOP + title_h / 2.0 - kh / 2.0)
-
-	# FOUR CLANS stone wordmark.
-	var title := _add_sprite(TEX_TITLE, TITLE_SCALE)
-	var tw := TEX_TITLE.get_width() * TITLE_SCALE
-	title.position = Vector2((800.0 - tw) / 2.0, TITLE_TOP)
-
-	# "shinobi arena" wooden sign, tucked under the wordmark.
-	var sub := _add_sprite(TEX_SUBTITLE, SUB_SCALE)
-	var sw := TEX_SUBTITLE.get_width() * SUB_SCALE
-	sub.position = Vector2((800.0 - sw) / 2.0, TITLE_TOP + title_h - 10.0)
-
-	# The stacked wooden buttons (per-platform set — web hides ONLINE and QUIT).
+	UI.backdrop(self, 0.12)
+	var shade := GradientTexture2D.new()
+	shade.gradient = Gradient.new()
+	shade.gradient.set_color(0, Color(0.025, 0.03, 0.08, 0.9))
+	shade.gradient.set_color(1, Color(0.025, 0.03, 0.08, 0))
+	shade.fill_to = Vector2(1, 0)
+	var veil := UI.image(self, shade, Rect2(0, 0, 650, 450))
+	veil.stretch_mode = TextureRect.STRETCH_SCALE
+	UI.label(self, "S H I N O B I   A R E N A", Rect2(58, 40, 370, 22), 16, UI.GOLD)
+	var title := UI.label(self, "FOUR CLANS", Rect2(54, 61, 450, 66), 56)
+	title.add_theme_color_override("font_shadow_color", Color("352440"))
+	title.add_theme_constant_override("shadow_offset_x", 3)
+	title.add_theme_constant_override("shadow_offset_y", 4)
+	UI.fill(self, Rect2(58, 137, 274, 2), UI.GOLD)
+	for i in 4:
+		UI.fill(self, Rect2(58 + i * 18, 128, 12, 3), GameState.CLANS[i].color)
 	_slugs = _platform_slugs()
-	var bw := 188.0 * BTN_SCALE
-	var bx := (800.0 - bw) / 2.0
 	for i in _slugs.size():
 		var slug: String = _slugs[i]
-		var btn := TextureRect.new()
-		btn.texture = load(BTN_TEX[slug][0])
-		btn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		btn.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		btn.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		btn.scale = Vector2(BTN_SCALE, BTN_SCALE)
-		btn.size = Vector2(load(BTN_TEX[slug][0]).get_size())
-		btn.position = Vector2(bx, BTN_TOP + i * BTN_STEP)
-		add_child(btn)
+		var btn := UI.button(self, BUTTON_NAMES[slug], Rect2(58, 160 + i * 42, 274, 35), _activate.bind(i), 22)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.mouse_entered.connect(_hover.bind(i))
 		_buttons.append(btn)
+	_description = UI.label(self, "", Rect2(58, 376, 540, 24), 16, UI.MUTED)
+	UI.footer(self, "W/S  SELECT     ENTER / A  CONFIRM     MOUSE  POINT & CLICK")
+	for i in 12:
+		var spark := UI.fill(self, Rect2(440 + (i * 37) % 320, 190 + (i * 53) % 210, 2, 2), UI.GOLD)
+		_sparks.append(spark)
+	_build_options()
+	_build_credits()
 
-	# Navigation hint — the landing screen teaches its own controls (every overlay already does).
-	var nav_hint := Label.new()
-	nav_hint.text = "W/S · ↕ — SELECT      ENTER / SPACE / ✕ — CONFIRM"
-	nav_hint.position = Vector2(0, 430)
-	nav_hint.size = Vector2(800, 18)
-	nav_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	nav_hint.add_theme_font_size_override("font_size", 12)
-	nav_hint.add_theme_color_override("font_color", COL_DIM)
-	nav_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(nav_hint)
-
-	_build_options_panel()
-	_build_credits_panel()
-
-
-# Full-screen parallax layer.
-func _add_layer(tex: Texture2D) -> void:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.anchor_right = 1.0
-	tr.anchor_bottom = 1.0
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(tr)
-
-
-# A pixel sprite drawn at native size × `scale`, top-left anchored.
-func _add_sprite(tex: Texture2D, sprite_scale: float) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.size = Vector2(tex.get_size())
-	tr.scale = Vector2(sprite_scale, sprite_scale)
-	add_child(tr)
-	return tr
-
-
-func _build_options_panel() -> void:
-	_options_panel = _make_overlay_panel(460.0, 300.0, "OPTIONS")
-	var box: VBoxContainer = _options_panel.get_node("Box")
-	for i in OPT_ROWS.size():
-		var row := Label.new()
-		row.add_theme_font_size_override("font_size", 22)
-		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		box.add_child(row)
-		_opt_rows.append(row)
-	var hint := Label.new()
-	hint.text = "↑/↓ select    ←/→ adjust    ✕ confirm    ◯ / Esc back"
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", COL_DIM)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(hint)
-	_options_panel.visible = false
-
-
-func _build_credits_panel() -> void:
-	# 520x400 with a tight line spacing: the credit list is 12 rows plus the back hint,
-	# which overflows the shared 320-tall default (content ran off the bottom of the screen).
-	_credits_panel = _make_overlay_panel(520.0, 400.0, "CREDITS")
-	var box: VBoxContainer = _credits_panel.get_node("Box")
-	box.add_theme_constant_override("separation", 4)
-	var lines: Array = [
-		"FOUR CLANS — Shinobi Arena",
-		"",
-		"Game Design & Programming",
-		"   Artur Sums",
-		"",
-		"Engine          Godot 4.6",
-		"Art             Pixel-art sprite suite",
-		"Music           Generated with Suno AI",
-		"Built with      Claude Code",
-		"",
-		"Thanks for playing!",
-	]
-	for l in lines:
-		var lab := Label.new()
-		lab.text = String(l)
-		lab.add_theme_font_size_override("font_size", 16)
-		lab.add_theme_color_override("font_color", COL_HEAD if l == lines[0] else COL_DIM)
-		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		box.add_child(lab)
-	var hint := Label.new()
-	hint.text = "◯ / Esc / ✕  back"
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", COL_SEL)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(hint)
-	_credits_panel.visible = false
-
-
-# A centred dark panel with a dimmed full-screen backdrop and a title label.
-# Returns the panel Control; its "Box" child (VBoxContainer) holds the content.
-func _make_overlay_panel(w: float, h: float, header: String) -> Control:
+func _make_overlay(title: String, rect: Rect2) -> Control:
 	var root := Control.new()
-	root.anchor_right = 1.0
-	root.anchor_bottom = 1.0
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	var dim := ColorRect.new()
-	dim.anchor_right = 1.0
-	dim.anchor_bottom = 1.0
-	dim.color = Color(0.04, 0.04, 0.10, 0.72)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(dim)
-
-	var panel := ColorRect.new()
-	panel.color = Color("1a1726")
-	panel.size = Vector2(w, h)
-	panel.position = Vector2((800.0 - w) / 2.0, (450.0 - h) / 2.0)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(panel)
-
-	var border := ColorRect.new()
-	border.color = Color("3a3450")
-	border.size = Vector2(w, 3)
-	border.position = panel.position + Vector2(0, -3)
-	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(border)
-
-	var head := Label.new()
-	head.text = header
-	head.position = Vector2((800.0 - w) / 2.0, (450.0 - h) / 2.0 + 14.0)
-	head.size = Vector2(w, 34)
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.add_theme_font_size_override("font_size", 30)
-	head.add_theme_color_override("font_color", COL_SEL)
-	root.add_child(head)
-
-	var box := VBoxContainer.new()
-	box.name = "Box"
-	box.position = Vector2((800.0 - w) / 2.0 + 24.0, (450.0 - h) / 2.0 + 64.0)
-	box.size = Vector2(w - 48.0, h - 80.0)
-	box.add_theme_constant_override("separation", 10)
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(box)
-
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(root)
+	UI.fill(root, Rect2(0, 0, 800, 450), Color(0.02, 0.02, 0.06, 0.88))
+	UI.panel(root, rect, UI.GOLD)
+	UI.label(root, title, Rect2(rect.position.x, rect.position.y + 12, rect.size.x, 36), 30, UI.GOLD, true)
 	return root
 
+func _build_options() -> void:
+	_options_panel = _make_overlay("OPTIONS", Rect2(154, 34, 492, 370))
+	for i in OPT_ROWS.size():
+		var row := UI.button(_options_panel, "", Rect2(180, 92 + i * 43, 440, 35), _option_activate.bind(i), 18)
+		row.mouse_entered.connect(func():
+			_options_cursor = i
+			_refresh_options())
+		_opt_rows.append(row)
+		_opt_values.append(UI.label(row, "", Rect2(328, 3, 66, 29), 18, UI.IVORY, true))
+		if i < 3:
+			UI.button(row, "-", Rect2(292, 3, 30, 29), _option_adjust.bind(i, -0.1), 20)
+			UI.button(row, "+", Rect2(400, 3, 30, 29), _option_adjust.bind(i, 0.1), 20)
+	UI.label(_options_panel, "UP/DOWN  SELECT    LEFT/RIGHT  ADJUST    ESC  BACK", Rect2(170, 360, 460, 24), 14, UI.MUTED, true)
 
-# --- Input -----------------------------------------------------------------
+func _build_credits() -> void:
+	_credits_panel = _make_overlay("CREDITS", Rect2(180, 52, 440, 342))
+	UI.label(_credits_panel, "FOUR CLANS", Rect2(200, 113, 400, 35), 32, UI.IVORY, true)
+	UI.label(_credits_panel, "Design & programming\nArtur Sums\n\nMade with Godot\n\nThanks for playing.", Rect2(210, 154, 380, 158), 20, UI.MUTED, true)
+	UI.button(_credits_panel, "BACK", Rect2(300, 330, 200, 36), _set_overlay.bind(OVERLAY_NONE))
 
-func _nav(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+func _hover(index: int) -> void:
+	if _overlay != OVERLAY_NONE or not visible:
+		return
+	if cursor != index:
+		cursor = index
+		Audio.play("click")
+		_refresh()
 
+func _activate(index: int) -> void:
+	if not visible or _overlay != OVERLAY_NONE or Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
+		return
+	cursor = index
+	Audio.play("confirm")
+	match _slugs[index]:
+		"start": GameState.change_state(GameState.State.MODE_SELECT)
+		"online": GameState.change_state(GameState.State.ONLINE_MENU)
+		"options": _set_overlay(OVERLAY_OPTIONS)
+		"credits": _set_overlay(OVERLAY_CREDITS)
+		"quit": get_tree().quit()
 
-func _confirm() -> bool:
-	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
-		or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm")
-
-
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not visible:
 		return
-	var t: float = Time.get_ticks_msec() / 1000.0
-
-	# A button is mid press-flash: when it ends, fire the action.
-	if _press_until > 0.0:
-		if t >= _press_until:
-			var act: int = _press_action
-			_press_until = 0.0
-			_press_action = -1
-			_refresh()
-			_do_action(act)
+	_elapsed += delta
+	for i in _sparks.size():
+		_sparks[i].position.y = 390.0 - fmod(_elapsed * (5 + i % 3) + i * 23, 220.0)
+		_sparks[i].modulate.a = 0.2 + 0.4 * (sin(_elapsed * 1.5 + i) + 1.0) / 2.0
+	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
-
-	if t < _input_lockout_until:
-		return
-
-	match _overlay:
-		OVERLAY_OPTIONS:
-			_process_options()
-		OVERLAY_CREDITS:
-			_process_credits()
-		_:
-			_process_main_menu(t)
-
-
-func _process_main_menu(t: float) -> void:
-	if _nav("aim_up"):
-		cursor = (cursor + _slugs.size() - 1) % _slugs.size()
-		Audio.play("click")
-		_refresh()
-	elif _nav("aim_down"):
-		cursor = (cursor + 1) % _slugs.size()
-		Audio.play("click")
-		_refresh()
-	elif _confirm():
-		Audio.play("confirm")
-		_press_action = cursor
-		_press_until = t + PRESS_FLASH_S
-		_refresh()   # show the pressed sprite during the flash
-
-
-func _do_action(action: int) -> void:
-	# Resolve by SLUG, not index — the button set varies per platform (web drops rows).
-	match String(_slugs[action]):
-		"start":
-			GameState.change_state(GameState.State.MODE_SELECT)
-		"online":
-			GameState.change_state(GameState.State.ONLINE_MENU)
-		"options":
-			_set_overlay(OVERLAY_OPTIONS)
-		"credits":
-			_set_overlay(OVERLAY_CREDITS)
-		"quit":
-			get_tree().quit()
-
-
-func _process_options() -> void:
-	if Input.is_action_just_pressed("menu_cancel"):
-		Audio.play("click")
+	if _overlay != OVERLAY_NONE and Input.is_action_just_pressed("menu_cancel"):
 		_set_overlay(OVERLAY_NONE)
 		return
-	if _nav("aim_up"):
-		_options_cursor = (_options_cursor + OPT_ROWS.size() - 1) % OPT_ROWS.size()
-		Audio.play("click")
-		_refresh_options()
-	elif _nav("aim_down"):
-		_options_cursor = (_options_cursor + 1) % OPT_ROWS.size()
-		Audio.play("click")
-		_refresh_options()
-	elif _nav("left") or _nav("right"):
-		var right: bool = _nav("right")
-		if _options_cursor < 3:
-			var delta: float = VOL_STEP if right else -VOL_STEP
-			_adjust_volume(_options_cursor, delta)
-		elif _options_cursor == 3 or _options_cursor == 4:
-			_flip_toggle(_options_cursor)
-	elif _confirm():
-		if _options_cursor == 3 or _options_cursor == 4:
-			_flip_toggle(_options_cursor)
-		elif _options_cursor == OPT_ROWS.size() - 1:   # BACK
-			Audio.play("click")
+	if _overlay == OVERLAY_CREDITS:
+		if UI.confirm():
 			_set_overlay(OVERLAY_NONE)
+		return
+	if _overlay == OVERLAY_OPTIONS:
+		if UI.nav("aim_up") or UI.nav("aim_down"):
+			_options_cursor = posmod(_options_cursor + (1 if UI.nav("aim_down") else -1), OPT_ROWS.size())
+			Audio.play("click")
+			_refresh_options()
+		elif UI.nav("left") or UI.nav("right"):
+			if _options_cursor < 3:
+				_option_adjust(_options_cursor, 0.1 if UI.nav("right") else -0.1)
+			elif _options_cursor in [3, 4]:
+				_option_activate(_options_cursor)
+		elif UI.confirm():
+			_option_activate(_options_cursor)
+		return
+	if UI.nav("aim_up") or UI.nav("aim_down"):
+		cursor = posmod(cursor + (1 if UI.nav("aim_down") else -1), _slugs.size())
+		Audio.play("click")
+		_refresh()
+	elif UI.confirm():
+		_activate(cursor)
 
+func _set_overlay(kind: int) -> void:
+	_overlay = kind
+	_options_panel.visible = kind == OVERLAY_OPTIONS
+	_credits_panel.visible = kind == OVERLAY_CREDITS
+	_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.18
+	if kind == OVERLAY_OPTIONS:
+		_options_cursor = 0
+		_refresh_options()
 
-# Row 3 = FULLSCREEN, row 4 = TUTORIAL (the HOW TO PLAY overlay before each match).
-func _flip_toggle(row: int) -> void:
-	if row == 3:
-		Settings.set_fullscreen(not Settings.fullscreen)
-	else:
-		Settings.set_show_tutorial(not Settings.show_tutorial)
+func _option_activate(row: int) -> void:
+	match row:
+		3: Settings.set_fullscreen(not Settings.fullscreen)
+		4: Settings.set_show_tutorial(not Settings.show_tutorial)
+		5: _set_overlay(OVERLAY_NONE)
 	Audio.play("click")
 	_refresh_options()
 
-
-func _process_credits() -> void:
-	if Input.is_action_just_pressed("menu_cancel") or _confirm():
-		Audio.play("click")
-		_set_overlay(OVERLAY_NONE)
-
-
-func _adjust_volume(row: int, delta: float) -> void:
+func _option_adjust(row: int, delta: float) -> void:
 	match row:
 		0: Settings.set_master_volume(Settings.master_volume + delta)
 		1: Settings.set_music_volume(Settings.music_volume + delta)
 		2: Settings.set_sfx_volume(Settings.sfx_volume + delta)
-	Audio.play("click")   # audible feedback — lets you hear an SFX-volume change
+	Audio.play("click")
 	_refresh_options()
-
-
-# --- Rendering -------------------------------------------------------------
-
-func _set_overlay(kind: int) -> void:
-	_overlay = kind
-	if _options_panel != null:
-		_options_panel.visible = (kind == OVERLAY_OPTIONS)
-	if _credits_panel != null:
-		_credits_panel.visible = (kind == OVERLAY_CREDITS)
-	if kind == OVERLAY_OPTIONS:
-		_options_cursor = 0
-		_refresh_options()
-	# A short lockout so the opening/closing press doesn't immediately act again.
-	_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.18
-
 
 func _refresh() -> void:
 	for i in _buttons.size():
-		var slug: String = _slugs[i]
-		var state: int
-		if _press_until > 0.0 and _press_action == i:
-			state = 2   # pressed
-		elif i == cursor:
-			state = 1   # hover (= selected)
-		else:
-			state = 0   # normal
-		_buttons[i].texture = load(BTN_TEX[slug][state])
-
+		UI.select(_buttons[i], i == cursor)
+		_buttons[i].text = (">  " if i == cursor else "   ") + BUTTON_NAMES[_slugs[i]]
+	_description.text = DESCRIPTIONS[_slugs[cursor]]
 
 func _refresh_options() -> void:
-	var vols: Array = [Settings.master_volume, Settings.music_volume, Settings.sfx_volume]
+	var volumes := [Settings.master_volume, Settings.music_volume, Settings.sfx_volume]
 	for i in OPT_ROWS.size():
-		var sel: bool = (i == _options_cursor)
-		var label: Label = _opt_rows[i]
-		var text: String
+		UI.select(_opt_rows[i], i == _options_cursor)
+		_opt_rows[i].alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_opt_rows[i].text = "HOW TO PLAY" if i == 4 else OPT_ROWS[i]
+		_opt_values[i].add_theme_color_override("font_color", UI.GOLD if i == _options_cursor else UI.IVORY)
 		if i < 3:
-			text = "%s   %s" % [_pad_name(String(OPT_ROWS[i])), _vol_bar(float(vols[i]))]
+			_opt_values[i].text = "%d%%" % roundi(volumes[i] * 100)
 		elif i == 3:
-			var on: String = "ON" if Settings.fullscreen else "OFF"
-			text = "%s   ◄ %s ►" % [_pad_name("FULLSCREEN"), on]
+			_opt_values[i].text = "ON" if Settings.fullscreen else "OFF"
 		elif i == 4:
-			var t_on: String = "ON" if Settings.show_tutorial else "OFF"
-			text = "%s   ◄ %s ►" % [_pad_name("TUTORIAL"), t_on]
-		else:
-			text = "BACK"
-		label.text = ("▶  " if sel else "    ") + text
-		label.add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
-
-
-func _pad_name(name: String) -> String:
-	return name + " ".repeat(maxi(0, 10 - name.length()))
-
-
-func _vol_bar(v: float) -> String:
-	var filled: int = clampi(int(round(v * BAR_SEGMENTS)), 0, BAR_SEGMENTS)
-	return "◄ " + "▮".repeat(filled) + "▯".repeat(BAR_SEGMENTS - filled) + " ►"
+			_opt_values[i].text = "ON" if Settings.show_tutorial else "OFF"
