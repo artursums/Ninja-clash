@@ -1,7 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
-#
 # Autoload: GameState
 # Screen state machine + clan selections + match progress. Reactive systems
 # (HUD, arena, screens) subscribe to state_changed.
@@ -17,6 +13,8 @@ enum State {
 	ROUND,
 	ROUND_END,
 	MATCH_END,
+	MATCH_SETUP,   # Fight Setup / Variants screen (opened from clan select); appended so enum values don't shift
+	ONLINE_MENU,   # Online host/join screen (ADR-0003); appended so enum values don't shift
 }
 
 # Who controls each fighter this match. FFA = P1 (human) vs three bots, free-for-all.
@@ -35,6 +33,17 @@ const CLANS: Array = [
 	{"name": "FIRE",   "color": Color("ff9132"), "secondary": Color("ffc382"), "sprite": "orange"},
 ]
 
+# Skins — an appearance STYLE layered on top of a clan's COLOUR. "base" is the classic
+# ninja; "elemental" is the colour's alternate elemental look; the rest are costume sets.
+# Every style resolves to a valid sprite for any of the four clan colours.
+const SKIN_STYLES: Array = ["base", "elemental", "ronin", "chef", "cyber", "edo", "office", "pirate", "vacation", "pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
+const SKIN_LABELS: Array = ["CLASSIC", "ELEMENTAL", "RONIN", "CHEF", "CYBER", "EDO", "OFFICE", "PIRATE", "VACATION", "PIGGY", "ENDOBOT", "NEKO", "STALKER", "IRONCLAD", "BAKENEKO"]
+const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "glacier", "orange": "inferno"}
+
+# Costume styles that ship the full richer animation set (6-frame idle/walk/swing
+# alongside the 5-pose sheet), stored under costumes/<style>/<color>_*.png.
+const RICH_SKINS: Array = ["pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
+
 var current_state: int = State.TITLE
 var game_mode: int = Mode.HUMAN_VS_HUMAN
 var ai_difficulty: int = 1   # 1=GENIN, 2=CHUNIN, 3=JONIN
@@ -42,6 +51,10 @@ var p1_clan: int = 3   # default Fire
 var p2_clan: int = 1   # default Storm
 var p3_clan: int = 2   # FFA bot — default Frost
 var p4_clan: int = 0   # FFA bot — default Shadow
+var p1_skin: int = 0   # skin STYLE index (into SKIN_STYLES); humans cycle theirs in clan select
+var p2_skin: int = 0
+var p3_skin: int = 0   # FFA/AI bots stay Classic
+var p4_skin: int = 0
 var selected_map_index: int = 0
 var current_round: int = 1
 var target_score: int = 5
@@ -55,6 +68,12 @@ func change_state(s: int) -> void:
 	current_state = s
 	print("[STATE] -> ", State.keys()[s])
 	state_changed.emit(s)
+	# Online: the host mirrors every screen change to the client (no-op offline / on the client;
+	# safe lookup so headless unit tests without autoloads keep working).
+	if is_inside_tree():
+		var net: Node = get_node_or_null("/root/Net")
+		if net != null:
+			net.on_local_state_changed(s)
 
 func get_clan(slot: int) -> Dictionary:
 	return CLANS[clan_index(slot)]
@@ -65,6 +84,50 @@ func clan_index(slot: int) -> int:
 		2: return p2_clan
 		3: return p3_clan
 		_: return p4_clan
+
+func skin_count() -> int:
+	return SKIN_STYLES.size()
+
+func skin_index(slot: int) -> int:
+	match slot:
+		1: return p1_skin
+		2: return p2_skin
+		3: return p3_skin
+		_: return p4_skin
+
+func skin_label(style_idx: int) -> String:
+	return String(SKIN_LABELS[style_idx % SKIN_LABELS.size()])
+
+# Pose sheet (80×16, 5 frames) for a clan colour + skin style.
+func skin_pose_path(color: String, style_idx: int) -> String:
+	var style: String = String(SKIN_STYLES[style_idx % SKIN_STYLES.size()])
+	if style == "base":
+		return "res://sprites/ninjas/ninja_%s_native_80x16.png" % color
+	if style == "elemental":
+		return "res://sprites/ninjas/ninja_%s_%s_native_80x16.png" % [color, ELEMENTAL_BY_COLOR.get(color, "")]
+	return "res://sprites/ninjas/costumes/%s/%s_native_80x16.png" % [style, color]
+
+# Resolves a 96×16 6-frame animation sheet (tag = "idle"/"walk"/"swing") for the
+# style, or "" if the style has none (player then falls back to its pose frames).
+func _skin_anim_path(color: String, style_idx: int, tag: String) -> String:
+	var style: String = String(SKIN_STYLES[style_idx % SKIN_STYLES.size()])
+	if style == "base":
+		return "res://sprites/ninjas/ninja_%s_%s_6frame_native_96x16.png" % [color, tag]
+	if style in RICH_SKINS:
+		return "res://sprites/ninjas/costumes/%s/%s_%s_6frame_native_96x16.png" % [style, color, tag]
+	return ""
+
+# Idle sheet (96×16, 6 frames) — "" = none (player falls back to the pose idle).
+func skin_idle_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "idle")
+
+# Walk sheet (96×16, 6 frames) — richer run cycle. "" = none (player falls back to the 2-frame pose walk).
+func skin_walk_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "walk")
+
+# Swing sheet (96×16, 6 frames) — full katana-slash body animation. "" = none (player falls back to the pose attack frame).
+func skin_swing_path(color: String, style_idx: int) -> String:
+	return _skin_anim_path(color, style_idx, "swing")
 
 # 2 for the duel modes, 4 for the free-for-all.
 func num_players() -> int:

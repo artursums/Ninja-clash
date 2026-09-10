@@ -19,5 +19,6 @@ autoload swaps the beep for your file automatically — **no code change needed*
 
 `.ogg` preferred (smaller). Mono is fine. Keep them short; these are UI/combat SFX, not music.
 
-> Music (per-state tracks) is not wired yet — it belongs with the audio-bus work when real music
-> exists. Master volume is already controllable via the `Settings` autoload.
+> Music is wired and shipping: a menu track and a match track load from `audio/start-menu/`
+> and `audio/gameplay/` onto a dedicated Music bus (see `audio.gd`). Master, Music and SFX
+> levels are independently controllable via the `Settings` autoload.

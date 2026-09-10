@@ -23,7 +23,7 @@ game** (~3,900 lines, 16 scripts): title, mode/clan/map select, 2–4 players, b
 shuriken, katana, HUD, FX, generated pixel-art, and a synthesized-audio system. The owner has
 played whole matches from it.
 
-The project's original plan (`.claude/rules/prototype-code.md` + Milestone 01) treated the
+The project's original plan (the prototype-code standards + Milestone 01) treated the
 prototype as **throwaway** and mandated a clean **from-scratch rewrite in `src/`**. We executed
 two sprints of that rewrite (Game State Manager, Couch Input, Map, Character Controller,
 Movement — 81 GUT tests). It became clear we were **re-implementing working, validated prototype
@@ -50,7 +50,7 @@ Online (v2) remains a goal, so the **input/state-separation pattern from ADR-000
 
 - The from-scratch `src/` rewrite (GSM, Couch Input, Map, Character Controller, Movement + tests)
   is **archived to `archive/src-rewrite/`** as reference. We do **not** run a parallel rewrite.
-- The **GDDs (`design/gdd/`), ADR-0001, and the clean patterns** from the rewrite remain the
+- The **GDDs (`docs/gdd/`), ADR-0001, and the clean patterns** from the rewrite remain the
   **guide** for hardening — we know what "right" looks like; we apply it to the prototype.
 - `ninja_clash` is the single Godot project; GUT is installed there for hardening tests.
 
@@ -98,6 +98,6 @@ Online (v2) remains a goal, so the **input/state-separation pattern from ADR-000
 
 - `docs/architecture/ADR-0001-input-state-separation.md` — the pattern now applied to `ninja_clash`
 - `archive/src-rewrite/` — the archived from-scratch rewrite (reference)
-- `production/milestones/milestone-01-production-mvp.md` — re-scoped per this ADR
-- `production/sprints/sprint-01.md`, `sprint-02.md` — the rewrite sprints (now superseded/historical)
-- `design/gdd/` — GDDs remain the design spec + hardening guide
+- `docs/production/milestone-01-production-mvp.md` — re-scoped per this ADR
+- `docs/production/sprint-01.md`, `sprint-02.md` — the rewrite sprints (now superseded/historical)
+- `docs/gdd/` — GDDs remain the design spec + hardening guide

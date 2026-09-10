@@ -6,7 +6,7 @@
 > in `archive/src-rewrite/`. Its value lives on as the ADR-0001 pattern + tested reference now
 > reused for hardening. Kept here for history; not the active plan.
 
-> **Milestone**: [Milestone 01 — Production MVP](../milestones/milestone-01-production-mvp.md)
+> **Milestone**: [Milestone 01 — Production MVP](milestone-01-production-mvp.md)
 > **Capacity**: 1 week, full-time (~5 days) · solo
 > **Status**: Planned
 
@@ -50,7 +50,7 @@ None — this is Sprint 1.
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|------------|
 | Production-quality rewrite (typed/DI/tested) is slower than prototype hacking | High | Medium | Foundation-only scope; Map/CC are Should-Have, not Must; lean on prototype as reference |
-| Couch Input controller hot-plug is non-trivial in Godot 4.6 (flagged technical risk) | Medium | Medium | 1.5d budget; reference `docs/engine-reference/godot/`; validate 2-controller before 4 |
+| Couch Input controller hot-plug is non-trivial in Godot 4.6 (flagged technical risk) | Medium | Medium | 1.5d budget; reference the official Godot 4.6 input documentation; validate 2-controller before 4 |
 | Playtest gate not formally closed → may be PIVOT not PROCEED | Medium | High | T1 first; if PIVOT, stop and re-plan before building |
 | GUT addon incompatible with Godot 4.6 | Low | Medium | Verify in T2 smoke test before anything depends on it |
 
@@ -73,6 +73,6 @@ None — this is Sprint 1.
   feel-critical "hot zone" systems and each deserves a focused sprint, with the
   prototype's tuned values pinned as the starting point.
 - The prototype (`prototypes/movement-and-combat/`) stays **frozen as reference**.
-  Production is a rewrite to standards, not a copy (see `.claude/rules/prototype-code.md`).
+  Production is a rewrite to standards, not a copy.
 - **Deferred:** the L2/J defense mechanic prototyped this cycle is held out of v1 until
   validated (off-GDD; pushes on the purist anti-pillars).

@@ -6,6 +6,23 @@ of which can be scripted headless here. This guide is the checklist; the owner r
 
 ## Prerequisites
 - Install export templates matching the engine: **Godot 4.6.2** (Editor ▸ Manage Export Templates).
+  (Web templates are already installed at `~/Library/Application Support/Godot/export_templates/4.6.2.stable/`.)
+
+## Web (LIVE — friend-testable build)
+
+The **Web preset exists** in `export_presets.cfg` (threads ON, GUT/tests excluded) and the game
+is deployed on Vercel: **https://ninja-clash.vercel.app**
+
+Rebuild + redeploy after changes:
+```
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
+    --export-release "Web" ../build/ninja-clash/index.html
+cd build/ninja-clash && npx vercel deploy --prod --yes
+```
+`build/ninja-clash/vercel.json` ships the `Cross-Origin-Opener-Policy` /
+`Cross-Origin-Embedder-Policy` headers Godot 4 web builds need for SharedArrayBuffer —
+without them the game will not boot in the browser. Gamepads work via the browser
+Gamepad API (press a button once so the browser exposes the pad).
 
 ## Presets to create (Project ▸ Export ▸ Add…)
 

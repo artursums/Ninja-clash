@@ -1,9 +1,9 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
 # Autoload: Audio
-# Procedural beep SFX generated at startup via AudioStreamWAV. No audio assets shipped.
-# Crude but lets the prototype simulate sound feedback for testing the full match loop.
+# Music playback plus the SFX layer. Music tracks (generated with Suno AI) ship under audio/start-menu/
+# and audio/gameplay/ on a dedicated Music bus; Settings drives the Music and SFX bus
+# levels independently. Sound EFFECTS are still procedural beeps synthesised at startup
+# via AudioStreamWAV — dropping a real <key>.ogg/.wav into audio/sfx/ overrides the beep
+# for that key with no code change.
 
 extends Node
 
@@ -102,6 +102,11 @@ func play(snd_name: String) -> void:
 	add_child(p)
 	p.play()
 	p.finished.connect(func() -> void: p.queue_free())
+	# Online host: mirror in-match combat SFX to the client (Net filters keys + screens;
+	# no-op offline and on the client, so this can never echo back).
+	var net: Node = get_node_or_null("/root/Net")
+	if net != null:
+		net.relay_sfx(snd_name)
 
 func play_win_fanfare() -> void:
 	play("win_1")
@@ -132,16 +137,24 @@ func _on_state_changed(new_state: int) -> void:
 	var menu_states := [
 		GameState.State.TITLE, GameState.State.MODE_SELECT,
 		GameState.State.CLAN_SELECT, GameState.State.MAP_SELECT,
-		GameState.State.MATCH_END,
+		GameState.State.MATCH_END, GameState.State.ONLINE_MENU,
 	]
 	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
 	if new_state in menu_states:
 		play_music(MENU_MUSIC_PATH)
 	elif new_state in fight_states:
-		play_music(MATCH_MUSIC_PATH)
+		play_music(_match_music_path())
 	elif new_state == GameState.State.MATCH_INTRO:
 		if _current_music_path == MENU_MUSIC_PATH:
 			stop_music()   # silence under the first countdown; a between-round track keeps playing
+
+
+# Resolve the fight track for the selected map: a map's "music" field overrides the default
+# MATCH_MUSIC_PATH, so e.g. Neo Tokyo plays its own neon track. Falls back to the default.
+func _match_music_path() -> String:
+	var map: Dictionary = Maps.get_map(GameState.selected_map_index)
+	var track: String = map.get("music", "")
+	return track if not track.is_empty() else MATCH_MUSIC_PATH
 
 
 # Play a looping music track. No-op if it's already the playing track (so menu-screen changes

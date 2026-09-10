@@ -212,8 +212,8 @@ implemented in v1 — flat debounce is sufficient for a 4-option clan picker.
 
 **Bidirectional consistency** (resolved 2026-05-17):
 
-- `design/gdd/systems-index.md` updated: Combat and Round Flow rows + Dependency Map Feature Layer entries now include Couch Input.
-- `design/gdd/game-concept.md` updated: Round Flow's "Depends on" column now includes Couch Input.
+- `docs/gdd/systems-index.md` updated: Combat and Round Flow rows + Dependency Map Feature Layer entries now include Couch Input.
+- `docs/gdd/game-concept.md` updated: Round Flow's "Depends on" column now includes Couch Input.
 
 ## Tuning Knobs
 

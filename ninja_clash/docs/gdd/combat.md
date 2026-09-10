@@ -172,8 +172,8 @@ the per-slot stash counts and per-projectile ownership records.
 | **Game State Manager** (indirect, via Round Flow) | Combat is active only when GSM is in `InMatch`. Combat does not directly subscribe to GSM — it relies on Round Flow's round-start signal to gate activity. | indirect |
 
 **Cross-system updates required** (caught during this section draft):
-1. `design/gdd/character-controller.md` Interactions table row for Combat says "Combat calls a kill method on CC" — this is stale. The kill flow is now `Combat → Movement.set_dead()`; CC is freed later by Round Flow. **Recommend updating CC GDD's Combat row.**
-2. `design/gdd/movement.md` Public Queries section lists only `is_dodging()`, `is_iframe_active()`, `is_dead()`, `facing` — does NOT list `set_dead()` as a public method, but Combat Rule 7.1 calls it. **Recommend adding `set_dead()` to Movement's public API documentation.**
+1. `docs/gdd/character-controller.md` Interactions table row for Combat says "Combat calls a kill method on CC" — this is stale. The kill flow is now `Combat → Movement.set_dead()`; CC is freed later by Round Flow. **Recommend updating CC GDD's Combat row.**
+2. `docs/gdd/movement.md` Public Queries section lists only `is_dodging()`, `is_iframe_active()`, `is_dead()`, `facing` — does NOT list `set_dead()` as a public method, but Combat Rule 7.1 calls it. **Recommend adding `set_dead()` to Movement's public API documentation.**
 
 Both updates will be applied in the post-design step.
 
@@ -295,11 +295,11 @@ deflected_velocity = -projectile.velocity
 
 **Cross-system updates required** (caught during Sections C.3, E, F drafting — 5 total):
 
-1. **`design/gdd/projectile.md` Rule 7** must be gated by `state == Flying` — currently emits `projectile_hit_player` on any Player overlap, including in Stuck (would cause walk-over-stuck-shuriken to fire both pickup AND hit signals).
-2. **`design/gdd/character-controller.md` Interactions row for Combat** currently says "Combat calls a kill method on CC" — stale. Update to: "Combat calls `Movement.set_dead()`; CC is freed later by Round Flow."
-3. **`design/gdd/movement.md` Public Queries** lists only the 4 read queries — should add `set_dead()` as a public method (called by Combat Rule 7.1).
-4. **`design/gdd/map.md` Interactions row for Combat** says "Queries map for currently-recoverable shurikens" — stale; Combat tracks stash, Projectile tracks recoverable shurikens. Remove or rewrite.
-5. **`design/gdd/systems-index.md` + `design/gdd/game-concept.md`**: remove Map from Combat's "depends on" list (and the corresponding Feature Layer entry in systems-index Dependency Map).
+1. **`docs/gdd/projectile.md` Rule 7** must be gated by `state == Flying` — currently emits `projectile_hit_player` on any Player overlap, including in Stuck (would cause walk-over-stuck-shuriken to fire both pickup AND hit signals).
+2. **`docs/gdd/character-controller.md` Interactions row for Combat** currently says "Combat calls a kill method on CC" — stale. Update to: "Combat calls `Movement.set_dead()`; CC is freed later by Round Flow."
+3. **`docs/gdd/movement.md` Public Queries** lists only the 4 read queries — should add `set_dead()` as a public method (called by Combat Rule 7.1).
+4. **`docs/gdd/map.md` Interactions row for Combat** says "Queries map for currently-recoverable shurikens" — stale; Combat tracks stash, Projectile tracks recoverable shurikens. Remove or rewrite.
+5. **`docs/gdd/systems-index.md` + `docs/gdd/game-concept.md`**: remove Map from Combat's "depends on" list (and the corresponding Feature Layer entry in systems-index Dependency Map).
 
 All 5 will be applied in the post-design step.
 
@@ -325,7 +325,7 @@ All 5 will be applied in the post-design step.
 
 **Not knobs**: throw cooldown (no cooldown — stash is the gate, per Round 1); deflection physics (mirror + full-speed locked per Round 3); catch mechanism (auto-on-i-frame locked per Movement Round 1); stash decrement (always 1 per throw); per-clan tuning (forbidden by Pillar 2).
 
-**Concept doc update required**: `design/gdd/game-concept.md` Tuning Knobs row for `shuriken_throw_velocity` is stale (currently "TBD (prototype-driven)") — resolve to **200 px/s** *(pinned 2026-05-17 during Combat GDD design)*.
+**Concept doc update required**: `docs/gdd/game-concept.md` Tuning Knobs row for `shuriken_throw_velocity` is stale (currently "TBD (prototype-driven)") — resolve to **200 px/s** *(pinned 2026-05-17 during Combat GDD design)*.
 
 ## Acceptance Criteria
 

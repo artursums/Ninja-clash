@@ -331,9 +331,9 @@ validator must match runtime tolerances within `VALIDATOR_POSITION_EPSILON_PX`
 
 **Bidirectional consistency notes:**
 
-- `design/gdd/systems-index.md` correctly lists Projectile as depending on Map (Core Layer row 6); Combat's row already lists Projectile as a dep. **No updates needed.**
-- `design/gdd/map.md` Interactions table already lists Projectile correctly. ✓
-- `design/gdd/game-concept.md` Dependencies row for Combat lists Projectile. ✓
+- `docs/gdd/systems-index.md` correctly lists Projectile as depending on Map (Core Layer row 6); Combat's row already lists Projectile as a dep. **No updates needed.**
+- `docs/gdd/map.md` Interactions table already lists Projectile correctly. ✓
+- `docs/gdd/game-concept.md` Dependencies row for Combat lists Projectile. ✓
 - Combat GDD does not exist yet. Its dependency on Projectile (with the specific signal connections specified in Rules 3, 7, 9, 13) will need to be honored when Combat is designed.
 - Visual FX + Audio GDDs do not exist yet. They may add Projectile as a direct dep (vs accessing it indirectly via Combat) when designed. Flagged in Open Questions.
 
@@ -457,9 +457,9 @@ validator must match runtime tolerances within `VALIDATOR_POSITION_EPSILON_PX`
 | **Combat-side thrower tracking**: Combat must decide whether to track thrower-of-projectile and ignore self-hits. TowerFall handles it implicitly (throw velocity carries arrow away fast). Pure-design choice for Combat GDD. | Combat GDD author | Before Combat GDD approved | Forward contract — Combat owns the decision |
 | **Visual FX subscription mechanism**: does Projectile add a `projectile_wall_stuck` signal, or does Visual FX poll state transitions? Same decision applies to pickup-sparkle events. | Visual FX GDD author | Before Visual FX GDD approved | Defer to Visual FX GDD; Projectile adds signals on request |
 | **Audio subscription mechanism**: same as Visual FX above. Audio GDD decides whether to subscribe to state transitions or new signals. | Audio GDD author | Before Audio GDD approved | Defer to Audio GDD |
-| `design/gdd/game-concept.md` Tuning Knobs row for `shuriken_wall_stick_duration_s` is stale — should reflect "permanent until retrieved" resolution. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated |
-| `design/gdd/game-concept.md` Tuning Knobs row for `pickup_radius_px` should change Owner from Combat → Projectile (and note default 12 px). | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated |
-| `design/gdd/game-concept.md` Dependencies table Combat row was stale — caught during /design-review. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: Combat row in concept doc Dependencies table updated to include Projectile |
+| `docs/gdd/game-concept.md` Tuning Knobs row for `shuriken_wall_stick_duration_s` is stale — should reflect "permanent until retrieved" resolution. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated |
+| `docs/gdd/game-concept.md` Tuning Knobs row for `pickup_radius_px` should change Owner from Combat → Projectile (and note default 12 px). | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated |
+| `docs/gdd/game-concept.md` Dependencies table Combat row was stale — caught during /design-review. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: Combat row in concept doc Dependencies table updated to include Projectile |
 | Precise wall-normal computation for `stuck_position`: current Rule 5 uses `-velocity.normalized()` (simple approximation). Could be more accurate via raycast from prior position to overlap point. | gameplay-programmer | During implementation if visual jank observed | Defer — approximation should be visually acceptable; revisit if needed |
 | `SHURIKEN_THROW_VELOCITY` final value is Combat-owned per concept doc — Projectile recommends ~200 px/s starting value based on TowerFall-style arc readability with `SHURIKEN_GRAVITY = 600`. Final pin in Combat GDD. | Combat GDD author | Before Combat GDD approved | Forward recommendation |
 | Initial tuning values are placeholders. Real values require MVP playtest iteration per Pillar 5. Highest-impact: `SHURIKEN_GRAVITY_PX_S2`, `SHURIKEN_THROW_VELOCITY` (Combat), `PICKUP_RADIUS_PX`. | game-designer + Projectile implementer | MVP playtest cycles | Defer to playtest |

@@ -1,13 +1,18 @@
 # Prototype Report: Movement and Combat
 
-> **Status**: CONCLUDED — **PROCEED** (developer-confidence, recorded 2026-05-26). See Recommendation below.
-> A formal 2+ human social playtest is still recommended early in production (not blocking).
+> **Historical record.** This is the prototype decision report as it stood on **2026-05-26**,
+> kept because it documents *why* the project continued and which tuning values were carried
+> forward. It describes the prototype, not the shipped game — see [`README.md`](README.md) for
+> what Ninja Clash is today, and *What happened next* at the bottom for the gap between them.
+>
+> **Verdict**: CONCLUDED — **PROCEED** (developer-confidence). A formal 2+ human social
+> playtest was recommended but never separately run; that is stated plainly below.
 
 ---
 
 ## Hypothesis
 
-**The throw-dodge-retrieve loop with one-hit-kill rules is intrinsically fun in a 2-player local context for sessions of 15+ minutes** (verbatim from `design/gdd/game-concept.md` MVP Definition).
+**The throw-dodge-retrieve loop with one-hit-kill rules is intrinsically fun in a 2-player local context for sessions of 15+ minutes** (verbatim from `docs/gdd/game-concept.md` MVP Definition).
 
 More specifically, this prototype tests three sub-hypotheses:
 
@@ -50,15 +55,6 @@ If even one of these sub-hypotheses fails decisively, the whole loop is in quest
 ---
 
 ## Result
-
-> **TO FILL IN AFTER PLAYTEST**
->
-> Capture **specific observations**, not opinions. For example:
->
-> - "At `dodge_iframe = 0.20`, P2 successfully dodged 7 of 12 incoming throws over a 5-round match."
-> - "Throw velocity 200 felt readable; at 350 the dodge became unreliable for both players (~2/10 success)."
-> - "Pickup radius 12 felt cramped — players sometimes ran past stuck shurikens; 18 felt comfortable."
-> - "Self-hit immunity at 0 caused 3 accidental spawn-suicides in the first 2 minutes; at 0.083 zero accidents over 10 rounds."
 
 **PROCEED.** (Recorded 2026-05-26.) The throw–dodge–retrieve loop was validated through
 extensive hands-on iteration across multiple sessions (solo and keyboard-vs-bot). The
@@ -109,56 +105,38 @@ three sub-hypotheses:
 Developer-confidence PROCEED. After extensive hands-on iteration, the core throw–dodge–retrieve
 loop is judged fun and buildable, and the prototype has fully de-risked the make-or-break
 Movement and Combat systems. Production begins with the Foundation layer per
-`production/sprints/sprint-01.md`. Two caveats carried into production: (1) run a 2+ human
+`docs/production/sprint-01.md`. Two caveats carried into production: (1) run a 2+ human
 social playtest early to confirm the solo judgment; (2) the L2/J defense mechanic is deferred
 until validated. The prototype tuning values above are pinned as the production starting point.
 
 ---
 
-## If Proceeding
+## What happened next
 
-> If the prototype validates the loop, the production MVP must be written from scratch (this prototype code is throwaway). The following must change from the prototype:
+The PROCEED decision held, but two things in the plan above did **not** survive contact
+with reality — recorded here rather than quietly edited out:
 
-- **Architecture**: implement the full 8 MVP GDDs (CouchInput slot/clan assignment, Movement with all 7 verbs including wall-jump + drop-through + comfort features, Combat as dict-based autoload per its GDD, Projectile with both states gated cleanly, CC with `slot` field + 32-bit collision layers, Map with `MapResource` + recoverability validator, GSM with full state machine, Round Flow with cyclic spawn rotation + kill-cam + full match flow)
-- **Performance targets**: 60 fps locked on Steam Deck; verify per the budgets in each GDD's Performance section
-- **Scope adjustments**: pin tuning values from the playtest (especially the 4 live-tunable levers); document any GDD revisions discovered during playtest
-- **Estimated production effort**: ~3 months to v1 per concept doc; first sprint = ~2-3 weeks for full MVP per Scope Tiers table
+- **"This prototype code is throwaway; rewrite from scratch."** That plan was executed for
+  two sprints and then abandoned. The prototype had grown into a nearly-complete, playable
+  game, and the rewrite was re-implementing validated behaviour at real cost. The prototype
+  was promoted to the production base instead — see
+  [`docs/architecture/ADR-0002-prototype-as-production-base.md`](docs/architecture/ADR-0002-prototype-as-production-base.md).
+  This report's *If Proceeding* plan is therefore superseded; it has been removed rather
+  than left standing as a false statement of intent.
+- **The one-hit-kill hypothesis was not what shipped.** The game runs on **5 HP** with a
+  katana and a guard. The hypothesis this report validated — the throw–dodge–retrieve
+  *loop* — held; the lethality rule around it did not, and the divergence was a deliberate
+  feel decision made during iteration, not an oversight.
 
----
+The tuning values pinned above are the 2026-05-26 snapshot and have since moved on
+(`shuriken_throw_velocity`, for instance, is now 648). Current values live in
+`player_tuning.tres`, `bot_tuning.tres` and the `Combat` autoload.
 
-## If Pivoting
-
-> If the loop is *workable but needs change*, document:
-
-- Which sub-hypothesis failed (dodge feel / throw velocity / retrieval)
-- What alternative the playtest suggests (e.g., "catch needs a separate input button, not dodge auto-catch" — would invalidate the resolved `catch_input_mode` decision)
-- Whether the GDDs need revision before MVP commit
-
----
-
-## If Killing
-
-> If the loop is fundamentally not fun even with extreme tuning, document:
-
-- Which playtest finding was decisive
-- What the failure suggests about the game concept (e.g., "1-hit-kill is too punishing at 2P — players never feel safe enough to throw")
-- Whether the project should pivot (alternative mechanic / 2-hit-kill / shield variant) or stop
-
-Per concept doc: *"If this hypothesis fails in MVP testing, the project pivots or stops."*
+The unfilled *If Pivoting*, *If Killing* and *Lessons Learned* template sections were
+removed: the first two describe branches that were not taken, and the third was never
+filled in. An empty template section documents nothing.
 
 ---
 
-## Lessons Learned
-
-> **TO FILL IN AFTER PLAYTEST** — even short notes are valuable for the production MVP design.
-
-Examples of lesson categories worth capturing:
-
-- **GDD revisions** the playtest suggested (e.g., "Movement Rule 4.4 needs a smaller stationary threshold than 5 px/s — dodge triggered too rarely")
-- **Cross-system surprises** (e.g., "self-hit immunity at 83ms is too short when throwing straight down — shuriken returns from a wall bounce within the window")
-- **Tuning interactions** (e.g., "high throw velocity + small pickup radius = stuck shurikens become uncatchable")
-- **Player behaviors** that confirm or contradict the concept's predicted dynamics (e.g., did players "count opponents' shurikens"? Did they develop "preferred retrieval routes"?)
-
----
-
-*Generated as a scaffold by `/prototype movement-and-combat` on 2026-05-18. Playtest required to complete.*
+*Prototype decision report, concluded 2026-05-26. Superseded for production planning by
+ADR-0002; retained as the record of why the project continued.*

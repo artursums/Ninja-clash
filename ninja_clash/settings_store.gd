@@ -16,6 +16,8 @@ var master_volume: float = 1.0   ## 0..1 (linear) — overall "sound" level (Mas
 var music_volume: float = 1.0    ## 0..1 (linear) — Music bus
 var sfx_volume: float = 1.0      ## 0..1 (linear) — SFX bus (effects)
 var fullscreen: bool = false
+var show_tutorial: bool = true   ## HOW TO PLAY overlay before each match's first countdown
+var last_join_ip: String = ""    ## last address typed on the ONLINE join screen (convenience)
 
 
 func _ready() -> void:
@@ -49,6 +51,16 @@ func set_fullscreen(on: bool) -> void:
 	save_to(DEFAULT_PATH)
 
 
+func set_show_tutorial(on: bool) -> void:
+	show_tutorial = on
+	save_to(DEFAULT_PATH)   # no apply(): read directly by main.gd at match start
+
+
+func set_last_join_ip(ip: String) -> void:
+	last_join_ip = ip.strip_edges()
+	save_to(DEFAULT_PATH)   # no apply(): read directly by the online menu
+
+
 # --- Persistence (pure I/O — unit-tested with a temp path) ---
 
 func load_from(path: String) -> void:
@@ -59,6 +71,8 @@ func load_from(path: String) -> void:
 	music_volume = clampf(float(cfg.get_value(SECTION, "music_volume", music_volume)), 0.0, 1.0)
 	sfx_volume = clampf(float(cfg.get_value(SECTION, "sfx_volume", sfx_volume)), 0.0, 1.0)
 	fullscreen = bool(cfg.get_value(SECTION, "fullscreen", fullscreen))
+	show_tutorial = bool(cfg.get_value(SECTION, "show_tutorial", show_tutorial))
+	last_join_ip = String(cfg.get_value(SECTION, "last_join_ip", last_join_ip))
 
 
 func save_to(path: String) -> void:
@@ -67,6 +81,8 @@ func save_to(path: String) -> void:
 	cfg.set_value(SECTION, "music_volume", music_volume)
 	cfg.set_value(SECTION, "sfx_volume", sfx_volume)
 	cfg.set_value(SECTION, "fullscreen", fullscreen)
+	cfg.set_value(SECTION, "show_tutorial", show_tutorial)
+	cfg.set_value(SECTION, "last_join_ip", last_join_ip)
 	cfg.save(path)
 
 

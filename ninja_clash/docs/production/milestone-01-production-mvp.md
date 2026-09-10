@@ -48,8 +48,8 @@ prototype rather than rebuild.
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| [Sprint 1](../sprints/sprint-01.md) | *(superseded)* from-scratch Foundation rewrite (GSM, Couch Input) | Archived — see ADR-0002 |
-| [Sprint 2](../sprints/sprint-02.md) | *(superseded)* from-scratch Map / Character Controller / Movement | Archived — see ADR-0002 |
-| [Sprint 3](../sprints/sprint-03.md) | **Ninja Clash hardening** (input/state ✅ → config + tests) | Active |
+| [Sprint 1](sprint-01.md) | *(superseded)* from-scratch Foundation rewrite (GSM, Couch Input) | Archived — see ADR-0002 |
+| [Sprint 2](sprint-02.md) | *(superseded)* from-scratch Map / Character Controller / Movement | Archived — see ADR-0002 |
+| [Sprint 3](sprint-03.md) | **Ninja Clash hardening** (input/state ✅ → config + tests) | Active |
 | Sprint 4 (planned) | Store-readiness (export, save, icon) | — |
 | Sprint 5 (planned) | Content/polish (audio, menus, art) | — |

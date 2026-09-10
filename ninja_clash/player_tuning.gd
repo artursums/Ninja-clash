@@ -11,7 +11,10 @@ extends Resource
 @export var jump_strength: float = 480.0
 @export var gravity: float = 1400.0
 @export var terminal_fall_speed: float = 320.0
-@export var stomp_bounce_strength: float = 260.0
+@export var stomp_bounce_strength: float = 260.0       # upward pop the stomper gets off a head
+@export var stomp_bounce_sideways: float = 150.0       # sideways shove away from the victim (anti-perch)
+@export var stomp_bounce_lock_s: float = 0.12          # how long that sideways shove resists input
+@export var stomp_cooldown_s: float = 0.45             # stomper can't stomp again within this window
 @export var shuriken_pogo_bounce: float = 240.0
 @export var down_throw_speed: float = 720.0
 @export var shuriken_throw_recoil: float = 260.0
@@ -34,6 +37,7 @@ extends Resource
 # --- HP + katana melee ---
 @export var max_hp: int = 5
 @export var max_katana: int = 3
+@export var start_shurikens: int = 3   # shurikens a fighter spawns holding (stash cap stays 5)
 @export var hurt_iframe_s: float = 0.35
 @export var katana_swing_duration_s: float = 0.32
 @export var katana_cooldown_s: float = 0.2
@@ -45,3 +49,9 @@ extends Resource
 @export var katana_hit_knockback: float = 150.0
 @export var katana_hit_pop: float = 70.0
 @export var katana_hit_recoil_s: float = 0.10
+
+# --- Charged katana "blade-wave" projectile (DEV-005; optional variant, gated by MatchConfig) ---
+@export var blade_wave_charge_time_s: float = 3.0   # how long the katana must be held before a release fires a wave
+@export var blade_wave_speed: float = 340.0         # straight-line flight speed (px/s); ~shuriken effective speed
+@export var blade_wave_damage: int = 1              # hearts removed on a fighter hit
+@export var blade_wave_lifetime_s: float = 2.5      # max time aloft before it despawns (range fallback)

@@ -198,8 +198,8 @@ Pause does NOT appear as a transition because `get_tree().paused = true` freezes
 
 **Cross-system updates required** (caught during this section draft):
 
-1. **`design/gdd/map.md` Loading state row** doesn't credit Round Flow as the caller of `MapLoader.load()`. Recommend clarifying: Round Flow triggers the load on InMatch entry sequence Rule 4.5.
-2. **`design/gdd/couch-input.md` Core Rules** never explicitly define the `controller_disconnected(slot)` signal name — only appears in the Interactions table. Recommend adding to CouchInput's Core Rules signal list.
+1. **`docs/gdd/map.md` Loading state row** doesn't credit Round Flow as the caller of `MapLoader.load()`. Recommend clarifying: Round Flow triggers the load on InMatch entry sequence Rule 4.5.
+2. **`docs/gdd/couch-input.md` Core Rules** never explicitly define the `controller_disconnected(slot)` signal name — only appears in the Interactions table. Recommend adding to CouchInput's Core Rules signal list.
 3. **`MatchContext` schema** is under-specified across GSM + concept docs. Round Flow now writes 3 new fields (`final_scores`, `winner_slot`, `rounds_played`) AND reads `map_id`, `active_slots`, `match_target`. Recommend documenting the full schema (most natural home: GSM GDD).
 
 All 3 will be applied/flagged in the post-design step.
@@ -355,7 +355,7 @@ kill_cam_complete(t_now, t_round_end_started) := (t_now - t_round_end_started) >
 - ✅ CouchInput GDD Dependencies row for Round Flow (line 205): "Round Flow depends on CouchInput. Subscribes to `controller_disconnected(slot)` for mid-round elimination; reads slot↔clan mapping via `MatchContext`" — **matches Rule 13**. ✓
 - ⚠️ CouchInput GDD: `controller_disconnected(slot)` signal name appears in Interactions table (line 120, 205) but NOT in Core Rules signal list (Rule 7 enumerates `throw_pressed, pause_requested, menu_confirm, menu_cancel, menu_direction` only). **Cross-system fix #3 queued: add `controller_disconnected(slot)` to CouchInput Core Rule 7 explicit signal list.**
 
-**Concept doc consistency** (`design/gdd/game-concept.md`):
+**Concept doc consistency** (`docs/gdd/game-concept.md`):
 
 - ✅ Round Flow dep row (line 368): "Combat, Movement, Map, Game State Manager, Couch Input" — **matches this GDD** (plus CC implicit via Movement). ✓
 - ⚠️ Concept doc adds CC indirectly via Movement; this GDD lists CC as a direct dep (Round Flow directly instantiates `PlayerCharacterBody`). **Cross-system fix #4 queued: concept doc should add CC to Round Flow's "depends on" list.**
@@ -365,7 +365,7 @@ kill_cam_complete(t_now, t_round_end_started) := (t_now - t_round_end_started) >
 - ⚠️ Concept Edge Case "Round ends with no kills (stalemate)" (line 345): "Sudden-death mechanic to be designed" — **resolved to "No stalemate mechanic in v1; rounds run indefinitely until kill"**. **Cross-system fix #7 queued: update concept doc edge case row.**
 - ⚠️ Concept Edge Case "Two players die in the same frame" (line 346): "Both deaths register; round may end in tie. No tie-break in v1 (no one banks the round win)" — **matches** but this GDD adds the specific corner-case limitation (last-2-mutual-kill produces signal-order-dependent attribution). **Cross-system fix #8 queued: enrich the edge case row with the v1 limitation note.**
 
-**Systems-index consistency** (`design/gdd/systems-index.md`):
+**Systems-index consistency** (`docs/gdd/systems-index.md`):
 
 - ✅ Row #8 (line 40): "Round Flow | Feature | MVP | Not Started | — | Game State Manager, Combat, Movement, Map, Couch Input, Character Controller" — **matches this GDD's 6 deps**. ✓ (Status will change to Approved after design-review.)
 - ✅ Feature Layer row 8 (line 106): "Round Flow — depends on: Game State Manager, Combat (kill events), Movement (death trigger), Map (spawn points), Couch Input (`controller_disconnected` for mid-round elimination), Character Controller (instantiates `PlayerCharacterBody` at round start)" — **matches**. ✓

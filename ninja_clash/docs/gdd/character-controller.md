@@ -219,7 +219,7 @@ Uses Map's `wrapped_x` / `wrapped_y` formulas — no new math here.
 
 **Bidirectional consistency** (resolved 2026-05-17):
 
-- `design/gdd/systems-index.md` updated: Combat, Round Flow, and Visual FX rows + Dependency Map Feature/Presentation entries now include Character Controller.
+- `docs/gdd/systems-index.md` updated: Combat, Round Flow, and Visual FX rows + Dependency Map Feature/Presentation entries now include Character Controller.
 
 ## Tuning Knobs
 

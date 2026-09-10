@@ -1,7 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
-#
 # Autoload: Combat
 # Live-tunable parameters + per-slot score tracking. Round flow is driven by
 # main.gd reacting to kill_logged (no more auto-respawn here).

@@ -1,8 +1,10 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
+# Player CharacterBody2D — a sprite-based ninja, tinted and skinned per clan.
 #
-# Player CharacterBody2D. Sprite-based ninja silhouette tinted per clan.
+# Drives one fighter slot: movement, wall-jump, dash-dodge, throwing, katana, guard,
+# damage and death. Reads its intent from the PlayerInputRouter snapshot (ADR-0001)
+# rather than Godot Input directly, so identical code runs for a local human, a bot
+# (_bot_think fills the same virtual-input dicts) and an online puppet (ADR-0003).
+# Balance values are data-driven from player_tuning.tres — see _apply_tuning().
 
 extends CharacterBody2D
 
@@ -13,12 +15,17 @@ extends CharacterBody2D
 # (PLAYER_W/H, sprite frame indices) stay as consts — they are not balance knobs.
 const TUNING_PATH := "res://player_tuning.tres"
 var tuning: PlayerTuning = null   # inject in tests; otherwise TUNING_PATH is loaded in _ready
+const BOT_TUNING_PATH := "res://bot_tuning.tres"
+var bot_tuning: BotTuning = null  # inject in tests; otherwise loaded lazily on the first _bot_think
 
 var MAX_HSPEED := 158.4
 var JUMP_STRENGTH := 480.0
 var GRAVITY := 1400.0
 var PLAYER_TERMINAL_FALL_SPEED := 320.0
 var STOMP_BOUNCE_STRENGTH := 260.0
+var STOMP_BOUNCE_SIDEWAYS := 150.0
+var STOMP_BOUNCE_LOCK_S := 0.12
+var STOMP_COOLDOWN_S := 0.45
 var SHURIKEN_POGO_BOUNCE := 240.0
 var DOWN_THROW_SPEED := 720.0
 var SHURIKEN_THROW_RECOIL := 260.0
@@ -47,10 +54,51 @@ var KATANA_HIT_START_S := 0.05
 var KATANA_HIT_END_S := 0.22
 var KATANA_RANGE := 30.0
 var KATANA_HALF_H := 18.0
+# How much of a foe's body must be inside the blade box to count as a hit, as a fraction of their
+# half-extents. 0 = their CENTRE must be inside (old behaviour — tip could enter without landing);
+# 1 = any part of the body counts (reached a touch too far). 0.6 sits in between: the tip must bite
+# in a little, not merely graze the edge.
+const KATANA_HIT_BODY_FRAC := 0.6
 var KATANA_VISUAL_SCALE := 1.0
 var KATANA_HIT_KNOCKBACK := 150.0
 var KATANA_HIT_POP := 70.0
 var KATANA_HIT_RECOIL_S := 0.10
+
+# Charged katana "blade-wave" projectile (DEV-005 — optional variant, gated by MatchConfig.blade_wave_enabled).
+# Holding the katana past CHARGE_TIME then releasing fires a straight directional slash-wave instead
+# of a second swing; the release ALWAYS spends one katana charge (miss/terrain/block all cost it).
+var BLADE_WAVE_CHARGE_TIME_S := 3.0
+var BLADE_WAVE_SPEED := 340.0
+var BLADE_WAVE_DAMAGE := 1
+var BLADE_WAVE_LIFETIME_S := 2.5
+# Charge tell: up to three wave "pips" stack in front while holding. Fixed (clan-independent) colours
+# so the player learns the cue — the HOT 3rd colour means "fully charged, release now".
+const BLADE_WAVE_TELL_SHEET := "res://sprites/fx/katana_slash_5frame_native_400x80.png"
+const CHARGE_PIP_COLORS := [
+	Color(0.45, 0.75, 1.0),   # 1 — cool blue (just started)
+	Color(1.0, 0.82, 0.25),   # 2 — gold (charging)
+	Color(1.0, 0.30, 0.18),   # 3 — hot red = READY, let go now
+]
+
+# Guard mobility + bounces (L2). You can RUN while guarding (was rooted). When a blade lands
+# on a raised guard the attacker is knocked back a little; when two raised guards collide both
+# fighters are shoved apart. All sell with a spark + clash flash.
+var BLOCK_RECOIL_SPEED := 155.0   # attacker pushed back off a guard they struck
+var BLOCK_RECOIL_POP := 55.0      # small upward pop on that recoil
+var BLOCK_RECOIL_S := 0.12        # how long the recoil velocity is held
+var SHIELD_BUMP_SPEED := 175.0    # two guards meeting shove each other apart
+var SHIELD_BUMP_POP := 45.0
+var SHIELD_BUMP_S := 0.14
+var SHIELD_BUMP_RANGE := 24.0     # horizontal gap within which two guards "meet"
+var SHIELD_BUMP_VRANGE := 28.0    # vertical tolerance (must be on roughly the same level)
+
+# Guard meter ("mana"). A full guard sustains GUARD_MAX_S of held block. Once you begin spending it
+# the meter never regenerates until it is fully drained: releasing early just freezes the bar where
+# it stands, and only emptying it triggers the GUARD_COOLDOWN_S lockout (no blocking) that refills it.
+# This commits a fighter to spending the whole bar — guard can't be feathered/spammed. Shown as a
+# depleting bar above the head.
+var GUARD_MAX_S := 4.0
+var GUARD_COOLDOWN_S := 5.0
 
 # Sprite sheet frame indices — must match sprites/ninjas/generate_ninjas.py POSES order
 const FRAME_IDLE := 0
@@ -58,7 +106,17 @@ const FRAME_WALK_1 := 1
 const FRAME_WALK_2 := 2
 const FRAME_JUMP := 3
 const FRAME_ATTACK := 4
-const WALK_CYCLE_S := 0.14   # ~7 fps gait
+const WALK_CYCLE_S := 0.14   # ~7 fps gait (2-frame pose fallback)
+const WALK6_FRAME_S := 0.085 # per-frame time for the richer 6-frame run cycle (~12 fps)
+const WALK6_FRAMES := 6
+const SWING_FRAMES := 6      # frames in the katana-swing body sheet
+
+# Movement dust (TowerFall-style scuff/puff). Feet sit half the 32px hitbox below origin.
+const DUST_FEET_OFFSET := 16.0
+const DUST_BODY_HALF := 11.0        # body half-width; puffs are pushed fully OUTSIDE this so nothing sits under the ninja
+const DUST_SCALE := 0.9             # one knob for puff size (was 1.4-1.6 — shrunk so dust reads as small scuffs)
+const RUN_DUST_INTERVAL_S := 0.16   # real-time gap between run scuffs
+const RUN_DUST_MIN_HSPEED := 40.0   # only kick up dust above this ground speed
 
 # === Per-player config ===
 var slot: int = 1
@@ -83,6 +141,10 @@ var _reticle: Node2D = null            # aim reticle, lazily built
 var swing_start_t: float = -999.0
 var katana_cooldown_until: float = -999.0   # earliest time the next swing is allowed (0.2 s gate)
 var swing_hit_done: bool = false       # ensure one player-hit per swing
+var katana_charging: bool = false      # blade-wave variant: katana held, a directional wave charging
+var katana_charge_ready: bool = false  # held past BLADE_WAVE_CHARGE_TIME_S — releasing now fires the wave
+var katana_press_t: float = -999.0     # real-time the current katana hold began
+var _charge_pips: Array = []           # up to 3 coloured wave sprites in front, the charge tell
 var hurt_iframe_until: float = 0.0
 var jumps_remaining: int = 1   # single jump (no double jump); resets to 1 whenever on floor
 var iframe_t_end: float = 0.0
@@ -91,16 +153,38 @@ var slide_dir: Vector2 = Vector2.ZERO   # normalized dash direction (8-way), set
 var slide_charged: bool = true          # L2/R2 dash charge — spent on dash, restored on floor/wall contact
 var slide_cooldown_until: float = 0.0   # earliest time the charge may refill (base cooldown + any air refresh)
 var air_dash_penalty: bool = false      # set when a dash is taken airborne — adds the touch-down delay once
-var last_left_tap_t: float = -999.0     # P2 keyboard double-tap-to-dash timing (slot 2 only)
+var last_left_tap_t: float = -999.0     # keyboard double-tap-to-dash timing (any human slot, 4-way)
 var last_right_tap_t: float = -999.0
+var last_up_tap_t: float = -999.0
+var last_down_tap_t: float = -999.0
 var wall_jump_lock_until: float = -999.0
+var stomp_cooldown_until: float = -999.0     # stomper can't head-stomp again until this real-time
+var stomp_bounce_lock_until: float = -999.0  # holds the sideways stomp bounce against movement input
 var clash_recoil_until: float = 0.0   # while > now, hold the clash recoil velocity (input can't override)
-var hit_recoil_until: float = 0.0     # while > now, hold the small katana-hit knock-back
+var hit_recoil_until: float = 0.0     # while > now, hold the small katana-hit / block knock-back
+var shield_bump_until: float = 0.0    # while > now, hold the guard-vs-guard shove (input can't override)
+var guard_meter: float = 4.0          # remaining guard time (seconds); GUARD_MAX_S when full
+var guard_cooldown_until: float = 0.0 # while > now, guard is broken/locked out (refilling)
 var frozen_until: float = 0.0         # while > now, this fighter is in a clash hitstop (per-player, not global)
 var throw_anim_until: float = 0.0   # show ATTACK frame for ~220ms after a throw
+var _was_on_floor: bool = false     # previous-frame floor state — drives the landing dust puff
+var _next_run_dust_t: float = 0.0   # real-time gate so run scuffs spawn at intervals, not every frame
 var death_time: float = -1.0        # set on _die() — drives spin/fade timing
 var death_spin_dir: int = 0         # +1 or -1 — matches knockback horizontal direction
 var _first_tick_done: bool = false
+
+# === Online puppet state (ADR-0003) ===
+# On the online CLIENT every fighter is a puppet: the host owns the simulation and Net applies
+# its snapshots onto these fields (via NetCodec.apply_player). _puppet_tick dead-reckons between
+# snapshots and blends toward the latest authoritative position.
+var net_target_pos: Vector2 = Vector2.ZERO   # latest host position for this fighter
+var net_has_target: bool = false
+const PUPPET_SNAP_DIST := 90.0      # beyond this, teleport (spawn / screen wrap), don't lerp
+const PUPPET_BLEND := 0.35          # per-tick pull toward the authoritative position
+
+# Pure bot decision helpers. preload (not a class_name) so it resolves on a fresh headless boot
+# without depending on the editor's global class cache being regenerated first.
+const BotLogic := preload("res://bot_logic.gd")
 
 # === Bot AI (testing) — when is_bot, _bot_think() fills these virtual-input dicts
 # each frame and the normal movement code reads them via _held()/_pressed(). ===
@@ -124,6 +208,23 @@ var _bot_throw_dir: Vector2 = Vector2.ZERO  # the bot's intended throw aim (kept
 var _bot_threat_id: int = 0           # instance id of the incoming shuriken we're tracking
 var _bot_threat_seen_t: float = 0.0   # when we first spotted it — drives human reaction latency
 
+# Last-resort head-stomp tuning (see BotLogic.should_stomp + _bot_pursue_stomp). A bot only stomps
+# when fully disarmed; these shape how it lines up the dive.
+const BOT_STOMP_SCAVENGE_RANGE := 240.0   # a loose blade within this counts as "re-arm instead of stomp"
+const BOT_STOMP_ALIGN_X := 14.0           # horizontal tolerance to be "over" the foe before dropping
+const BOT_STOMP_ABOVE_MARGIN := 8.0       # treat the foe as at/below us (ready to drop) when dy >= -this
+
+# Defence + environment tuning (Phase 2).
+const BOT_GUARD_MIN_METER := 0.6          # min guard-meter seconds before the bot commits to a block
+const BOT_HIGH_GROUND_MARGIN := 24.0      # a perch must sit at least this far above the foe to be "high ground"
+const BOT_PLATFORM_MAX_THICK := 40.0      # walls thinner than this are floating platforms (side walls are 550 tall)
+const BOT_EXPOSED_RANGE := 360.0          # if the foe has a clear shooting line within this, seek cover/height
+
+var _bot_platforms: Array = []            # cached floating-platform rects (Rect2, world space) for the loaded map
+var _bot_platforms_map: int = -1          # map index the cache was built for (-1 = none yet)
+var _bot_high_ground_until: float = 0.0   # while > now, committed to contesting a higher perch
+var _bot_high_ground_cd: float = 0.0      # earliest time to re-commit to a high-ground push
+
 # === Input action names ===
 var input_left: String = ""
 var input_right: String = ""
@@ -140,13 +241,19 @@ var input_defend: String = ""
 var visual: Sprite2D = null
 var pose_texture: Texture2D = null   # 80×16, 5 frames (idle/walk1/walk2/jump/attack)
 var idle_texture: Texture2D = null   # 96×16, 6 frames (neutral/inhale/exhale/blink/look-L/look-R)
-var current_visual_mode: String = "pose"   # "pose" or "idle"
+var walk_texture: Texture2D = null   # 96×16, 6 frames — richer run cycle (optional; null → pose walk1/walk2)
+var swing_texture: Texture2D = null  # 96×16, 6 frames — katana swing body anim (optional; null → pose attack)
+var current_visual_mode: String = "pose"   # "pose" | "idle" | "walk" | "swing"
 
 # === Above-head indicators (built by main.gd) ===
 var stash_icons: Array = []    # 5 shuriken icons
 var heart_icons: Array = []    # 5 HP hearts
 var katana_icons: Array = []   # 3 katana-charge marks
+var guard_bar_bg: ColorRect = null    # guard-meter bar (track + fill), above the head
+var guard_bar_fill: ColorRect = null
+const GUARD_BAR_W := 26.0
 var katana_sprite: Sprite2D = null   # swing visual ("Katana" child)
+var slash_fx: Node2D = null          # procedural film-style slash arc (slash_fx.gd); covers the swing
 
 # 6-frame idle pattern: list of [frame_index, ticks_at_60fps].
 # ~2.6s full loop. Each player slot gets a small phase offset so blinks don't sync.
@@ -185,6 +292,9 @@ func _apply_tuning() -> void:
 		GRAVITY = tuning.gravity
 		PLAYER_TERMINAL_FALL_SPEED = tuning.terminal_fall_speed
 		STOMP_BOUNCE_STRENGTH = tuning.stomp_bounce_strength
+		STOMP_BOUNCE_SIDEWAYS = tuning.stomp_bounce_sideways
+		STOMP_BOUNCE_LOCK_S = tuning.stomp_bounce_lock_s
+		STOMP_COOLDOWN_S = tuning.stomp_cooldown_s
 		SHURIKEN_POGO_BOUNCE = tuning.shuriken_pogo_bounce
 		DOWN_THROW_SPEED = tuning.down_throw_speed
 		SHURIKEN_THROW_RECOIL = tuning.shuriken_throw_recoil
@@ -212,6 +322,10 @@ func _apply_tuning() -> void:
 		KATANA_HIT_KNOCKBACK = tuning.katana_hit_knockback
 		KATANA_HIT_POP = tuning.katana_hit_pop
 		KATANA_HIT_RECOIL_S = tuning.katana_hit_recoil_s
+		BLADE_WAVE_CHARGE_TIME_S = tuning.blade_wave_charge_time_s
+		BLADE_WAVE_SPEED = tuning.blade_wave_speed
+		BLADE_WAVE_DAMAGE = tuning.blade_wave_damage
+		BLADE_WAVE_LIFETIME_S = tuning.blade_wave_lifetime_s
 	SLIDE_MAX_UP_SPEED = SLIDE_SPEED * 0.7071067811865476
 
 
@@ -219,7 +333,7 @@ func _ready() -> void:
 	add_to_group("players")
 	_apply_tuning()   # data-driven balance: load player_tuning.tres (or use the injected resource)
 	_spawn_collision_layer = collision_layer   # remember our solid layer so respawn restores it
-	var prefix = "p1" if slot == 1 else "p2"
+	var prefix = "p%d" % slot   # every slot reads ITS OWN action set (pads 3/4 bind to p3_/p4_)
 	input_left = prefix + "_left"
 	input_right = prefix + "_right"
 	input_jump = prefix + "_jump"
@@ -241,6 +355,10 @@ func _physics_process(delta: float) -> void:
 	if not _first_tick_done:
 		_first_tick_done = true
 		print("[PLAYER ", slot, "] first tick. pos=", position, " on_floor=", is_on_floor())
+	# Online client: puppet mode — render the host's snapshots, never simulate or read input.
+	if Net.is_client():
+		_puppet_tick(delta)
+		return
 	# Dead body physics — carries knockback impulse + gravity until it lands, then FREEZES
 	# in place forever. Once settled we stop calling move_and_slide entirely: a kinematic
 	# body that isn't driven can't be pushed, so the corpse can never be shoved around.
@@ -272,6 +390,11 @@ func _physics_process(delta: float) -> void:
 		# Still apply gravity gently to settle on platforms
 		velocity.y = min(velocity.y + 600.0 * delta, 400.0)
 		move_and_slide()
+		# Pin the horizontal spawn column through the MATCH_INTRO countdown: a fighter must never
+		# drift off its pad before the round begins. (Root cause of the rare "same-spot at round
+		# start" was never caught in testing, so we hard-hold the column as belt-and-braces.)
+		if GameState.current_state == GameState.State.MATCH_INTRO and spawn_pos != Vector2.ZERO:
+			position.x = spawn_pos.x
 		_update_visual()
 		return
 	var t: float = Time.get_ticks_msec() / 1000.0
@@ -364,24 +487,42 @@ func _physics_process(delta: float) -> void:
 		facing = int(sign(move))
 
 	# Defense (guard) — hold L2/J to plant the katana in front. Blocks front shurikens and
-	# katana strikes (see _blocks_incoming); roots you in place; gives no ammo (vs dodge, which
-	# catches). Mutually exclusive with dash / aim / swing / wall-grab. You may still turn to
-	# face the incoming threat (facing follows movement above), but you cannot move.
+	# katana strikes (see _blocks_incoming); gives no ammo (vs dodge, which catches). Mutually
+	# exclusive with dash / aim / swing / wall-grab. You CAN run while guarding (shield charge):
+	# two raised guards that meet bounce apart (see _check_shield_bump).
+	# Guard requires meter and no active lockout (see the meter update just below).
 	is_defending = _held(input_defend) and not is_swinging and not is_sliding \
-		and not is_aiming and not is_wall_grabbing
+		and not is_aiming and not is_wall_grabbing \
+		and guard_meter > 0.0 and t >= guard_cooldown_until
 
-	# Apply velocity — priority: dash-dodge > guard > clash-recoil > wall-jump-lock > walk.
-	# Aiming does NOT appear here: you run while you aim, same as ever.
+	# Guard meter: drain while guarding (empties in GUARD_MAX_S), break into a GUARD_COOLDOWN_S
+	# lockout on empty (the bar refills across it). Releasing without emptying freezes the meter —
+	# no regen until it is fully spent, so a started guard must be drained to the bottom.
+	if is_defending:
+		guard_meter = maxf(0.0, guard_meter - delta)
+		if guard_meter <= 0.0:
+			guard_cooldown_until = t + GUARD_COOLDOWN_S
+			Audio.play("hit")   # guard-break cue
+	elif t < guard_cooldown_until:
+		guard_meter = GUARD_MAX_S * clampf(1.0 - (guard_cooldown_until - t) / GUARD_COOLDOWN_S, 0.0, 1.0)
+
+	# Apply velocity — priority: dash-dodge > recoils (clash / hit / shield-bump) > guard-run >
+	# wall-jump-lock > walk. Recoils sit above the guard so a bump shove can't be cancelled by
+	# simply holding the guard. Aiming does NOT appear here: you run while you aim, same as ever.
 	if is_sliding:
 		# Directional dash-dodge: drive the whole velocity vector (8-way, incl. up/diagonal).
 		# Upward speed is capped (see _dash_velocity) so a straight-up dash matches a diagonal's height.
 		velocity = _dash_velocity()
-	elif is_defending:
-		velocity.x = 0.0   # rooted while guarding — committal (gravity still applies below)
 	elif t < clash_recoil_until:
 		pass   # hold the post-clash push-apart; don't let movement input cancel it
 	elif t < hit_recoil_until:
-		pass   # hold the brief katana-hit knock-back so the bump reads
+		pass   # hold the brief katana-hit / block knock-back so the bump reads
+	elif t < shield_bump_until:
+		pass   # hold the guard-vs-guard shove
+	elif t < stomp_bounce_lock_until:
+		pass   # hold the sideways bounce off a stomped head so input can't cancel the knock-away
+	elif is_defending:
+		velocity.x = move * MAX_HSPEED   # run while guarding (shield charge)
 	elif t < wall_jump_lock_until:
 		pass
 	else:
@@ -407,27 +548,30 @@ func _physics_process(delta: float) -> void:
 			wall_jump_lock_until = t + WALL_JUMP_LOCK_S
 			is_wall_grabbing = false
 			jumps_remaining = 0  # the wall jump IS the jump — no bonus air jump (no double jump)
+			# puff against the wall (the side the ninja is pushing off), not under it
+			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -signf(wall_normal.x))
 		elif jumps_remaining > 0:
 			velocity.y = -JUMP_STRENGTH   # single jump, always full strength (coyote case included)
 			jumps_remaining -= 1
+			# kick-off puff beside the trailing foot
+			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -float(facing))
 
 	# Dash-dodge request — ONE move on L2, R2 AND Circle (slide + dodge are now unified),
-	# plus a P2-only keyboard double-tap of A/D. Double-tap is scoped to slot 2 so an
-	# analog stick can't trigger it.
+	# plus a keyboard double-tap of any move/aim direction (W/A/S/D or numpad 8/4/5/6) for
+	# every HUMAN slot. The dash fires toward the held aim, so the second tap's held key
+	# already points it the right way. (A pad stick crossing the deadzone twice inside the
+	# window also counts — accepted: the dash still costs the charge + cooldown.)
 	var dash_requested: bool = not is_defending and (_pressed(input_slide) or _pressed(input_dodge))
-	if slot == 2:
-		if _pressed(input_left):
-			if t - last_left_tap_t <= DOUBLE_TAP_WINDOW_S:
-				dash_requested = true
-				last_left_tap_t = -999.0
-			else:
-				last_left_tap_t = t
-		if _pressed(input_right):
-			if t - last_right_tap_t <= DOUBLE_TAP_WINDOW_S:
-				dash_requested = true
-				last_right_tap_t = -999.0
-			else:
-				last_right_tap_t = t
+	if not is_bot:
+		last_left_tap_t = _tap_check(input_left, last_left_tap_t, t)
+		last_right_tap_t = _tap_check(input_right, last_right_tap_t, t)
+		last_up_tap_t = _tap_check(input_aim_up, last_up_tap_t, t)
+		last_down_tap_t = _tap_check(input_aim_down, last_down_tap_t, t)
+		if last_left_tap_t == TAP_FIRED or last_right_tap_t == TAP_FIRED \
+				or last_up_tap_t == TAP_FIRED or last_down_tap_t == TAP_FIRED:
+			dash_requested = true
+			last_left_tap_t = -999.0; last_right_tap_t = -999.0
+			last_up_tap_t = -999.0;   last_down_tap_t = -999.0
 
 	# Dash-dodge — fires toward the held aim (8-way) with brief i-frames that catch an
 	# incoming shuriken. Spends the charge; in the air you get exactly one until you touch
@@ -438,23 +582,64 @@ func _physics_process(delta: float) -> void:
 		air_dash_penalty = not (on_floor_now or on_wall_now)   # only airborne dashes pay the touch-down delay
 		_start_slide(_aim_direction(), t)
 
-	# Katana swing — start, then run hit checks while active.
-	# Once all 3 charges are spent, the katana is locked out entirely for the rest of
-	# the round (respawn refills it); pressing it does nothing until then.
-	if _pressed(input_katana) and not is_swinging and not is_defending and katana_charges > 0 and t >= katana_cooldown_until:
+	# Katana. Standard rules: a press swings instantly (zero latency). When the blade-wave variant
+	# is ON the katana becomes HOLD-TO-CHARGE: holding winds up a wave (no swing yet), a quick tap
+	# swings on release, and holding past the threshold then releasing throws the wave.
+	# Once all charges are spent the katana is locked out for the round (respawn refills it).
+	if MatchConfig.blade_wave_enabled:
+		_update_katana_charge_input(t)
+	elif _pressed(input_katana) and not is_swinging and not is_defending and katana_charges > 0 and t >= katana_cooldown_until:
 		_start_swing(t)
 	if is_swinging:
 		_process_swing(t)
 		if t - swing_start_t >= KATANA_SWING_DURATION_S:
 			is_swinging = false
 
+	# Guard-vs-guard: two raised guards meeting shove both fighters apart (+ spark).
+	_check_shield_bump(t)
+
 	# Head-stomp detection: snapshot fall velocity, then check collisions after move
 	var was_falling: bool = velocity.y > 50.0
 	move_and_slide()
 	if was_falling:
 		_check_headstomp()
+	_update_movement_dust(t, was_falling)
 	_check_screen_wrap()
 	_update_visual()
+
+# Online-client frame: move with the snapshot velocity through the real level colliders (so
+# is_on_floor() and the run/jump poses read correctly), then blend toward the authoritative
+# position. All state fields were set by NetCodec.apply_player; this only renders them.
+func _puppet_tick(delta: float) -> void:
+	if not alive:
+		_hide_reticle()
+		if net_has_target:
+			position = net_target_pos   # corpses just track the host exactly (they barely move)
+		_update_visual()
+		return
+	if not is_sliding:
+		velocity.y += GRAVITY * delta   # dead-reckon the arc between 30 Hz snapshots
+		velocity.y = minf(velocity.y, PLAYER_TERMINAL_FALL_SPEED)
+	move_and_slide()
+	if net_has_target:
+		if position.distance_to(net_target_pos) > PUPPET_SNAP_DIST:
+			position = net_target_pos   # spawn / screen-wrap jump — snap, never streak across
+		else:
+			position = position.lerp(net_target_pos, PUPPET_BLEND)
+	_check_screen_wrap()
+	_update_aim_reticle()
+	_update_visual()
+
+# Double-tap detection for one direction action. Returns the updated "last tap" timestamp:
+# TAP_FIRED when this press completed a double-tap (caller dashes and resets all four),
+# the press time on a first tap, or the old value when the action wasn't pressed this tick.
+const TAP_FIRED := -1.0
+func _tap_check(action: String, last_t: float, t: float) -> float:
+	if not _pressed(action):
+		return last_t
+	if t - last_t <= DOUBLE_TAP_WINDOW_S:
+		return TAP_FIRED
+	return t
 
 # The dash IS the dodge: a directional burst (8-way) with brief invincibility frames that
 # catch an incoming shuriken. L2 / R2 / Circle all trigger this one move.
@@ -637,35 +822,53 @@ func _pressed(action: String) -> bool:
 # scale dodge reliability, fire rate, spacing tightness and aggression. Tap actions are
 # edge-set via _bot_pressed; per-action cooldowns stop it machine-gunning.
 func _bot_think(t: float) -> void:
+	# Decision model — evaluated in priority order each tick; survival reactions early-return so they
+	# beat positioning. Knobs scale every stage by tier (GENIN/CHUNIN/JONIN), and a human-feel layer
+	# (reaction lag, capped dodge success, jitter) keeps even JONIN beatable.
+	#   §1  survive an incoming shuriken — parry / dodge / GUARD (block when dodge is on cooldown)
+	#   §1b clash the foe's blade
+	#   §2  re-arm — scavenge dropped blades (mixed with melee)
+	#   §3  engage — katana duel, last-resort head-stomp (disarmed only), or ranged spacing +
+	#       ENVIRONMENT (contest high ground / break the foe's shooting line with cover)
+	#   §4/5 aim + throw   §edge/wall movement   §7 jumps   §8 dashes
 	_bot_held.clear()
 	_bot_pressed.clear()
 
 	var lvl: int = clampi(bot_difficulty, 1, 3)
-	# Per-tier knobs (index 0 unused). Dodge isn't a guaranteed escape — if it were,
-	# two equal bots would dodge everything and never resolve — so even JONIN lets ~20%
-	# of throws through; the tiers scale defence, fire rate, spacing and aggression.
-	var dodge_chance: float = [0.0, 0.45, 0.63, 0.80][lvl]   # chance to read an incoming shuriken
-	var dodge_range: float  = [0.0, 82.0, 98.0, 116.0][lvl]  # how far out it reacts (timed to catch)
-	var throw_cd: float     = [0.0, 0.75, 0.52, 0.34][lvl]   # min gap between throws
-	var jump_react_h: float = [0.0, 72.0, 58.0, 46.0][lvl]   # eagerness to chase a higher foe
-	# Chasing dialed back ~15% (the ×1.15 spacing) so the bot sits further out and crowds the
-	# player less — more room to breathe. Rush frequency is likewise trimmed 15% below.
-	var near_range: float   = [0.0, 70.0, 62.0, 54.0][lvl] * 1.15   # back off sooner (keep more distance)
-	var far_range: float    = [0.0, 220.0, 195.0, 172.0][lvl] * 1.15# only close when the player is further out
-	var hop_chance: float   = [0.0, 0.010, 0.014, 0.020][lvl]
-	var rush_chance: float  = [0.0, 0.004, 0.007, 0.011][lvl] * 0.85  # 15% fewer pressure rushes
+	# Per-tier knobs now live in bot_tuning.tres (BotTuning), indexed [GENIN, CHUNIN, JONIN].
+	# Lazy-load once; fall back to the resource's script defaults (= the validated numbers) so the
+	# bot behaves identically even if the .tres is missing (e.g. a headless test).
+	if bot_tuning == null:
+		bot_tuning = load(BOT_TUNING_PATH) if ResourceLoader.exists(BOT_TUNING_PATH) else BotTuning.new()
+	var ti: int = lvl - 1   # tier index: 1/2/3 → 0/1/2
+	# Dodge isn't a guaranteed escape — if it were, two equal bots would dodge everything and never
+	# resolve — so even JONIN lets ~20% of throws through; the tiers scale defence, fire rate,
+	# spacing and aggression. The historical ×1.15 (spacing) / ×0.85 (rush, melee-commit) scalars
+	# are baked into the bot_tuning defaults.
+	var dodge_chance: float = bot_tuning.dodge_chance[ti]   # chance to read an incoming shuriken
+	var dodge_range: float  = bot_tuning.dodge_range[ti]    # how far out it reacts (timed to catch)
+	var throw_cd: float     = bot_tuning.throw_cd[ti]       # min gap between throws
+	var jump_react_h: float = bot_tuning.jump_react_h[ti]   # eagerness to chase a higher foe
+	var near_range: float   = bot_tuning.near_range[ti]     # back off sooner (keep more distance)
+	var far_range: float    = bot_tuning.far_range[ti]      # only close when the player is further out
+	var hop_chance: float   = bot_tuning.hop_chance[ti]
+	var rush_chance: float  = bot_tuning.rush_chance[ti]    # per-frame pressure-rush chance
 	# Katana-duel knobs. The bot picks its moment, closes, then HOLDS a beat before each
 	# cut — deliberate pacing, never a flurry. Pauses also give the human room to read it.
-	var melee_commit_chance: float = [0.0, 0.006, 0.009, 0.013][lvl] * 0.85 # 15% less eager to start a duel (throws more instead)
-	var melee_windup: float        = [0.0, 0.50,  0.42,  0.34][lvl]  # pause before a strike (the "stare-down")
-	var melee_recovery: float      = [0.0, 1.10,  0.90,  0.72][lvl]  # rest after a strike — no spamming
+	var melee_commit_chance: float = bot_tuning.melee_commit_chance[ti] # per-frame chance to start a duel
+	var melee_windup: float        = bot_tuning.melee_windup[ti]   # pause before a strike (the "stare-down")
+	var melee_recovery: float      = bot_tuning.melee_recovery[ti] # rest after a strike — no spamming
 	# Human-like movement & defence knobs.
-	var deflect_chance: float   = [0.0, 0.40,  0.55,  0.70][lvl]  # parry an incoming shuriken with the blade
-	var dash_close_chance: float= [0.0, 0.020, 0.032, 0.048][lvl] # burst-dash to close a big gap
-	var dash_air_chance: float  = [0.0, 0.030, 0.050, 0.080][lvl] # air-dash mid-jump toward the foe
+	var deflect_chance: float   = bot_tuning.deflect_chance[ti]    # parry an incoming shuriken with the blade
+	var dash_close_chance: float= bot_tuning.dash_close_chance[ti] # burst-dash to close a big gap
+	var dash_air_chance: float  = bot_tuning.dash_air_chance[ti]   # air-dash mid-jump toward the foe
 	# Human-feel knobs (research: "start from perfect play, then add reaction lag + errors").
-	var reaction_s: float       = [0.0, 0.24,  0.17,  0.11][lvl]  # lag before it answers a NEW threat (point-blank throws beat it)
-	var pickup_range: float     = [0.0, 120.0, 150.0, 180.0][lvl] # how far it detours to grab a loose blade (stash<5)
+	var reaction_s: float       = bot_tuning.reaction_s[ti]   # lag before it answers a NEW threat (point-blank throws beat it)
+	var pickup_range: float     = bot_tuning.pickup_range[ti] # how far it detours to grab a loose blade (stash<5)
+	# Defence + positioning knobs (Phase 2). Guard is the "can't dodge → block" fallback; high-ground
+	# is the tendency to contest a perch above the foe (per-frame commit chance, like rush_chance).
+	var guard_chance: float       = bot_tuning.guard_chance[ti]       # likelihood it blocks when dodge is on cooldown under fire
+	var high_ground_chance: float = bot_tuning.high_ground_chance[ti] # per-frame chance to commit to a high-ground push
 
 	var enemy: Node = _bot_nearest_enemy()
 	if enemy == null:
@@ -708,6 +911,18 @@ func _bot_think(t: float) -> void:
 			_bot_next_dodge_t = t + DODGE_TOTAL_DURATION_S + 0.04
 			return
 		_bot_next_dodge_t = t + 0.22   # missed the read → brief vulnerable window
+
+	# 1a) Guard fallback: a throw is incoming but the dodge is on cooldown — a human plants the
+	# katana and BLOCKS the front instead of eating it. Costs guard meter (not a charge); we only
+	# commit with enough meter left to matter, and face the projectile so the FRONT guard catches it.
+	var dodge_on_cd: bool = t < _bot_next_dodge_t
+	if reacted and t >= guard_cooldown_until \
+			and BotLogic.should_guard(true, dodge_on_cd, guard_meter, BOT_GUARD_MIN_METER) \
+			and randf() < guard_chance:
+		var gx: float = incoming.global_position.x - global_position.x
+		facing = 1 if gx >= 0.0 else -1
+		_bot_held[input_defend] = true
+		return
 
 	# 1b) Defend against the foe's BLADE: if they're swinging at us within reach, swing too
 	# so the katanas CLASH (lightning, no damage) instead of eating the cut. Reactive parry.
@@ -776,9 +991,15 @@ func _bot_think(t: float) -> void:
 	var in_melee: bool = must_melee or (katana_charges > 0 and enemy_in_blade_range) \
 		or (katana_charges > 0 and level_for_melee and t < _bot_melee_until)
 
+	# Disarmed with nothing to re-arm from → the head-stomp becomes the last-resort win condition.
+	var want_stomp: bool = in_melee and _bot_should_stomp()
+
 	var desired: int = 0
 	if in_melee:
-		if adx > 30.0:
+		if want_stomp:
+			# No shurikens, no charge, no blade to fetch: line up over the foe and dive on their head.
+			desired = _bot_pursue_stomp(t, dy, adx, to_enemy)
+		elif adx > 30.0:
 			desired = to_enemy                      # close to blade range
 			# All-in skips the stare-down — just relentless pressure.
 			_bot_strike_ready_t = t + (0.0 if must_melee else melee_windup)
@@ -794,12 +1015,14 @@ func _bot_think(t: float) -> void:
 				_bot_strike_ready_t = _bot_next_katana_t + randf_range(0.05, 0.2)
 				if not must_melee and randf() < 0.45:
 					_bot_melee_until = 0.0          # sometimes break off after a strike (varies spacing)
-		# All-in chases vertically too — jump up to the player's platform to reach them.
-		if must_melee and dy < -28.0 and is_on_floor() and t >= _bot_next_jump_t:
+		# All-in chases vertically too — jump up to the player's platform to reach them with the
+		# blade (the stomp pursuit above does its own climbing, so skip this while diving for a stomp).
+		if must_melee and not want_stomp and dy < -28.0 and is_on_floor() and t >= _bot_next_jump_t:
 			_bot_pressed[input_jump] = true
 			_bot_next_jump_t = t + randf_range(0.4, 0.7)
-		# (No deliberate head-stomp — the bot relies on shurikens + the katana. An incidental
-		# stomp can still happen via _check_headstomp if it just lands on the foe in play.)
+		# Head-stomp is gated to the disarmed case above (want_stomp): while the bot holds any
+		# shuriken or katana charge it never aims for the head, and _check_headstomp won't credit an
+		# incidental landing either. See _bot_should_stomp / BotLogic.should_stomp.
 	else:
 		# Ranged spacing: grab loose blades when safe, else hold a pocket / strafe / rush.
 		if t >= _bot_rush_until and randf() < rush_chance:
@@ -822,10 +1045,25 @@ func _bot_think(t: float) -> void:
 		elif adx < near_range:
 			desired = -to_enemy
 		else:
-			if t >= _bot_next_strafe_t:
-				_bot_strafe_dir = -_bot_strafe_dir
-				_bot_next_strafe_t = t + randf_range(0.35, 0.9)
-			desired = _bot_strafe_dir
+			# Hold a pocket — but a smart bot contests HIGH GROUND: drift onto a platform above the
+			# foe and rain shurikens down, which also breaks their shooting line (cover). It commits
+			# harder when the foe currently has a CLEAR line to us (exposed). Falls back to strafing.
+			var exposed: bool = adx < BOT_EXPOSED_RANGE and _bot_foe_has_clear_shot(enemy)
+			# High ground is a PERIODIC tactic, not a constant — a long cooldown keeps the bot
+			# pressuring most of the time and only occasionally relocating to a perch (more eagerly
+			# when exposed to a clear shooting line). Otherwise two bots just climb and never fight.
+			if t >= _bot_high_ground_until and t >= _bot_high_ground_cd \
+					and (randf() < high_ground_chance or (exposed and randf() < high_ground_chance * 2.0)):
+				_bot_high_ground_until = t + randf_range(1.2, 2.2)
+				_bot_high_ground_cd = t + randf_range(5.0, 9.0)
+			var hi_step: int = _bot_seek_high_ground(t, enemy) if t < _bot_high_ground_until else 0
+			if hi_step != 0:
+				desired = hi_step
+			else:
+				if t >= _bot_next_strafe_t:
+					_bot_strafe_dir = -_bot_strafe_dir
+					_bot_next_strafe_t = t + randf_range(0.35, 0.9)
+				desired = _bot_strafe_dir
 
 	# 4) Aim vertically toward the foe (drives up/down throws).
 	if dy < -42.0:
@@ -965,12 +1203,137 @@ func _bot_nearest_stuck_shuriken():
 			best = s
 	return best
 
+# Last-resort gate: the bot may deliberately go for a head-stomp ONLY when fully disarmed — no
+# shurikens, no katana charges — and there is no loose blade within scavenge range to re-arm from.
+# Gates both the deliberate pursuit (_bot_pursue_stomp) and the actual stomp credit (_check_headstomp).
+func _bot_should_stomp() -> bool:
+	var sb = _bot_nearest_stuck_shuriken()
+	var scavengeable: bool = sb != null and global_position.distance_to(sb.global_position) <= BOT_STOMP_SCAVENGE_RANGE
+	return BotLogic.should_stomp(stash, katana_charges, scavengeable)
+
+# Deliberate last-resort head-stomp: line up over the foe and come down on their head. Only ever
+# called once _bot_should_stomp() holds. Returns the horizontal step intent and may request a jump;
+# the stomp itself lands via _check_headstomp the frame we touch down on top of them.
+func _bot_pursue_stomp(t: float, dy: float, adx: float, to_enemy: int) -> int:
+	facing = to_enemy
+	# Foe above us → climb to get over them first (the wall-play block scales walls toward height).
+	if dy < -BOT_STOMP_ABOVE_MARGIN:
+		if is_on_floor() and t >= _bot_next_jump_t:
+			_bot_next_jump_t = t + randf_range(0.35, 0.6)
+			_bot_pressed[input_jump] = true
+		return to_enemy   # move toward/under them while rising
+	# Not yet lined up over them → close the horizontal gap to get directly above.
+	if adx > BOT_STOMP_ALIGN_X:
+		return to_enemy
+	# Lined up and at/above their level → hop so we arc down onto their head; gravity finishes it.
+	if is_on_floor() and t >= _bot_next_jump_t:
+		_bot_next_jump_t = t + randf_range(0.3, 0.5)
+		_bot_pressed[input_jump] = true
+	return 0   # hold the alignment and drop
+
+# Cache the loaded map's floating-platform rects (rebuilt only when the map changes — never per
+# frame). Side walls (≈550 px tall) are excluded; only thin decks count as reachable high ground.
+func _bot_ensure_platforms() -> void:
+	var idx: int = GameState.selected_map_index
+	if idx == _bot_platforms_map:
+		return
+	_bot_platforms_map = idx
+	_bot_platforms.clear()
+	for w in Maps.get_map(idx).get("walls", []):
+		var sz: Vector2 = w.get("size", Vector2.ZERO)
+		if sz.y > 0.0 and sz.y <= BOT_PLATFORM_MAX_THICK:
+			var c: Vector2 = w.get("center", Vector2.ZERO)
+			_bot_platforms.append(Rect2(c - sz * 0.5, sz))
+
+# Steer toward the nearest perch that is above the foe (and above us). Returns the horizontal step;
+# also hops up when standing under the chosen perch. 0 when there's no worthwhile high ground.
+func _bot_seek_high_ground(t: float, enemy: Node) -> int:
+	_bot_ensure_platforms()
+	var idx: int = BotLogic.pick_high_ground(_bot_platforms, global_position, enemy.global_position, BOT_HIGH_GROUND_MARGIN)
+	if idx < 0:
+		return 0
+	var r: Rect2 = _bot_platforms[idx]
+	var tx: float = r.position.x + r.size.x * 0.5
+	var gap: float = tx - global_position.x
+	if is_on_floor() and t >= _bot_next_jump_t and absf(gap) < r.size.x * 0.5 + 24.0:
+		_bot_pressed[input_jump] = true   # under the perch → hop up onto it
+		_bot_next_jump_t = t + randf_range(0.4, 0.7)
+	return 0 if absf(gap) < 10.0 else (1 if gap > 0.0 else -1)
+
+# Does the foe currently have a clear straight line to us (no wall/platform between)? One cheap ray.
+# True → we're exposed to their throws and should consider relocating behind cover / onto a perch.
+func _bot_foe_has_clear_shot(enemy: Node) -> bool:
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var q: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(enemy.global_position, global_position)
+	q.exclude = [get_rid(), enemy.get_rid()]
+	q.collide_with_areas = false
+	return space.intersect_ray(q).is_empty()
+
 func _start_swing(t: float) -> void:
 	is_swinging = true
 	swing_start_t = t
 	swing_hit_done = false
 	katana_cooldown_until = t + KATANA_SWING_DURATION_S + KATANA_COOLDOWN_S   # 0.2 s recovery after the swing finishes (0.52 s total swing-to-swing)
 	Audio.play("dodge")   # placeholder swoosh
+
+# Blade-wave hold-to-charge input (DEV-005, only while the variant is ON). A press begins a charge
+# WITHOUT swinging — holding is the wind-up. Held past BLADE_WAVE_CHARGE_TIME_S it arms (charge tell
+# peaks); releasing while armed throws the wave, releasing before then does the normal swing. So a
+# quick tap still swings (on release) and a long hold throws. Cancels cleanly on guard/death/no
+# charges. Bots only pulse the press for one frame, so they fall straight through to the normal swing.
+func _update_katana_charge_input(t: float) -> void:
+	if _pressed(input_katana) and not katana_charging and not is_swinging and not is_defending \
+			and katana_charges > 0 and t >= katana_cooldown_until:
+		katana_charging = true
+		katana_charge_ready = false
+		katana_press_t = t
+	if not katana_charging:
+		return
+	if is_defending or katana_charges <= 0 or not alive:
+		katana_charging = false
+		katana_charge_ready = false
+		return
+	if _held(input_katana):
+		if not katana_charge_ready and t - katana_press_t >= BLADE_WAVE_CHARGE_TIME_S:
+			katana_charge_ready = true
+			Audio.play("dodge")   # "charged / ready" cue
+		return
+	# Released:
+	if katana_charge_ready:
+		_fire_blade_wave(t)            # held past the threshold → throw the wave
+	elif t >= katana_cooldown_until:
+		_start_swing(t)               # quick tap → normal swing (on release)
+	katana_charging = false
+	katana_charge_ready = false
+
+# Spawn the directional slash-wave and ALWAYS spend one katana charge (the explicit contrast with the
+# melee swing, which never wastes a charge on a whiff/clash). Direction reuses the 8-way throw aim.
+func _fire_blade_wave(t: float) -> void:
+	if katana_charges <= 0:
+		return
+	var dir: Vector2 = _throw_aim().normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2(facing, 0.0)
+	if dir.x != 0.0:
+		facing = int(signf(dir.x))   # face the wave
+	katana_charges -= 1
+	_update_katana_indicator()
+	var WaveScript: Script = load("res://blade_wave.gd")
+	var w: Area2D = Area2D.new()
+	w.set_script(WaveScript)
+	w.thrower_slot = slot
+	w.damage = BLADE_WAVE_DAMAGE
+	w.lifetime_s = BLADE_WAVE_LIFETIME_S
+	w.velocity_v = dir * BLADE_WAVE_SPEED
+	var clan: Dictionary = GameState.get_clan(slot)
+	w.tint = clan.get("secondary", Color(0.7, 0.9, 1.0))
+	w.position = global_position + dir * 18.0
+	get_parent().add_child(w)
+	Audio.play("throw")
+	throw_anim_until = t + 0.22
+	if slash_fx != null:
+		slash_fx.stop()
+	_hide_charge_pips()
 
 # Active during the swing's hit window: deflect any flying shuriken in front,
 # and deal 1 damage to one enemy (consuming a katana charge, max 3).
@@ -991,27 +1354,42 @@ func _process_swing(t: float) -> void:
 	for p in get_tree().get_nodes_in_group("players"):
 		if p == self or not p.alive:
 			continue
-		if _point_in_box(p.global_position, hb_center, hb_half) and _is_clashing_with(p):
+		if _box_hits_body(p.global_position, hb_center, hb_half) and _is_clashing_with(p):
 			swing_hit_done = true
 			Combat.register_clash(self, p)   # fires the freeze + lightning + recoil (de-duped)
 			return
-	# Strike an enemy (offensive — once per swing, costs a charge)
-	if katana_charges > 0:
-		for p in get_tree().get_nodes_in_group("players"):
-			if p == self or not p.alive:
-				continue
-			if _point_in_box(p.global_position, hb_center, hb_half):
-				if p.take_damage(1, Vector2(facing * 220.0, -80.0), slot):
-					katana_charges -= 1
-					_update_katana_indicator()   # reflect the spent charge this instant, no frame lag
-					swing_hit_done = true
-					_spawn_strike_flash(p.global_position)
-					if p.alive and p.has_method("apply_hit_recoil"):
-						p.apply_hit_recoil(facing)   # small bump on a survivor — sells the hit
-				break
+	# Strike an enemy — or get parried by their raised guard, which bounces US back.
+	for p in get_tree().get_nodes_in_group("players"):
+		if p == self or not p.alive:
+			continue
+		if not _box_hits_body(p.global_position, hb_center, hb_half):
+			continue
+		var impact: Vector2 = Vector2(facing * 220.0, -80.0)
+		if p.is_guarding_against(impact):
+			# Blade meets a front guard: spark on the guard, no damage — and we recoil off it.
+			swing_hit_done = true
+			p._on_block(impact)
+			apply_block_recoil()
+			_spawn_clash_burst((global_position + p.global_position) * 0.5)
+		elif katana_charges > 0 and p.take_damage(1, impact, slot):
+			katana_charges -= 1
+			_update_katana_indicator()   # reflect the spent charge this instant, no frame lag
+			swing_hit_done = true
+			_spawn_strike_flash(p.global_position)
+			if p.alive and p.has_method("apply_hit_recoil"):
+				p.apply_hit_recoil(facing)   # small bump on a survivor — sells the hit
+		break
 
 func _point_in_box(point: Vector2, center: Vector2, half: Vector2) -> bool:
 	return absf(point.x - center.x) <= half.x and absf(point.y - center.y) <= half.y
+
+# True when a fighter's BODY box (PLAYER_W×PLAYER_H, centred on body_center) overlaps the blade
+# hitbox — AABB vs AABB. A center-only test let the blade TIP visibly enter a foe without landing,
+# because the foe's centre could still sit outside the box; testing the whole body fixes that so the
+# tip connects whenever any part of the foe is in reach.
+func _box_hits_body(body_center: Vector2, hb_center: Vector2, hb_half: Vector2) -> bool:
+	return absf(hb_center.x - body_center.x) <= hb_half.x + PLAYER_W * 0.5 * KATANA_HIT_BODY_FRAC \
+		and absf(hb_center.y - body_center.y) <= hb_half.y + PLAYER_H * 0.5 * KATANA_HIT_BODY_FRAC
 
 # True when `other` has a LIVE (unresolved) blade out and we sit inside its swing
 # reach — i.e. both blades are out and overlapping. Deliberately NOT gated to the
@@ -1025,7 +1403,7 @@ func _is_clashing_with(other) -> bool:
 		return false
 	var ohb_center: Vector2 = other.global_position + Vector2(other.facing * KATANA_RANGE * 0.5, 0.0)
 	var ohb_half: Vector2 = Vector2(KATANA_RANGE * 0.5 + 4.0, KATANA_HALF_H)
-	return _point_in_box(global_position, ohb_center, ohb_half)
+	return _box_hits_body(global_position, ohb_center, ohb_half)
 
 # Called by main.gd on a clash. Pushes us away from the other blade and holds that
 # velocity through the freeze + a short recoil so we visibly bounce a hair apart.
@@ -1044,6 +1422,59 @@ func apply_hit_recoil(push_dir: int) -> void:
 	velocity.y = minf(velocity.y, -KATANA_HIT_POP)
 	hit_recoil_until = Time.get_ticks_msec() / 1000.0 + KATANA_HIT_RECOIL_S
 
+# True when our guard is up AND `impact_velocity` comes at our front — i.e. we parry this strike.
+# Queried by an attacker's swing so a blocked blade can bounce the attacker instead of cutting.
+func is_guarding_against(impact_velocity: Vector2) -> bool:
+	return _blocks_incoming(impact_velocity)
+
+# Our blade landed on a foe's raised guard: bounce us back off it (opposite our facing), briefly
+# held so the parry reads. No damage, no charge — the swing is already marked resolved.
+func apply_block_recoil() -> void:
+	velocity.x = float(-facing) * BLOCK_RECOIL_SPEED
+	velocity.y = minf(velocity.y, -BLOCK_RECOIL_POP)
+	hit_recoil_until = Time.get_ticks_msec() / 1000.0 + BLOCK_RECOIL_S
+
+# Guard-vs-guard: while we hold a guard, if another guarding fighter overlaps us, shove both
+# apart with a spark. The lower slot drives the pair (applies the shove to both) so it fires once.
+func _check_shield_bump(t: float) -> void:
+	if not is_defending or not alive or t < shield_bump_until:
+		return
+	for p in get_tree().get_nodes_in_group("players"):
+		if p == self or not p.alive or not p.is_defending or slot >= p.slot:
+			continue
+		var dx: float = p.global_position.x - global_position.x
+		if absf(dx) > SHIELD_BUMP_RANGE or absf(p.global_position.y - global_position.y) > SHIELD_BUMP_VRANGE:
+			continue
+		var dir: int = 1 if dx >= 0.0 else -1   # +1 when the foe is to our right
+		apply_shield_bump(-dir, t)              # we are shoved away from the foe
+		p.apply_shield_bump(dir, t)             # the foe is shoved the other way
+		_spawn_clash_burst((global_position + p.global_position) * 0.5)
+		Audio.play("block")
+		return
+
+# Shove from a guard-vs-guard meeting: push along dir_x, small pop, face the foe we bumped.
+func apply_shield_bump(dir_x: int, t: float) -> void:
+	velocity.x = float(dir_x) * SHIELD_BUMP_SPEED
+	velocity.y = minf(velocity.y, -SHIELD_BUMP_POP)
+	shield_bump_until = t + SHIELD_BUMP_S
+	facing = -dir_x   # keep facing the fighter we just clashed guards with
+
+# A clash spark (the 5-frame lightning) for guard bounces — juicier than the small hit flash.
+func _spawn_clash_burst(pos: Vector2) -> void:
+	var path: String = "res://sprites/fx/clash_lightning_5frame_native_160x32.png"
+	if not ResourceLoader.exists(path):
+		return
+	var fx: Sprite2D = Sprite2D.new()
+	fx.set_script(load("res://fx_anim.gd"))
+	fx.frame_count = 5
+	fx.fps = 20.0
+	fx.texture = load(path)
+	fx.position = pos
+	fx.scale = Vector2(1.5, 1.5)
+	fx.z_index = 55
+	get_parent().add_child(fx)
+	Net.relay_strip_fx(path, 5, 20.0, pos, fx.scale, 55)
+
 # Drop a quick 4-frame spark burst at a successful katana hit.
 func _spawn_strike_flash(pos: Vector2) -> void:
 	var path: String = "res://sprites/fx/strike_flash_4frame_native_96x24.png"
@@ -1058,6 +1489,57 @@ func _spawn_strike_flash(pos: Vector2) -> void:
 	fx.scale = Vector2(1.5, 1.5)
 	fx.z_index = 50
 	get_parent().add_child(fx)
+	Net.relay_strip_fx(path, 4, 22.0, pos, fx.scale, 50)
+
+# TowerFall-style movement puff. kind = "run" | "jump" | "land". Spawned into the
+# world (like the other FX) so the dust stays put while the ninja keeps moving.
+# flip_x mirrors the strip so a run scuff trails the correct way.
+# foot_pos = ground contact at the player's CENTRE x; side = -1 (left) / +1 (right).
+# fx_anim centres the sprite, so we re-anchor it: inner edge pushed past the body
+# (DUST_BODY_HALF) so it sits BESIDE the ninja, and the LOWEST dust pixel (base_row,
+# since the cell's lower rows are empty padding) lands exactly on foot_pos.y — so the
+# puff rests ON the ground, not floating in the air, and nothing pokes below the floor.
+func _spawn_dust(foot_pos: Vector2, kind: String, side: float) -> void:
+	# [path, frame_count, fps, native_w, native_h, base_row]  (base_row = lowest dust pixel)
+	var info: Array = {
+		"run":  ["res://sprites/fx/dust_run_4frame_native_64x16.png", 4, 26.0, 16.0, 16.0, 14.0],
+		"jump": ["res://sprites/fx/dust_jump_5frame_native_120x24.png", 5, 24.0, 24.0, 24.0, 22.0],
+		"land": ["res://sprites/fx/dust_land_5frame_native_160x32.png", 5, 22.0, 32.0, 32.0, 26.0],
+	}.get(kind, [])
+	if info.is_empty() or not ResourceLoader.exists(info[0]):
+		return
+	var fx: Sprite2D = Sprite2D.new()
+	fx.set_script(load("res://fx_anim.gd"))
+	fx.frame_count = info[1]
+	fx.fps = info[2]
+	fx.texture = load(info[0])
+	var s: float = DUST_SCALE
+	var dir: float = -1.0 if side < 0.0 else 1.0
+	var half_w: float = info[3] * s * 0.5
+	var half_h: float = info[4] * s * 0.5
+	fx.position = Vector2(
+		foot_pos.x + dir * (DUST_BODY_HALF + half_w),
+		foot_pos.y + half_h - info[5] * s)   # drop so the lowest dust pixel sits on the floor
+	fx.scale = Vector2(dir * s, s)   # mirror so the puff drifts/leans OUTWARD
+	fx.z_index = 1   # just above the floor tiles, below combat sparks (z 50)
+	get_parent().add_child(fx)
+	Net.relay_strip_fx(info[0], info[1], info[2], fx.position, fx.scale, 1)
+
+# Run scuffs + landing puff. Called once per physics step AFTER move_and_slide(),
+# so is_on_floor() and global_position reflect this frame's result.
+func _update_movement_dust(t: float, was_falling: bool) -> void:
+	var on_floor_now: bool = is_on_floor()
+	if alive:
+		var foot: Vector2 = Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET)
+		if on_floor_now and not _was_on_floor and was_falling:
+			# landing: a puff kicks out to EACH side (nothing directly under the ninja)
+			_spawn_dust(foot, "land", -1.0)
+			_spawn_dust(foot, "land", 1.0)
+		elif on_floor_now and not is_sliding and absf(velocity.x) > RUN_DUST_MIN_HSPEED:
+			if t >= _next_run_dust_t:    # periodic scuff trailing BEHIND the direction of travel
+				_next_run_dust_t = t + RUN_DUST_INTERVAL_S
+				_spawn_dust(foot, "run", -signf(velocity.x))
+	_was_on_floor = on_floor_now
 
 # aim is a NON-normalized intent vector (per-axis -1/0/+1) from _throw_aim():
 #   (±1, 0) horizontal · (0, ±1) vertical · (±1, ±1) diagonal.
@@ -1108,8 +1590,9 @@ func _throw_shuriken(aim: Vector2) -> void:
 	s.velocity_v = vel
 	s.throw_time = Time.get_ticks_msec() / 1000.0
 	get_parent().add_child(s)
-	stash -= 1
-	stash_changed.emit(slot, stash)
+	if not MatchConfig.infinite_shurikens:
+		stash -= 1
+		stash_changed.emit(slot, stash)
 	Audio.play("throw")
 	throw_anim_until = Time.get_ticks_msec() / 1000.0 + 0.22
 
@@ -1201,21 +1684,32 @@ func take_damage(amount: int, impact_velocity: Vector2, killer_slot: int = 0) ->
 
 # Called by another player who landed on top of us (head-stomp).
 # Returns true if the stomp landed (stomper bounces). Deals 1 damage like other hits.
+# Someone landed on our head. We ALWAYS bounce them off (return true) while alive, so a stomper
+# can never perch on the head — but we only take DAMAGE when not protected by dodge/hurt i-frames.
+# The damage path opens a hurt-iframe window (take_damage), so even back-to-back stomps can't drain
+# HP faster than that window. Returns true = valid head contact, bounce the stomper.
 func hit_by_stomp(stomper) -> bool:
 	if not alive:
 		return false
-	if is_iframe:
-		return false   # dodge i-frames block the stomp
-	return take_damage(1, Vector2(0.0, 400.0), stomper.slot)   # downward stomp impulse
+	var t: float = Time.get_ticks_msec() / 1000.0
+	if not is_iframe and t >= hurt_iframe_until:
+		take_damage(1, Vector2(0.0, 400.0), stomper.slot)   # downward stomp impulse; plays "hit", opens i-frames
+	else:
+		Audio.play("dodge")   # protected — soft bounce blip, no damage
+	return true
 
 # Detect if we landed on top of another player this frame and trigger the stomp.
 func _check_headstomp() -> void:
 	if not alive:
 		return
-	# The AI never head-stomps — it does everything else (shurikens, katana, mobility) but
-	# will not jump on the player's head. Landing on a foe is just a harmless collision.
-	if is_bot:
+	# Head-stomp is a LAST RESORT for the AI: a bot only stomps when fully disarmed (no shurikens,
+	# no katana charges, no loose blade to scavenge — see _bot_should_stomp). While armed it never
+	# stomps, so even an incidental landing on the foe is a harmless collision.
+	if is_bot and not _bot_should_stomp():
 		return
+	var t: float = Time.get_ticks_msec() / 1000.0
+	if t < stomp_cooldown_until:
+		return   # just stomped — must wait before stomping again (anti rapid multi-stomp)
 	for i in get_slide_collision_count():
 		var coll: KinematicCollision2D = get_slide_collision(i)
 		var other = coll.get_collider()
@@ -1227,8 +1721,18 @@ func _check_headstomp() -> void:
 		# another player → their top-surface normal points up (-Y).
 		if coll.get_normal().y < -0.5:
 			if other.hit_by_stomp(self):
-				velocity.y = -STOMP_BOUNCE_STRENGTH   # bounce up
-				jumps_remaining = 1                    # refresh the single jump for chain stomps
+				# Bounce UP and SIDEWAYS away from the victim so we're knocked off the head instead
+				# of dropping straight back on it. The sideways shove is briefly input-locked, and a
+				# stomp cooldown blocks an instant re-stomp. NO jump refresh (it enabled chain-stomps).
+				velocity.y = -STOMP_BOUNCE_STRENGTH
+				var away: float = signf(global_position.x - other.global_position.x)
+				if away == 0.0:
+					away = float(facing)   # dead-centre overlap: shove the way we're facing
+				velocity.x = away * STOMP_BOUNCE_SIDEWAYS
+				facing = int(away)
+				stomp_bounce_lock_until = t + STOMP_BOUNCE_LOCK_S
+				stomp_cooldown_until = t + STOMP_COOLDOWN_S
+				break   # one stomp per frame
 
 func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void:
 	alive = false
@@ -1253,6 +1757,7 @@ func respawn(at_pos: Vector2) -> void:
 	collision_layer = _spawn_collision_layer   # solid again — back to being a real fighter
 	_corpse_settled = false
 	position = at_pos
+	spawn_pos = at_pos   # remembered so the MATCH_INTRO freeze can pin us to this column
 	velocity = Vector2.ZERO
 	is_iframe = false
 	is_sliding = false
@@ -1263,19 +1768,35 @@ func respawn(at_pos: Vector2) -> void:
 	hurt_iframe_until = 0.0
 	jumps_remaining = 1
 	wall_jump_lock_until = -999.0
+	stomp_cooldown_until = -999.0
+	stomp_bounce_lock_until = -999.0
 	clash_recoil_until = 0.0
 	hit_recoil_until = 0.0
+	shield_bump_until = 0.0
 	frozen_until = 0.0
+	guard_meter = GUARD_MAX_S
+	guard_cooldown_until = 0.0
 	katana_cooldown_until = -999.0
+	katana_charging = false
+	katana_charge_ready = false
+	katana_press_t = -999.0
 	slide_charged = true
 	slide_cooldown_until = 0.0
 	air_dash_penalty = false
 	last_left_tap_t = -999.0
 	last_right_tap_t = -999.0
 	_bot_jitter = randf() * 0.10
-	stash = 3
-	hp = MAX_HP
-	katana_charges = MAX_KATANA
+	# Loadout from the global match variants (MatchConfig). Defaults reproduce the standard game.
+	stash = MatchConfig.effective_start_shurikens()
+	hp = MatchConfig.max_hp
+	# Katana: PER-ROUND recharge (default) refills charges on every spawn; NEVER-recharge grants
+	# them only at the match's first spawn (round 1) and carries the remainder across later rounds.
+	# Disabled = no katana at all.
+	if not MatchConfig.katana_enabled:
+		katana_charges = 0
+	elif MatchConfig.katana_recharge or GameState.current_round == 1:
+		katana_charges = MatchConfig.katana_charges
+	# else (NEVER recharge, round > 1): keep katana_charges — carry the remaining charges over.
 	facing = 1 if slot == 1 else -1
 	death_time = -1.0
 	death_spin_dir = 0
@@ -1284,17 +1805,91 @@ func respawn(at_pos: Vector2) -> void:
 		visual.modulate = Color.WHITE
 	if katana_sprite != null:
 		katana_sprite.visible = false
+	if slash_fx != null:
+		slash_fx.stop()
 	stash_changed.emit(slot, stash)   # refreshes the stash row
 	_update_hp_indicator()            # full hearts back immediately
 	_update_katana_indicator()
 
 func _check_screen_wrap() -> void:
-	# TowerFall-style: fall off bottom → appear at top; rise above top → appear at bottom.
-	# X is PRESERVED so a wall-slide stays on the wall continuously through the wrap.
+	# TowerFall-style arena wrap. The tunnel gaps in the side walls are authored as readable
+	# wrap routes, so fighters and thrown blades must use both axes consistently.
+	if position.x < -PLAYER_W:
+		position.x = 800.0 + PLAYER_W
+	elif position.x > 800.0 + PLAYER_W:
+		position.x = -PLAYER_W
 	if position.y > 470.0:
 		position.y = -30.0
 	elif position.y < -60.0:
 		position.y = 470.0
+
+# Lazily build the procedural slash arc as a child, tinted to this fighter's clan colour. Created on
+# the first swing so it picks up the clan assigned for the match.
+func _ensure_slash_fx() -> void:
+	if slash_fx != null and is_instance_valid(slash_fx):
+		return
+	slash_fx = load("res://slash_fx.gd").new()
+	add_child(slash_fx)
+	var clan: Dictionary = GameState.get_clan(slot)
+	slash_fx.set_tint(clan.get("secondary", Color(0.7, 0.9, 1.0)))
+
+
+# Lazily build the three blade-wave charge "pips" — small slash crescents that sit in front of the
+# fighter while charging. Built once and then shown/hidden + recoloured each frame.
+func _ensure_charge_pips() -> void:
+	if not _charge_pips.is_empty():
+		return
+	var tex: Texture2D = null
+	if ResourceLoader.exists(BLADE_WAVE_TELL_SHEET):
+		tex = load(BLADE_WAVE_TELL_SHEET)
+	for i in 3:
+		var pip: Sprite2D = Sprite2D.new()
+		if tex != null:
+			pip.texture = tex
+			pip.hframes = 5
+			pip.frame = 2                                    # fullest crescent frame
+		pip.centered = true
+		pip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		pip.z_index = 56
+		var mat: CanvasItemMaterial = CanvasItemMaterial.new()
+		mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		pip.material = mat
+		pip.visible = false
+		add_child(pip)
+		_charge_pips.append(pip)
+
+
+# Charge tell. While holding, 1→2→3 coloured wave pips stack outward in front of the fighter; the
+# 3rd (hot-red, pulsing) only appears when fully charged — the "release now" signal. Hidden otherwise.
+func _update_charge_pips(t: float) -> void:
+	if not katana_charging or not alive or not GameState.is_round_active():
+		_hide_charge_pips()
+		return
+	_ensure_charge_pips()
+	var progress: float = clampf((t - katana_press_t) / maxf(BLADE_WAVE_CHARGE_TIME_S, 0.001), 0.0, 1.0)
+	var shown: int = 1
+	if katana_charge_ready:
+		shown = 3                # fully charged → all three, 3rd = release colour
+	elif progress >= 0.5:
+		shown = 2
+	for i in _charge_pips.size():
+		var pip: Sprite2D = _charge_pips[i]
+		if i < shown:
+			var s: float = 0.42
+			if i == 2 and katana_charge_ready:
+				s *= 0.9 + 0.16 * sin(t * 22.0)   # the ready pip pulses to draw the eye
+			pip.visible = true
+			pip.position = Vector2(facing * (13.0 + i * 11.0), -2.0)
+			pip.scale = Vector2(facing * s, s)
+			pip.modulate = CHARGE_PIP_COLORS[i]
+		else:
+			pip.visible = false
+
+
+func _hide_charge_pips() -> void:
+	for pip in _charge_pips:
+		pip.visible = false
+
 
 func _update_visual() -> void:
 	if visual == null:
@@ -1312,6 +1907,9 @@ func _update_visual() -> void:
 		visual.flip_h = false   # facing irrelevant while spinning
 		if katana_sprite != null:
 			katana_sprite.visible = false   # never leave a blade stuck on a corpse (died mid-swing)
+		if slash_fx != null:
+			slash_fx.stop()
+		_hide_charge_pips()
 		# Hearts/stash/katana belong to a LIVING ninja — hide them on the corpse here too
 		# (belt-and-suspenders with the _process refresh) so a dead body can never display a
 		# frozen heart row, regardless of which update path runs this frame.
@@ -1321,7 +1919,13 @@ func _update_visual() -> void:
 		return
 	# === Alive: determine state & pick texture mode + frame ===
 	var in_action: bool = is_sliding or t < throw_anim_until
-	if is_defending:
+	if is_swinging and swing_texture != null:
+		# Full-body katana slash: step the swing sheet across the swing window.
+		_set_visual_mode("swing")
+		var dur: float = maxf(KATANA_SWING_DURATION_S, 0.001)
+		var phase: float = clampf((t - swing_start_t) / dur, 0.0, 1.0)
+		visual.frame = mini(int(phase * SWING_FRAMES), SWING_FRAMES - 1)
+	elif is_defending:
 		_set_visual_mode("pose")
 		visual.frame = FRAME_IDLE   # planted brace; the raised blade (below) sells the guard
 	elif in_action:
@@ -1331,8 +1935,12 @@ func _update_visual() -> void:
 		_set_visual_mode("pose")
 		visual.frame = FRAME_JUMP
 	elif abs(velocity.x) > 15.0:
-		_set_visual_mode("pose")
-		visual.frame = FRAME_WALK_1 if (int(t / WALK_CYCLE_S) % 2 == 0) else FRAME_WALK_2
+		if walk_texture != null:
+			_set_visual_mode("walk")   # richer 6-frame run cycle
+			visual.frame = int(t / WALK6_FRAME_S) % WALK6_FRAMES
+		else:
+			_set_visual_mode("pose")   # fallback: 2-frame pose walk
+			visual.frame = FRAME_WALK_1 if (int(t / WALK_CYCLE_S) % 2 == 0) else FRAME_WALK_2
 	else:
 		# True idle on the ground — play the 6-frame breathing animation
 		if idle_texture != null:
@@ -1361,13 +1969,14 @@ func _update_visual() -> void:
 	# swings to the facing side. The V2 art is drawn blade-left, so facing right => mirror.
 	if katana_sprite != null:
 		if is_swinging:
+			# The blade swings (frames 2→5) AND a film-style slash crescent sweeps over it in sync —
+			# the blade reads as the weapon, the trail as its speed. Hit detection is unchanged (that
+			# lives in _process_swing); this is purely visual.
 			katana_sprite.visible = true
 			katana_sprite.flip_h = false
 			katana_sprite.scale = Vector2(-facing * KATANA_VISUAL_SCALE, KATANA_VISUAL_SCALE)
 			katana_sprite.position = Vector2(facing * 7.0, -1.0)   # hand: just in front of the chest
-			# V2 frame order: 0 sheathed, 1 drawn, 2 raised, 3 mid_swing, 4 strike_hit, 5 follow_thru.
-			# raised(2) = vertical windup (grip pixel ~16,14); follow_thru(5) = forward slash (grip ~25,1).
-			# offset = (16 - grip_x, 8 - grip_y) puts that grip pixel on the node origin (= the hand).
+			# V2 frame order: 2 raised (windup) → 5 follow-through; offset anchors the grip to the hand.
 			var elapsed: float = t - swing_start_t
 			if elapsed >= KATANA_HIT_START_S:
 				katana_sprite.frame = 5
@@ -1375,6 +1984,8 @@ func _update_visual() -> void:
 			else:
 				katana_sprite.frame = 2
 				katana_sprite.offset = Vector2(0.0, -6.0)
+			_ensure_slash_fx()
+			slash_fx.play(clampf(elapsed / KATANA_SWING_DURATION_S, 0.0, 1.0), facing)
 		elif is_defending:
 			# Guard stance: the raised(2) vertical blade held planted in front of the chest.
 			# Same grip-anchor as the swing windup, nudged a touch further forward.
@@ -1384,8 +1995,25 @@ func _update_visual() -> void:
 			katana_sprite.position = Vector2(facing * 8.0, -2.0)
 			katana_sprite.frame = 2
 			katana_sprite.offset = Vector2(0.0, -6.0)
+			if slash_fx != null:
+				slash_fx.stop()
+		elif katana_charging:
+			# Blade-wave charge: hold the blade raised; the wind-up is read from the wave "pips" that
+			# stack up in front of the fighter (see _update_charge_pips), not a crescent at the hand.
+			katana_sprite.visible = true
+			katana_sprite.flip_h = false
+			katana_sprite.scale = Vector2(-facing * KATANA_VISUAL_SCALE, KATANA_VISUAL_SCALE)
+			katana_sprite.position = Vector2(facing * 8.0, -2.0)
+			katana_sprite.frame = 2
+			katana_sprite.offset = Vector2(0.0, -6.0)
+			if slash_fx != null:
+				slash_fx.stop()
 		else:
 			katana_sprite.visible = false
+			if slash_fx != null:
+				slash_fx.stop()
+	# Blade-wave charge tell: the 1→3 coloured wave pips in front of the fighter.
+	_update_charge_pips(t)
 	# Above-head indicators are refreshed in _process (every rendered frame, after all
 	# physics mutations), so HP / stash / katana counts can't lag behind a hit, catch,
 	# pickup or stomp that another node applied this frame.
@@ -1397,6 +2025,7 @@ func _process(_delta: float) -> void:
 	_update_hp_indicator()
 	_update_stash_indicator()
 	_update_katana_indicator()
+	_update_guard_indicator()
 
 # Update above-head stash icons: filled (alpha 1.0) for held shurikens, dim (0.2) for used,
 # hidden entirely (alpha 0) when dead.
@@ -1421,20 +2050,47 @@ func _update_katana_indicator() -> void:
 	for i in katana_icons.size():
 		katana_icons[i].modulate.a = 1.0 if (alive and i < katana_charges) else 0.0
 
+# Guard meter bar: width tracks remaining guard, cyan when usable and red while broken/refilling.
+func _update_guard_indicator() -> void:
+	if guard_bar_fill == null:
+		return
+	guard_bar_bg.visible = alive
+	guard_bar_fill.visible = alive
+	if not alive:
+		return
+	var frac: float = clampf(guard_meter / GUARD_MAX_S, 0.0, 1.0)
+	guard_bar_fill.size.x = GUARD_BAR_W * frac
+	var on_cooldown: bool = Time.get_ticks_msec() / 1000.0 < guard_cooldown_until
+	guard_bar_fill.color = Color(0.9, 0.35, 0.3, 0.95) if on_cooldown else Color(0.4, 0.8, 1.0, 0.95)
+
 # Swap the Sprite2D's texture + hframes when the visual mode changes.
 # No-op if already in the requested mode (avoids per-frame texture re-assignment).
 func _set_visual_mode(mode: String) -> void:
 	if visual == null or current_visual_mode == mode:
 		return
+	# Graceful fallbacks when an optional sheet is missing (costumes/elemental skins).
 	if mode == "idle" and idle_texture == null:
-		return   # graceful fallback: stay in pose mode if idle sheet missing
+		return
+	if mode == "walk" and walk_texture == null:
+		mode = "pose"
+	if mode == "swing" and swing_texture == null:
+		mode = "pose"
+	if current_visual_mode == mode:
+		return
 	current_visual_mode = mode
-	if mode == "idle":
-		visual.texture = idle_texture
-		visual.hframes = 6
-	else:
-		visual.texture = pose_texture
-		visual.hframes = 5
+	match mode:
+		"idle":
+			visual.texture = idle_texture
+			visual.hframes = 6
+		"walk":
+			visual.texture = walk_texture
+			visual.hframes = WALK6_FRAMES
+		"swing":
+			visual.texture = swing_texture
+			visual.hframes = SWING_FRAMES
+		_:
+			visual.texture = pose_texture
+			visual.hframes = 5
 	visual.frame = 0   # reset to avoid out-of-bounds when hframes changes
 
 # Compute which idle frame to display at time t, walking the IDLE_PATTERN.
