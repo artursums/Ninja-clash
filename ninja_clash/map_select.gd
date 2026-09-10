@@ -40,7 +40,9 @@ func _on_remote_cursor(index: int) -> void:
 		_refresh()
 
 func _preview(data: Dictionary) -> Texture2D:
-	var path: String = data.get("background", "")
+	var path: String = data.get("preview", "")
+	if path.is_empty() or not ResourceLoader.exists(path):
+		path = data.get("background", "")
 	if not path.is_empty() and ResourceLoader.exists(path):
 		return load(path)
 	var fallback := GradientTexture2D.new()

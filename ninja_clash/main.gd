@@ -1,14 +1,13 @@
-# Main orchestrator. Reacts to GameState transitions; loads themed maps with
-# gradient sky + procedural background decorations + foreground props.
+# Main orchestrator: match flow, arena loading, fighters, and UI layers.
 
 extends Node2D
 
-const MAP_W := 800
-const MAP_H := 450
+const Arena := preload("res://arena_rules.gd")
+const MAP_W := int(Arena.WIDTH)
+const MAP_H := int(Arena.HEIGHT)
 const PLAYER_W := 20.0
 const PLAYER_H := 32.0
-# Per-level backdrops live at res://sprites/levels/<slug>/background.png, set via each map's
-# "background" field (Maps). Absent file → gradient sky fallback.
+# Maps supply a panorama texture; missing art falls back to a gradient.
 const PLATFORM_SRC_Y_WALKABLE := 395.0   # measured: top of opaque stone in platform.png (1536×1024)
 const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width × this
 
@@ -57,7 +56,7 @@ var bg_decorations: Node2D
 var fg_decorations: Node2D
 var current_map_nodes: Array = []
 var players: Array = []
-var spawn_points: Array = [Vector2(120, 380), Vector2(680, 380)]
+var spawn_points: Array = []
 
 var canvas: CanvasLayer
 var title_screen: Control
@@ -284,6 +283,11 @@ func _build_arena() -> void:
 	arena_root = Node2D.new()
 	arena_root.name = "ArenaRoot"
 	add_child(arena_root)
+	var camera := Camera2D.new()
+	camera.name = "ArenaCamera"
+	camera.position = Arena.SIZE * 0.5
+	camera.zoom = Arena.UI_SIZE / Arena.SIZE
+	arena_root.add_child(camera)
 
 	# Solid color behind the sky image (fills letterbox when bg keeps aspect ratio)
 	sky_bg_solid = ColorRect.new()
@@ -294,13 +298,11 @@ func _build_arena() -> void:
 	sky_bg_solid.z_index = -15
 	arena_root.add_child(sky_bg_solid)
 
-	# Sky background image (TextureRect at z=-10).
-	# Sized 640×450 (positioned x=80) so it fills the gap between walls with 6 px overlap
-	# onto each wall — no visible black strips. KEEP_ASPECT_COVERED keeps moon round,
-	# crops only ~6% of source vertically (decorative cherry-canopy top + cliff base).
+	# Full-world background; the fixed camera leaves HUD sizing independent.
 	sky_rect = TextureRect.new()
-	sky_rect.position = Vector2(80, 0)
-	sky_rect.size = Vector2(640, 450)
+	sky_rect.position = Vector2.ZERO
+	sky_rect.size = Arena.SIZE
+	sky_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sky_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
@@ -321,26 +323,18 @@ func _build_arena() -> void:
 	arena_root.add_child(fg_decorations)
 
 	# Players — created to match the mode's fighter count (2 duel · 4 free-for-all).
+	spawn_points = Maps.get_map(GameState.selected_map_index).spawn_points.duplicate()
 	_ensure_player_count(GameState.num_players())
 
-# Spawn position for a fighter slot. The free-for-all needs four; the map provides two,
-# so slots 3-4 use the upper-side platforms.
-#
-# Each slot maps to its OWN point by index — never modulo-wrapped. A modulo wrap would silently
-# put two different slots on the same point if a slot index ever exceeded the point count (e.g. a
-# stray higher-slot fighter after an FFA→duel switch), so two fighters would spawn on top of each
-# other. Instead, if there is no dedicated point for a slot, fall back to a spread position so no
-# two fighters can ever coincide.
-const FFA_SPAWNS: Array = [Vector2(230, 340), Vector2(570, 340), Vector2(220, 170), Vector2(580, 170)]
-
+# Every mode uses the arena's authored slot positions.
 func _player_spawn(slot: int) -> Vector2:
-	var pts: Array = FFA_SPAWNS if GameState.num_players() >= 4 else spawn_points
+	var pts: Array = spawn_points
 	var idx: int = slot - 1
 	if idx >= 0 and idx < pts.size():
 		return pts[idx]
 	# More fighters than defined spawn points — spread them out so no two ever share a spot.
 	push_warning("Spawn: slot %d has no dedicated spawn (only %d points); using spread fallback" % [slot, pts.size()])
-	return Vector2(110.0 + idx * 190.0, 340.0)
+	return Vector2(120.0 + idx * 240.0, 424.0)
 
 func _make_player(slot: int) -> CharacterBody2D:
 	var p: CharacterBody2D = CharacterBody2D.new()
@@ -860,6 +854,9 @@ func _load_map(index: int) -> void:
 	# Sky: use this level's background image if present, else gradient fallback
 	var using_image: bool = _apply_sky_background(data.get("sky_top", data.bg_color), data.get("sky_bot", data.bg_color), data.get("background", ""))
 
+	sky_rect.modulate = data.get("background_tint", Color.WHITE)
+	sky_bg_solid.visible = not using_image
+
 	# Background decorations — skip when a real image is the backdrop (would clash)
 	bg_decorations.commands = [] if using_image else data.get("bg_decorations", [])
 	bg_decorations.queue_redraw()
@@ -868,16 +865,15 @@ func _load_map(index: int) -> void:
 	fg_decorations.commands = data.get("fg_decorations", [])
 	fg_decorations.queue_redraw()
 
-	# Walls (with edge highlight, unless transparent_platforms=true; sprite if provided)
-	var edge_col: Color = data.get("wall_edge_color", data.wall_color)
-	var transparent: bool = data.get("transparent_platforms", false)
+	var terrain := Node2D.new()
+	terrain.set_script(preload("res://arena_terrain.gd"))
+	terrain.walls = data.walls
+	terrain.atlas = load(data.walls[0].sprite)
+	terrain.edge_color = data.wall_edge_color
+	arena_root.add_child(terrain)
+	current_map_nodes.append(terrain)
 	for w in data.walls:
-		var sprite_path: String = w.get("sprite", "")
-		var sprite_region: Rect2 = w.get("sprite_region", Rect2())
-		var sprite_mode: String = w.get("sprite_mode", "platform")
-		var walkable_y: float = w.get("sprite_walkable", -1.0)
-		var overhang: float = data.get("platform_overhang", PLATFORM_VISUAL_OVERHANG)
-		var body := _make_wall(w.center, w.size, data.wall_color, edge_col, transparent, sprite_path, sprite_region, sprite_mode, walkable_y, overhang)
+		var body := _make_wall(w.center, w.size, data.wall_color, data.wall_edge_color, true)
 		current_map_nodes.append(body)
 
 	# Non-colliding scenery sprites (e.g. neon gate pillars, ladder tower) drawn behind the
@@ -887,19 +883,11 @@ func _load_map(index: int) -> void:
 		if deco != null:
 			current_map_nodes.append(deco)
 
-	# Optional per-map animated ambience layer (Sakura: lantern glow / moon / birds;
-	# Neo Tokyo: rain / sun bloom / neon flicker / lightning / mist).
-	var ambience: String = data.get("ambience", "")
-	var ambience_scripts := {
-		"sakura": "res://sakura_ambience.gd",
-		"neon_tokyo": "res://neon_tokyo_ambience.gd",
-		"verdant_cistern": "res://verdant_cistern_ambience.gd",
-	}
-	if ambience_scripts.has(ambience):
-		var amb := Node2D.new()
-		amb.set_script(load(ambience_scripts[ambience]))
-		arena_root.add_child(amb)
-		current_map_nodes.append(amb)
+	var amb := Node2D.new()
+	amb.set_script(preload("res://arena_ambience.gd"))
+	amb.theme = data.get("ambience", "cistern")
+	arena_root.add_child(amb)
+	current_map_nodes.append(amb)
 
 	print("[MAIN] Loaded map %d: %s" % [index, data.name])
 
@@ -995,6 +983,7 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 		var sprite: Sprite2D = Sprite2D.new()
 		sprite.texture = load(sprite_path)
 		sprite.centered = true
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var src_w: float
 		var src_h: float
 		if sprite_region.size.x > 0:
@@ -1005,7 +994,10 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 		else:
 			src_w = float(sprite.texture.get_width())
 			src_h = float(sprite.texture.get_height())
-		if sprite_mode == "fill":
+		if sprite_mode == "block":
+			# Atlas rectangles fill exactly the static collision bounds.
+			sprite.scale = size / Vector2(src_w, src_h)
+		elif sprite_mode == "fill":
 			# Full-screen vertical wall: scale uniformly so visual height = 450 (screen)
 			# Centered on body, which is assumed at world y=225 (screen center).
 			var s: float = 450.0 / src_h

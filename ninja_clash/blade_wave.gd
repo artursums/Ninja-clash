@@ -12,6 +12,8 @@
 
 extends Area2D
 
+const Arena := preload("res://arena_rules.gd")
+
 const SLASH_SHEET := "res://sprites/fx/katana_slash_5frame_native_400x80.png"
 const SHEET_HFRAMES := 5
 const HEAD_FRAME := 2                          # fullest crescent frame, used as the wave body
@@ -21,7 +23,7 @@ const TRAIL_COUNT := 4
 const TRAIL_STRIDE := 3
 const HISTORY_MAX := TRAIL_STRIDE * TRAIL_COUNT + 1
 const TRAIL_ALPHAS := [0.5, 0.34, 0.22, 0.12]   # newest → oldest afterimage
-const SCREEN_MARGIN := 48.0                     # despawn once this far past the 800×450 viewport
+const SCREEN_MARGIN := 48.0                     # despawn once this far past the arena bounds
 
 # --- Set by the thrower BEFORE add_child (so they are valid in _ready) ---
 var velocity_v: Vector2 = Vector2.ZERO   # straight-line flight (direction × speed); never re-aimed
@@ -120,8 +122,8 @@ func apply_net(arr: Array) -> void:
 
 
 func _offscreen() -> bool:
-	return position.x < -SCREEN_MARGIN or position.x > 800.0 + SCREEN_MARGIN \
-		or position.y < -SCREEN_MARGIN or position.y > 450.0 + SCREEN_MARGIN
+	return position.x < -SCREEN_MARGIN or position.x > Arena.WIDTH + SCREEN_MARGIN \
+		or position.y < -SCREEN_MARGIN or position.y > Arena.HEIGHT + SCREEN_MARGIN
 
 
 func _record_history() -> void:

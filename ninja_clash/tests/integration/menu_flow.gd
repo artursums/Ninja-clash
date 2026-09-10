@@ -37,6 +37,10 @@ func run() -> void:
 	net = root.get_node("Net")
 	await process_frame
 	var title: Control = game.title_screen
+	check(title._intro_active, "Boot starts the title assembly")
+	click_control(title._buttons[0])
+	check(not title._intro_active and state.current_state == state.State.TITLE, "Skipping the intro does not activate a menu item")
+	check(title._halves[0].position.x == 0 and title._halves[1].position.x == 400, "Both picture halves meet without a gap")
 	unlock(title)
 	click_control(title._buttons[0])
 	check(state.current_state == state.State.MODE_SELECT, "Local play opens mode selection")
@@ -48,6 +52,8 @@ func run() -> void:
 	check(state.game_mode == state.Mode.HUMAN_VS_AI and state.ai_difficulty == 3, "Mode and AI rank reach match state")
 	var clans: Control = game.clan_select_screen
 	unlock(clans)
+	check(clans._player_buttons[0].position.x >= 500 and clans._player_buttons[0].size.y >= 44, "Solo ready action is large and on the right")
+	check(not clans._player_buttons[1].visible, "Solo mode hides the second player's action")
 	clans._mouse_pick(0)
 	clans._setup()
 	check(state.current_state == state.State.MATCH_SETUP, "Rules open from clan selection")
@@ -130,6 +136,15 @@ func run() -> void:
 	click_control(title._buttons[0])
 	check(state.current_state == previous, "Modal options block clicks on the menu behind them")
 	title._set_overlay(0)
+	check(not title._intro_active, "Returning to title does not replay the entrance")
+	await process_frame
+	await process_frame
+	var time_scale := Engine.time_scale
+	Engine.time_scale = 0.05
+	title._start_intro()
+	await create_timer(1.2, true, false, true).timeout
+	check(not title._intro_active and title._content.modulate.a == 1, "Title entrance completes independently of combat time scale")
+	Engine.time_scale = time_scale
 	game.queue_free()
 	await process_frame
 	print("Menu flow: %d checks, %d failures" % [checks, failures])

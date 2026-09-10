@@ -4,13 +4,13 @@ const UI = preload("res://menu_ui.gd")
 const STANDARDS = preload("res://sprites/menu/clan_standards.webp")
 
 const BANNER_W := 164.0
-const BANNER_H := 184.0
+const BANNER_H := 160.0
 const BANNER_GAP := 24.0
 const BANNER_Y := 120.0
 const CHIP_SCALE := 1.6
 const NINJA_SIZE := 72.0       # skin preview on the hovered banner (16×16 frame, scaled up)
 const NINJA_Y_OFF := 82.0
-const NAME_Y := 304.0          # clan-name label row, just below the flags
+const NAME_Y := 284.0          # clan-name label row, just below the flags
 
 var p1_cursor: int = 3
 var p2_cursor: int = 1
@@ -28,6 +28,8 @@ var _mouse_slot := 1
 var _card_buttons: Array[Button] = []
 var _player_buttons: Array[Button] = []
 var _skin_buttons: Array[Button] = []
+var _selection_labels: Array[Label] = []
+var _docks: Array[Panel] = []
 var _input_lockout_until: float = 0.0
 
 func _ready() -> void:
@@ -63,7 +65,7 @@ func _build() -> void:
 	UI.backdrop(self, 0.78)
 	UI.header(self, "CHOOSE YOUR CLAN", 1)
 	for i in 4:
-		var card := UI.button(self, "", Rect2(_banner_x(i), BANNER_Y, BANNER_W, 212), _mouse_pick.bind(i))
+		var card := UI.button(self, "", Rect2(_banner_x(i), BANNER_Y, BANNER_W, 192), _mouse_pick.bind(i))
 		_card_buttons.append(card)
 		var atlas := AtlasTexture.new()
 		atlas.atlas = STANDARDS
@@ -80,13 +82,15 @@ func _build() -> void:
 	p1_chip = UI.label(self, "P1", Rect2(0, 0, 45, 27), 22, UI.IVORY, true)
 	p2_chip = UI.label(self, "P2", Rect2(0, 0, 45, 27), 22, UI.IVORY, true)
 	for slot in [1, 2]:
-		var x := 32 if slot == 1 else 426
-		_player_buttons.append(UI.button(self, "", Rect2(x, 344, 180, 30), _mouse_lock.bind(slot), 16))
-		_skin_buttons.append(UI.button(self, "", Rect2(x + 188, 344, 154, 30), _mouse_skin.bind(slot), 14))
-	status_label = UI.label(self, "", Rect2(150, 379, 470, 24), 14, UI.MUTED, true)
-	UI.button(self, "< BACK", Rect2(32, 380, 100, 25), _back, 14)
-	UI.button(self, "TAB  RULES", Rect2(650, 380, 118, 25), _setup, 14)
-	UI.footer(self, "P1  A/D + ENTER    P2  NUM 4/6 + 0    DOWN  UNLOCK    P / 7  SKIN    ESC  BACK")
+		var x := 32 if slot == 1 else 416
+		_docks.append(UI.panel(self, Rect2(x, 344, 352, 62)))
+		_selection_labels.append(UI.label(self, "", Rect2(x + 12, 348, 196, 20), 16))
+		_skin_buttons.append(UI.button(self, "", Rect2(x + 12, 373, 190, 26), _mouse_skin.bind(slot), 14))
+		_player_buttons.append(UI.button(self, "", Rect2(x + 218, 352, 122, 46), _mouse_lock.bind(slot), 18))
+	status_label = UI.label(self, "", Rect2(150, 314, 500, 24), 14, UI.MUTED, true)
+	UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
+	UI.button(self, "TAB  RULES", Rect2(650, 416, 118, 24), _setup, 14)
+	UI.label(self, "A/D  SELECT   ENTER  READY   P  SKIN   P2  NUM 4/6 + 0", Rect2(144, 416, 496, 24), 12, UI.MUTED, true)
 
 func _solo() -> bool:
 	return not Net.is_online() and GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]
@@ -442,7 +446,23 @@ func _refresh() -> void:
 		_skin_buttons[slot - 1].disabled = not local or locked
 		_player_buttons[slot - 1].text = "P%d  %s" % [slot, "UNLOCK" if locked else "LOCK IN"]
 		_skin_buttons[slot - 1].text = "%s  >" % GameState.skin_label(GameState.p1_skin if slot == 1 else GameState.p2_skin)
-		UI.select(_player_buttons[slot - 1], _mouse_slot == slot)
+		var index: int = slot - 1
+		var clan: Dictionary = GameState.CLANS[p1_cursor if slot == 1 else p2_cursor]
+		_docks[index].visible = slot == 1 or not solo
+		_selection_labels[index].visible = slot == 1 or not solo
+		_selection_labels[index].text = ("YOUR CLAN  ·  " if solo else "P%d  ·  " % slot) + clan.name
+		_selection_labels[index].add_theme_color_override("font_color", clan.color)
+		var x := 32.0 if slot == 1 else 416.0
+		_docks[index].size.x = 736 if solo else 352
+		_selection_labels[index].position = Vector2(x + 12, 348)
+		_selection_labels[index].size.x = 270 if solo else 196
+		_skin_buttons[index].position = Vector2(328, 355) if solo else Vector2(x + 12, 373)
+		_skin_buttons[index].size = Vector2(188, 40) if solo else Vector2(190, 26)
+		_player_buttons[index].position = Vector2(540, 352) if solo else Vector2(x + 218, 352)
+		_player_buttons[index].size = Vector2(216, 46) if solo else Vector2(122, 46)
+		if solo:
+			_player_buttons[index].text = "READY  >"
+		UI.select(_player_buttons[index], local and (solo or _mouse_slot == slot), clan.color)
 	if solo:
 		if GameState.game_mode == GameState.Mode.FFA:
 			status_label.text = "P1: pick your clan — the 3 bots take the rest"

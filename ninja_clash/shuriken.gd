@@ -5,6 +5,8 @@
 
 extends Area2D
 
+const Arena := preload("res://arena_rules.gd")
+
 const GRAVITY := 600.0
 const TERMINAL := 400.0
 
@@ -135,17 +137,9 @@ func _physics_process(delta: float) -> void:
 	position += velocity_v * dt
 	# Screen wrap. Clearing the path history on a wrap stops the comet trail from streaking
 	# across the whole screen between the old and new sides.
-	if position.x < -16.0:
-		position.x = 816.0
-		_pos_history.clear()
-	elif position.x > 816.0:
-		position.x = -16.0
-		_pos_history.clear()
-	if position.y > 470.0:
-		position.y = -16.0
-		_pos_history.clear()
-	elif position.y < -60.0:
-		position.y = 460.0
+	var wrapped := Arena.wrap_position(position, Vector2(16, 16))
+	if not wrapped.is_equal_approx(position):
+		position = wrapped
 		_pos_history.clear()
 	_advance_spin(dt)
 	_record_history()

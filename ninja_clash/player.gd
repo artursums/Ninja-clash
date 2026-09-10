@@ -8,6 +8,8 @@
 
 extends CharacterBody2D
 
+const Arena := preload("res://arena_rules.gd")
+
 # === Tuning (data-driven) ===
 # Loaded from player_tuning.tres in _ready (or an injected PlayerTuning for tests) so balance is
 # editable + testable. Declared as vars (not consts) for that reason; the defaults below match the
@@ -1231,17 +1233,20 @@ func _bot_pursue_stomp(t: float, dy: float, adx: float, to_enemy: int) -> int:
 		_bot_pressed[input_jump] = true
 	return 0   # hold the alignment and drop
 
-# Cache the loaded map's floating-platform rects (rebuilt only when the map changes — never per
-# frame). Side walls (≈550 px tall) are excluded; only thin decks count as reachable high ground.
+# Cache clear landing spans once per map; covered sections of a wall are not targets.
 func _bot_ensure_platforms() -> void:
 	var idx: int = GameState.selected_map_index
 	if idx == _bot_platforms_map:
 		return
 	_bot_platforms_map = idx
 	_bot_platforms.clear()
-	for w in Maps.get_map(idx).get("walls", []):
+	var data: Dictionary = Maps.get_map(idx)
+	if data.has("bot_ledges"):
+		_bot_platforms.assign(data.bot_ledges)
+		return
+	for w in data.get("walls", []):
 		var sz: Vector2 = w.get("size", Vector2.ZERO)
-		if sz.y > 0.0 and sz.y <= BOT_PLATFORM_MAX_THICK:
+		if w.get("bot_perch", sz.y > 0.0 and sz.y <= BOT_PLATFORM_MAX_THICK):
 			var c: Vector2 = w.get("center", Vector2.ZERO)
 			_bot_platforms.append(Rect2(c - sz * 0.5, sz))
 
@@ -1812,16 +1817,7 @@ func respawn(at_pos: Vector2) -> void:
 	_update_katana_indicator()
 
 func _check_screen_wrap() -> void:
-	# TowerFall-style arena wrap. The tunnel gaps in the side walls are authored as readable
-	# wrap routes, so fighters and thrown blades must use both axes consistently.
-	if position.x < -PLAYER_W:
-		position.x = 800.0 + PLAYER_W
-	elif position.x > 800.0 + PLAYER_W:
-		position.x = -PLAYER_W
-	if position.y > 470.0:
-		position.y = -30.0
-	elif position.y < -60.0:
-		position.y = 470.0
+	position = Arena.wrap_position(position, Vector2(PLAYER_W, PLAYER_H))
 
 # Lazily build the procedural slash arc as a child, tinted to this fighter's clan colour. Created on
 # the first swing so it picks up the clan assigned for the match.
