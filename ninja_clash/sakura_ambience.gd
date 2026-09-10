@@ -1,6 +1,5 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Layered atmospheric ambience for the Sakura Temple map. Adds depth ("ruumilisus")
-# through three parallax/animation layers that all run on a REAL-time clock, so they
+# Layered atmospheric ambience for the Sakura Temple map. Builds a sense of spatial
+# depth through three parallax/animation layers that all run on a REAL-time clock, so they
 # keep breathing through the Engine.time_scale==0 clash hitstop (same trick as fx_anim.gd).
 #
 #   1. Lantern fire glow  — two flickering additive halos pinned over the wall lanterns,

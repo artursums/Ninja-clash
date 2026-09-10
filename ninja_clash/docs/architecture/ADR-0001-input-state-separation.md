@@ -11,8 +11,8 @@ Accepted (2026-05-26)
 ## Decision Makers
 
 `technical-director`, project owner. Informed by the Couch Input GDD
-(`design/gdd/couch-input.md`) and game-concept risk *"Online-deferral
-architectural debt"* (`design/gdd/game-concept.md`).
+(`docs/gdd/couch-input.md`) and game-concept risk *"Online-deferral
+architectural debt"* (`docs/gdd/game-concept.md`).
 
 ## Context
 
@@ -227,9 +227,9 @@ way. The binding "no direct `Input.*` in gameplay" rule is the part that must no
 
 ## Related
 
-- `design/gdd/couch-input.md` — CouchInput interface, signals, slot model (this ADR makes its
+- `docs/gdd/couch-input.md` — CouchInput interface, signals, slot model (this ADR makes its
   separation principle binding architecture-wide)
-- `design/gdd/movement.md` — consumes intent; owns jump-vs-dodge resolution
-- `design/gdd/game-concept.md` — risk "Online-deferral architectural debt"; networking deferral
-- `production/sprints/sprint-01.md` — T3 (this ADR), T5 (Couch Input), T7 (Character Controller)
+- `docs/gdd/movement.md` — consumes intent; owns jump-vs-dodge resolution
+- `docs/gdd/game-concept.md` — risk "Online-deferral architectural debt"; networking deferral
+- `docs/production/sprint-01.md` — T3 (this ADR), T5 (Couch Input), T7 (Character Controller)
 - `prototypes/movement-and-combat/player.gd` — the anti-pattern this ADR forbids in production

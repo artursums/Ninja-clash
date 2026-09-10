@@ -201,7 +201,7 @@ consumers (one indirect).
 
 **Bidirectional consistency** (resolved 2026-05-17):
 
-- `design/gdd/systems-index.md` updated: Character Controller row + Dependency Map Foundation Layer entry now list Map as a dependency.
+- `docs/gdd/systems-index.md` updated: Character Controller row + Dependency Map Foundation Layer entry now list Map as a dependency.
 - Movement's index row stays as-is (Character Controller + Couch Input) — Movement consumes Map *through* Character Controller, not directly.
 
 ## Tuning Knobs

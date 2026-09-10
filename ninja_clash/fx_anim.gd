@@ -1,4 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
 # One-shot sprite-strip FX (strike flash, clash lightning, ...). Plays its frames
 # once on REAL time so it keeps animating even while Engine.time_scale is 0 during
 # a clash hitstop, then frees itself.

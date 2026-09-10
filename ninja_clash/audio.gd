@@ -1,9 +1,9 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
 # Autoload: Audio
-# Procedural beep SFX generated at startup via AudioStreamWAV. No audio assets shipped.
-# Crude but lets the prototype simulate sound feedback for testing the full match loop.
+# Music playback plus the SFX layer. Music tracks (generated with Suno AI) ship under audio/start-menu/
+# and audio/gameplay/ on a dedicated Music bus; Settings drives the Music and SFX bus
+# levels independently. Sound EFFECTS are still procedural beeps synthesised at startup
+# via AudioStreamWAV — dropping a real <key>.ogg/.wav into audio/sfx/ overrides the beep
+# for that key with no code change.
 
 extends Node
 

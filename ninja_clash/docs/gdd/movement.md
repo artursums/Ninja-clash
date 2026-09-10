@@ -377,9 +377,9 @@ Result: short tap → short jump arc; held tap → full jump arc. Standard Tower
 
 **Bidirectional consistency notes:**
 
-- `design/gdd/systems-index.md` already lists Movement correctly: depends on Character Controller + Couch Input (Core Layer row 5); depended on by Combat, Round Flow, Visual FX (their respective rows). No index updates needed for dependency direction.
-- **`design/gdd/game-concept.md` Dependencies table is stale on Movement**: currently says "Movement depends on: Couch Input", missing Character Controller. Recommend updating to "Movement depends on: Character Controller, Couch Input" during the post-design index-update step (similar updates were made for Round Flow during prior GDD passes).
-- **CC GDD internal API inconsistency**: `design/gdd/character-controller.md` Rule 6 mentions `set_vertical_velocity(v)` as a Movement-callable method, but Rule 10's command list omits it. Movement Rule 8 (wall-slide) and Rule 2 (API list) both call it. Recommend updating CC GDD Rule 10 to include this method for consistency. Carried to Open Questions for the implementation step.
+- `docs/gdd/systems-index.md` already lists Movement correctly: depends on Character Controller + Couch Input (Core Layer row 5); depended on by Combat, Round Flow, Visual FX (their respective rows). No index updates needed for dependency direction.
+- **`docs/gdd/game-concept.md` Dependencies table is stale on Movement**: currently says "Movement depends on: Couch Input", missing Character Controller. Recommend updating to "Movement depends on: Character Controller, Couch Input" during the post-design index-update step (similar updates were made for Round Flow during prior GDD passes).
+- **CC GDD internal API inconsistency**: `docs/gdd/character-controller.md` Rule 6 mentions `set_vertical_velocity(v)` as a Movement-callable method, but Rule 10's command list omits it. Movement Rule 8 (wall-slide) and Rule 2 (API list) both call it. Recommend updating CC GDD Rule 10 to include this method for consistency. Carried to Open Questions for the implementation step.
 - Combat, Round Flow, and Visual FX GDDs are **not yet designed**. The contracts above are forward expectations those GDDs must honor when authored.
 
 ## Tuning Knobs
@@ -416,7 +416,7 @@ Result: short tap → short jump arc; held tap → full jump arc. Standard Tower
 
 **Not knobs**: physics tick rate (60 Hz fixed); collision layer indices (architectural); button mapping (locked to TowerFall parity per CouchInput); per-clan tuning overrides (forbidden by Pillar 2 *Fairness Is Sacred*).
 
-**Concept doc update required**: `design/gdd/game-concept.md` Tuning Knobs row for `catch_input_mode` is now stale (currently "TBD, MVP blocker"). Resolved as: locked to **dodge-button auto-catch during i-frames**. Will be applied during the post-design step.
+**Concept doc update required**: `docs/gdd/game-concept.md` Tuning Knobs row for `catch_input_mode` is now stale (currently "TBD, MVP blocker"). Resolved as: locked to **dodge-button auto-catch during i-frames**. Will be applied during the post-design step.
 
 ## Acceptance Criteria
 
@@ -491,8 +491,8 @@ Result: short tap → short jump arc; held tap → full jump arc. Standard Tower
 | Question | Owner | Deadline | Resolution |
 |---|---|---|---|
 | CC GDD Rule 10 must add `set_vertical_velocity(v: float)` to the Movement command list (currently mentioned in Rule 6 but missing from Rule 10's API list). | CC GDD author / gameplay-programmer | Before Movement implementation begins | **Resolved 2026-05-17**: added to CC GDD Rule 10 during post-Movement-design step |
-| `design/gdd/game-concept.md` Dependencies table row for Movement is stale — should include Character Controller (currently only lists Couch Input). | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated to include Character Controller (+ Visual FX as downstream) |
-| `design/gdd/game-concept.md` Tuning Knobs row for `catch_input_mode` is stale — should reflect "dodge-button auto-catch during i-frames" resolution. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated to reflect dodge-button auto-catch resolution |
+| `docs/gdd/game-concept.md` Dependencies table row for Movement is stale — should include Character Controller (currently only lists Couch Input). | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated to include Character Controller (+ Visual FX as downstream) |
+| `docs/gdd/game-concept.md` Tuning Knobs row for `catch_input_mode` is stale — should reflect "dodge-button auto-catch during i-frames" resolution. | post-design step | This GDD's Phase 5c | **Resolved 2026-05-17**: concept doc updated to reflect dodge-button auto-catch resolution |
 | CouchInput "A-button currently held" semantics: jump-cut (Rule 9) requires reading whether A is *currently held* (continuous query), but CouchInput's spec emits `primary_action_pressed` (discrete edge only). Verify CouchInput exposes a polling query like `is_primary_action_held(slot) -> bool` or document a Godot `Input.is_action_pressed(...)` equivalent. | gameplay-programmer | Before Movement implementation begins | Verify/add to CouchInput; document in CouchInput GDD |
 | Wall-jump in corner (player touches two walls simultaneously): which `wall_normal` does CC return? CC GDD says "deterministic per Godot's physics" but doesn't specify the resolution rule. | technical investigation during implementation | Movement implementation | TBD — likely Godot returns the most recently-contacted normal or the one with the larger collision penetration |
 | Combat-side contracts inherited from this GDD: (a) catch-and-add-to-stash when `Movement.is_iframe_active() && shuriken_hits_player`, capped at `STASH_MAX = 3`; (b) **deflection** physics when stash is full at catch time (Edge Case row 8). | Combat GDD author | Before Combat GDD approved | Forward contract — Combat GDD must honor |

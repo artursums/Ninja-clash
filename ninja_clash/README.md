@@ -1,203 +1,282 @@
-# Four Clans — Movement & Combat Prototype
+# Ninja Clash
 
-**Status:** Prototype / vertical slice — throwaway code, standards intentionally relaxed.
-**Engine:** Godot 4.6 · **Players:** local 2-player (gamepad or keyboard) · **Resolution:** 800×450.
+A 2D single-screen arena fighter for 1–4 players, built in **Godot 4.6 / GDScript**.
+Throw shurikens, dash-dodge to catch them out of the air, retrieve spent blades, and be
+the last ninja standing. TowerFall-inspired, built for couch play — with LAN/online 1v1.
 
-**Hypothesis under test:** *Does the throw → dodge → retrieve loop feel fun in local 2-player play?*
+**▶ Play in the browser: https://ninja-clash.vercel.app**
 
-![Four Clans gameplay — Sakura Temple arena](screenshots/04_gameplay.png)
-
----
-
-## Screenshots
+![Ninja Clash gameplay — Sakura Temple arena](screenshots/04_gameplay.png)
 
 | Title | Mode select | Clan select | Map select |
 |---|---|---|---|
 | ![Title](screenshots/01_title.png) | ![Mode select](screenshots/02_mode_select.png) | ![Clan select](screenshots/02_clan_select.png) | ![Map select](screenshots/03_map_select.png) |
 
----
-
-## What this is
-
-A TowerFall-inspired couch-versus arena fighter. Two ninjas face off on a single
-screen: throw shurikens, dodge to catch them out of the air, retrieve spent ammo,
-and eliminate your opponent. It is built as a throwaway vertical slice to validate
-the core combat *feel* before any production code is written.
+> The in-game wordmark reads **FOUR CLANS** — the design documents' working title. The
+> project ships as Ninja Clash. Same game.
 
 ---
 
-## How to run
+## Contents
+
+- [Feature overview](#feature-overview) · [Running it](#running-it) · [Controls](#controls)
+- [Mechanics](#mechanics) · [Match flow](#match-flow) · [Fight Setup](#fight-setup-variants)
+- [Online play](#online-play) · [Architecture](#architecture) · [Tests](#tests)
+- [Project layout](#project-layout) · [Known limitations](#known-limitations)
+
+---
+
+## Feature overview
+
+| | |
+|---|---|
+| **Players** | 1–4 local (keyboard ×2 + up to 4 gamepads), or 1v1 online |
+| **Arenas** | 4 — Sakura Temple, Neo Tokyo, Verdant Cistern, Sky Temple |
+| **Clans** | 4 — Shadow, Storm, Frost, Fire |
+| **Skins** | 15 appearance styles, layered over any clan colour |
+| **Modes** | P1 vs P2 · P1 vs AI · AI vs AI · P1 vs 3 (free-for-all) · Online 1v1 |
+| **AI** | 3 tiers — Genin, Chunin, Jonin |
+| **Rulesets** | Fight Setup screen — 9 configurable variants, persisted between sessions |
+| **Audio** | 3 Suno-generated music tracks on a dedicated bus; procedural SFX with drop-in override |
+| **Tests** | 46 GUT unit tests across 10 suites |
+| **Targets** | macOS · Windows · Linux · Web (WASM, live) |
+
+---
+
+## Running it
+
+**From source**
 
 1. Open **Godot 4.6**.
-2. **Project → Import →** select `project.godot` in this directory.
-3. Press **F5** to launch. If prompted for the main scene, pick `Main.tscn`.
+2. **Project ▸ Import** → select `project.godot` in this directory.
+3. Press **F5**. If prompted for a main scene, pick `Main.tscn`.
 
-Plug in a controller before launching to play with a gamepad (recommended). A
-DualSense (PS5) over USB or Bluetooth is detected automatically.
+**Headless, from a terminal**
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path ninja_clash
+```
+
+Plug in gamepads before launching — they are detected on hot-plug too. DualSense and
+Xbox pads both work; button constants are positional, so one mapping covers both.
 
 ---
 
 ## Controls
 
-### Gamepad — DualSense (primary)
+Bindings are built at runtime in `main.gd::_setup_input_map()` — there are no bindings
+stored in `project.godot`, so gamepad assignment can be re-derived on every hot-plug.
 
-Mapping follows the **TowerFall-on-PlayStation** layout. Player 1 = first connected
-controller, Player 2 = second controller.
-
-| Action | Button | Notes |
-|---|---|---|
-| Move / aim | **D-pad** or **Left Stick** | 8-directional; also aims throws and the dash |
-| Jump | **Cross ✕** | double jump in air; wall-jump off walls; also confirms menus |
-| Throw shuriken | **Square ▢** | **hold to aim** (reticle shows the 8-way direction), **release to fire**; a quick tap is a quick-draw. See *Throwing & aiming* below. |
-| Dash-dodge | **L2**, **R2**, **Circle ◯** | one move: 8-way burst + i-frames that catch a shuriken (see below) |
-| Katana | **Triangle △** | melee swing; deflects shurikens, damages enemies |
-
-### Keyboard (Player 2)
-
-**Player 1 is controller-only** (use the gamepad table above). Player 2 plays on the keyboard:
+### Keyboard — Player 1 (WASD)
 
 | Action | Key |
 |---|---|
-| Move / aim left | **A** |
-| Move / aim right | **D** |
-| Aim up | **W** |
-| Aim down | **S** |
+| Move / aim | **W A S D** (arrow keys also work) |
 | Jump | **Space** |
-| Throw shuriken | **L** (hold to aim, release to fire) |
+| Throw shuriken | **L** — hold to aim, release to fire |
 | Katana | **K** |
-| Dash-dodge | **Right Shift** or **double-tap A / D** |
+| Guard | **J** — hold to block incoming hits from the front |
+| Dash-dodge | **Left Shift**, or **double-tap W / A / S / D** |
+| Menu confirm | **Enter** · Cycle skin **P** |
 
-The double-tap is P2-only (so the gamepad stick can't trigger it). On a gamepad the
-dash-dodge is L2 / R2 / Circle, as in the table above.
+### Keyboard — Player 2 (numpad, Num Lock on)
 
-### Menu navigation (any controller or the keyboard, on every screen)
+| Action | Key |
+|---|---|
+| Move / aim | **4 / 6** left/right · **8 / 5** up/down |
+| Jump | **0** |
+| Throw shuriken | **1** |
+| Katana | **2** |
+| Guard | **3** |
+| Dash-dodge | **+**, or **double-tap 4 / 8 / 5 / 6** |
+| Menu confirm | **numpad Enter** · Cycle skin **7** |
 
-- **Title** — any key or any controller button begins
-- **Move cursor** — D-pad / stick, or A/D
-- **Confirm** — **Cross ✕** / Space
-- **Back / cancel** — **Circle ◯** / Esc
-- **Un-confirm** a clan pick — down (D-pad / S)
-- **Random map** — **Triangle △** / X
+### Gamepad — up to 4 pads
+
+TowerFall-on-PlayStation layout. First connected pad → P1, second → P2, and so on.
+
+| Action | Button |
+|---|---|
+| Move / aim | **D-pad** or **Left Stick** |
+| Jump | **Cross ✕** |
+| Throw shuriken | **Square ▢** — hold to aim, release to fire |
+| Katana | **Triangle △** |
+| Dash-dodge | **Circle ◯**, **L1** or **R1** |
+| Guard | **L2** · Dash **R2** |
+
+### Global
+
+**Esc** / **Circle ◯** back · **Esc** / **Start** pause · **Tab** / **Select** Fight Setup ·
+**X** / **Triangle △** random map
+
+A **HOW TO PLAY** overlay covers all three schemes on the first round of a match. It can be
+switched off in *Options* or *Pause ▸ Settings*; the choice persists.
 
 ---
 
-## Core mechanics
+## Mechanics
 
 ### Movement
-- **Run** at a fixed top speed; **double jump** (one ground + one air jump, refreshed on landing).
-- **Wall grab**: hold *into* a wall while airborne to slide down slowly.
-- **Wall jump**: jump while wall-grabbing for an upward kick away from the wall.
-- **Head-stomp**: land on an opponent's head to deal damage and bounce off.
-- **Screen wrap**: fall off the bottom and reappear at the top (and vice-versa).
+Single jump (no double jump), **wall grab** and **wall jump**, **head-stomp** for a damaging
+bounce, and **screen wrap** — fall off the bottom and reappear at the top.
 
-### Dash-dodge (L2 / R2 / Circle ◯)
-**The dash and the dodge are one move** — a directional burst that *is* a dodge.
-A short 8-way burst toward the held aim (incl. straight up and diagonals; gravity is
-suspended for its duration so up/diagonal dashes hold a clean line), with brief
-**invincibility frames** that **catch** an incoming shuriken straight into your stash
-(or deflect it back if your stash is full).
+### Dash-dodge
+The dash and the dodge are one move: an 8-way burst with gravity suspended for its duration,
+carrying brief **invincibility frames** that **catch** an incoming shuriken straight into your
+stash (or deflect it if the stash is full). Timing matters — short i-frames followed by a
+**~0.42 s cooldown** mean you must dash *just before* the hit lands. Airborne you get one
+charge until you touch a floor or wall.
 
-- **Time it** — TowerFall-style: short i-frames then a **cooldown (~0.42 s)**, so you
-  must dash *just before* a shuriken hits. Blanket-dashing won't catch them.
-- **One air charge** — airborne you get exactly one until you touch a **floor or wall**
-  (no infinite climbing). After spending it, the charge returns **0.5 s after** you land.
-- **No glow** — the move reads from its dash pose/animation, not a flash.
-- Direction comes from the stick/keys, not from which trigger you press.
-
-**Shurikens vanish only on a clean hit.** Landing a damaging hit on an opponent spends the
-blade and removes it — the *only* way a shuriken leaves the round. Every other interaction
-keeps it in play and retrievable: a katana deflect or a shuriken-vs-shuriken counter sends
-it flying off to stick somewhere, and a miss sticks where it lands. So blades only thin out
-when someone actually gets hit.
-
-### Throwing & aiming (TowerFall-style)
-- **Hold** the throw button to aim: a clan-colored **reticle** appears showing which of
-  the **8 directions** you're aiming, and you **stand still** (movement input becomes
-  pure aim) — this makes diagonals easy. **Release** to fire that way.
-- A quick **tap** is a *quick-draw* — fires immediately in the held/facing direction.
-- Aiming freezes you only on the ground; in the air you keep your momentum (no
-  air-control while aiming). Hold duration does not affect throw speed.
+### Throwing
+**Hold** to aim: a clan-coloured reticle shows which of the 8 directions you are committed
+to, and you stand still while aiming on the ground. **Release** to fire. A quick tap is a
+quick-draw in the facing direction. Hold duration does not affect throw speed.
 
 ### Combat
-- **5 HP** per life, shown as hearts above the ninja. Shurikens, katana hits, and
-  head-stomps each deal **1 damage**; reaching 0 HP is an elimination.
-- **Shuriken stash**: start with **3**, hold up to **5**. Throwing spends one; pick a
-  spent shuriken back up by walking over it, or catch one mid-air with a dodge.
-- **Katana**: **3 charges**. A swing **deflects** shurikens in front of you (free) and
-  **strikes** an enemy for 1 damage (costs a charge).
-- Brief hurt-invulnerability after a non-lethal hit prevents stun-locking.
+**5 HP** per life, shown as hearts. Shurikens, katana hits and head-stomps deal **1 damage**
+each. Stash starts at **3** blades and caps at **5**. The **katana** has 3 charges: swings
+deflect shurikens for free and cost a charge only on a hit. **Guard** holds the blade up to
+block frontal hits. Shuriken-vs-shuriken collisions produce a **clash** — a brief hitstop
+with a lightning flash and a push-apart recoil.
+
+Blades leave the round **only on a clean damaging hit**. Deflects, clashes and misses all
+stick somewhere and stay retrievable, so ammo thins out only when someone actually connects.
 
 ---
 
 ## Match flow
 
-1. **Title** — "FOUR CLANS". Press any input to begin.
-2. **Mode select** — **P1 vs P2** / **P1 vs AI** / **AI vs AI** / **P1 vs 3 (FFA)**, plus AI
-   difficulty (←/→ mode, ↑/↓ difficulty). See *Modes & AI* below.
-3. **Clan select** — players pick from **Shadow / Storm / Frost / Fire** (same-clan picks
-   rejected in duels). In **FFA** only P1 picks; the three bots take the remaining clans.
-4. **Map select** — choose the arena.
-5. **Match** — first to **5 round-wins** takes the match. A round runs until **one ninja is
-   left standing** (the survivor scores), opening with a 3-2-1-FIGHT countdown and pausing
-   ~1.6 s on the winner before the next round.
-6. **Match end** — winning clan + final score; rematch or return to title.
+1. **Title** → Start / Online / Options / Credits / Quit
+2. **Mode select** — the four modes plus AI difficulty
+3. **Clan select** — pick clan and skin (**Tab** opens Fight Setup here)
+4. **Map select** — 4 arenas with live backdrop previews
+5. **Match** — first to the target score (default 5 round-wins); a round ends when one
+   ninja is left standing, opening on a 3-2-1-FIGHT countdown
+6. **Match end** — winning clan, final score, rematch or return to title
 
-## Modes & AI
+---
 
-| Mode | Who controls whom |
+## Fight Setup (variants)
+
+A TowerFall-style variants screen reachable with **Tab** from clan select. Every value
+defaults to standard rules, so an untouched setup plays exactly like the base game. Changes
+persist to `user://match_config.cfg`.
+
+| Variant | Range |
 |---|---|
-| **P1 vs P2** | both human (controller + keyboard) |
-| **P1 vs AI** | you (P1) vs a bot (P2) — *beat the AI* |
-| **AI vs AI** | both bots fight — *watch a demo* |
-| **P1 vs 3 (FFA)** | you (P1) vs **three bots**, free-for-all — last ninja standing wins the round |
-
-The bot has three skill tiers, named after ninja ranks — **GENIN** (already a competent
-fighter), **CHUNIN** (hard), **JONIN** (brutal). Higher tiers dodge your shurikens more
-reliably, fire faster, space tighter, and press melee harder. Even GENIN dodges, retrieves
-ammo, throws on-line, jumps to chase, and swings up close. The match mode + tier is shown
-top-right during a round.
+| Katana enabled / recharge mode / charges | on-off · per-round or finite · 0–9 |
+| Shurikens enabled / starting count / infinite | on-off · 0–5 · on-off |
+| Max HP | 1–9 |
+| Rounds to win | 1–15 |
+| Blade wave (charged katana projectile) | on-off |
 
 ---
 
-## Map
+## Online play
 
-**Sakura Temple** — a pagoda arena with layered platforms, lanterns, and a moonlit
-backdrop. (Currently the only map in the prototype; spawn points are fixed.)
+LAN and internet **1v1** over ENet (default port **24565**), **host-authoritative**:
+
+- client → host: input as intent bitmasks, every physics tick (unreliable)
+- host → client: a world snapshot at **30 Hz**, plus reliable events for state changes,
+  scores, lobby picks and FX cues
+
+The host runs exactly the same simulation as a local match. Because `PlayerInputRouter`
+already separates device reads from the simulation, the host simply feeds fighter slot 2
+from the network instead of from a keyboard — the simulation cannot tell the difference.
+There is no client-side prediction: the client renders host-authoritative positions, so
+input latency scales with ping. Wire formats live in `net_codec.gd` and are unit-tested.
+
+Online is **desktop only** — the web build hides the option, since browsers cannot open raw
+UDP sockets.
+
+Dev shortcuts: `-- --host`, `-- --join=<ip>`, `-- --online-autotest`.
 
 ---
 
-## Tuning knobs
+## Architecture
 
-A **live tuning panel** (sliders, bottom-left during a round) exposes the most
-consequential balance levers:
+Autoloads (`project.godot`):
 
-1. **Dodge i-frame duration** (`0.20 s`)
-2. **Shuriken throw velocity** (`600`)
-3. **Pickup radius** (`12 px`)
-4. **Self-hit immunity** window (`0.083 s`)
-5. **Wall-grab fall speed** (`80`)
+| Autoload | Responsibility |
+|---|---|
+| `GameState` | Screen state machine, clan/skin selections, match progress |
+| `PlayerInput` | The **only** reader of Godot Input for the simulation (ADR-0001) |
+| `Combat` | Live-tunable combat levers + per-slot scoring |
+| `Maps` | Arena registry — 4 maps as pure data |
+| `Audio` | Music buses + SFX |
+| `Settings` | Volume, fullscreen and tutorial prefs → `user://settings.cfg` |
+| `MatchConfig` | Fight Setup ruleset → `user://match_config.cfg` |
+| `Net` | Online session manager (ADR-0003) |
 
-Dash feel is tuned by constants at the top of `player.gd`:
-`SLIDE_SPEED` (400), `SLIDE_DURATION_S` (0.20), `SLIDE_COOLDOWN_S` (0.417),
-`SLIDE_AIR_REFRESH_S` (0.5).
+Three decisions shaped the codebase, each recorded as an ADR in [`docs/architecture/`](docs/architecture/):
+
+- **[ADR-0001](docs/architecture/ADR-0001-input-state-separation.md)** — input/state separation.
+  The simulation reads a captured per-tick intent snapshot, never the live device. This is
+  what later made online multiplayer a feed-swap rather than a rewrite.
+- **[ADR-0002](docs/architecture/ADR-0002-prototype-as-production-base.md)** — the prototype
+  was promoted to the production base instead of being rewritten from scratch.
+- **[ADR-0003](docs/architecture/ADR-0003-online-multiplayer.md)** — host-authoritative ENet 1v1.
+
+Balance values are **data-driven**, not hardcoded: `player_tuning.tres` (a `PlayerTuning`
+resource) and `bot_tuning.tres` feed `player.gd`, and can be injected in tests. A live
+tuning panel exposes the five combat levers during a round.
+
+The menu screens are built procedurally in code rather than as `.tscn` scenes, composed
+from the pixel-art kit in `sprites/menu/`.
+
+---
+
+## Tests
+
+46 unit tests across 10 suites, run with [GUT](https://github.com/bitwes/Gut) 9.6:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
+    -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json
+```
+
+Coverage focuses on the pure, deterministic parts — network codec, match-config
+load/save/clamp, combat scoring, input intent, tuning integrity, settings persistence, map
+data and bot decision logic. GUT's `-s` mode does not load autoloads, so these test by
+direct instantiation and dependency injection rather than through the singletons.
+
+Boot smoke test: `Godot --headless --path ninja_clash --quit-after 90`.
+
+---
+
+## Project layout
+
+```
+ninja_clash/
+├── main.gd              # orchestrator: input map, arena building, round flow
+├── player.gd            # fighter: movement, combat, bot brain, online puppet
+├── shuriken.gd          # projectile + retrieval
+├── net.gd, net_codec.gd # online session + wire format
+├── maps.gd              # 4 arenas as data
+├── *_select.gd          # title / mode / clan / map / setup / online screens
+├── *_ambience.gd        # per-map parallax atmosphere layers
+├── *_tuning.tres        # data-driven balance
+├── docs/                # GDDs, ADRs, art bible, sprint history
+├── sprites/, audio/     # assets
+└── tests/unit/          # GUT suites
+```
 
 ---
 
 ## Known limitations
 
-- **Local 2-player only** — no online, no 4-player yet.
-- **One map** (Sakura Temple).
-- **Procedural beep SFX** generated at startup — no music or final sound design.
-- Some **on-screen menu hints are stale** (e.g. they still list keyboard-only keys);
-  the tables in this README reflect the actual bindings in `main.gd`.
-- Maps and round flow are simplified prototype variants of the design-doc specs.
+Stated plainly, because they are real:
 
----
-
-## After playtest
-
-Record outcomes in [`REPORT.md`](REPORT.md). Decision criteria (from the concept doc):
-
-- **PROCEED** — ≥3 of 5 first-time testers call the dodge timing "satisfying"/"fair" and voluntarily ask for a rematch.
-- **PIVOT** — the loop works but a specific value or mechanic needs changing before MVP.
-- **KILL** — the loop is not fun even with extreme tuning.
+- **Online is 1v1 only** and has no client-side prediction — fine on LAN, input lag scales
+  with ping over the internet.
+- **Sound effects are procedural beeps.** Music is real; the SFX layer is synthesised at
+  startup and awaits a proper sound pass (the drop-in override path exists).
+- **`player.gd` is 2,100 lines.** It is sectioned and documented, but movement, combat, bot
+  AI and network-puppet concerns belong in separate files. Splitting it is the next
+  refactor on the list.
+- **Test coverage is deliberately narrow** — the deterministic, non-visual parts. Movement
+  and combat feel are validated by hand, not by assertion.
+- **Menu screens read Godot Input directly** rather than going through the router. That is
+  UI navigation and does not affect simulation determinism, but it is an inconsistency.
+- No formal multi-tester playtest has been run; tuning reflects extended solo and
+  versus-bot iteration. See [`REPORT.md`](REPORT.md).

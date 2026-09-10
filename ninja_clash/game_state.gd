@@ -1,7 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
-#
 # Autoload: GameState
 # Screen state machine + clan selections + match progress. Reactive systems
 # (HUD, arena, screens) subscribe to state_changed.

@@ -1,6 +1,6 @@
 # Sprint 3 — Ninja Clash Hardening
 
-> **Milestone**: [Milestone 01 — Ninja Clash v1](../milestones/milestone-01-production-mvp.md)
+> **Milestone**: [Milestone 01 — Ninja Clash v1](milestone-01-production-mvp.md)
 > **Strategy**: [ADR-0002](../../docs/architecture/ADR-0002-prototype-as-production-base.md) — prototype is the production base
 > **Capacity**: 1 week, full-time (~5 days) · solo · **Status**: Active
 > **Project**: `ninja_clash/`

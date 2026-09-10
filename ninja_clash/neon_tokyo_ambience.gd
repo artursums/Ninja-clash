@@ -1,9 +1,8 @@
-# PROTOTYPE - NOT FOR PRODUCTION
 # Layered atmospheric ambience for the Neo Tokyo map — a rainy synthwave night.
 # Everything runs on a REAL-time clock so it keeps animating through the
 # Engine.time_scale==0 clash hitstop (same trick as fx_anim.gd / sakura_ambience.gd).
 #
-# Depth layers ("ruumilisus"), back to front:
+# Depth layers, back to front:
 #   - Sun bloom        — soft red/magenta halo over the background sun, slow breath. (z=-9)
 #   - Neon accents     — small buzzing cyan/magenta glows over the cityscape.         (z=-8)
 #   - Ground mist      — wide faint haze puffs drifting low across the arena.          (z=-7)

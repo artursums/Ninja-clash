@@ -1,7 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
-#
 # Main orchestrator. Reacts to GameState transitions; loads themed maps with
 # gradient sky + procedural background decorations + foreground props.
 

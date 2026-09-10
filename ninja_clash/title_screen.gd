@@ -220,23 +220,28 @@ func _build_options_panel() -> void:
 
 
 func _build_credits_panel() -> void:
-	_credits_panel = _make_overlay_panel(520.0, 320.0, "CREDITS")
+	# 520x400 with a tight line spacing: the credit list is 12 rows plus the back hint,
+	# which overflows the shared 320-tall default (content ran off the bottom of the screen).
+	_credits_panel = _make_overlay_panel(520.0, 400.0, "CREDITS")
 	var box: VBoxContainer = _credits_panel.get_node("Box")
+	box.add_theme_constant_override("separation", 4)
 	var lines: Array = [
 		"FOUR CLANS — Shinobi Arena",
 		"",
 		"Game Design & Programming",
-		"   Four Clans Team",
+		"   Artur Sums",
 		"",
 		"Engine          Godot 4.6",
 		"Art             Pixel-art sprite suite",
+		"Music           Generated with Suno AI",
+		"Built with      Claude Code",
 		"",
 		"Thanks for playing!",
 	]
 	for l in lines:
 		var lab := Label.new()
 		lab.text = String(l)
-		lab.add_theme_font_size_override("font_size", 18)
+		lab.add_theme_font_size_override("font_size", 16)
 		lab.add_theme_color_override("font_color", COL_HEAD if l == lines[0] else COL_DIM)
 		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(lab)

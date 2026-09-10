@@ -1,8 +1,10 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
+# Player CharacterBody2D — a sprite-based ninja, tinted and skinned per clan.
 #
-# Player CharacterBody2D. Sprite-based ninja silhouette tinted per clan.
+# Drives one fighter slot: movement, wall-jump, dash-dodge, throwing, katana, guard,
+# damage and death. Reads its intent from the PlayerInputRouter snapshot (ADR-0001)
+# rather than Godot Input directly, so identical code runs for a local human, a bot
+# (_bot_think fills the same virtual-input dicts) and an online puppet (ADR-0003).
+# Balance values are data-driven from player_tuning.tres — see _apply_tuning().
 
 extends CharacterBody2D
 

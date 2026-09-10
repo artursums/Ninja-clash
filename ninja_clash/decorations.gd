@@ -1,6 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
 # Procedural decoration renderer. Given a list of draw-commands (Dictionary),
 # renders backgrounds, props, and atmospheric layers via _draw().
 # main.gd instantiates one or more of these per map and passes the command list.

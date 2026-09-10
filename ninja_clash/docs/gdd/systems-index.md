@@ -124,7 +124,7 @@ Combining dependency layer + priority tier. Systems within the same row-group
 can be designed in parallel; the suggested sequence below is the order
 recommended for solo work, because each design informs the next.
 
-| Order | System | Priority | Layer | Suggested Agent(s) | Est. Effort |
+| Order | System | Priority | Layer | Suggested Discipline(s) | Est. Effort |
 |---|---|---|---|---|---|
 | 1 | Game State Manager | MVP | Foundation | game-designer + technical-director | M |
 | 2 | Couch Input | MVP | Foundation | systems-designer + godot-specialist | M |
@@ -163,7 +163,7 @@ to Godot 4.6 + the retrievable-projectile mechanic.
 |---|---|---|---|
 | **Movement** | Design | Dodge i-frame timing is the single most consequential balance lever per the concept doc. Too generous = stalemates; too tight = lucky kills feel unearned. | Prototype-first; test multiple i-frame durations (100/200/300 ms) with playtesters in MVP. |
 | **Combat** | Design + Balance | 4-player + 3-shuriken stash chaos: opening 5 seconds could become a retrieval scramble. | Prototype 4-player playtests early in Vertical Slice; tune `pickup_radius_px`, `shuriken_wall_stick_duration_s`. |
-| **Couch Input** | Technical | 4-controller hot-plug + clan-select UX is non-trivial in Godot 4.6. | Validate in MVP with 2-controller; expand to 4 in Vertical Slice. Reference `docs/engine-reference/godot/modules/input.md`. |
+| **Couch Input** | Technical | 4-controller hot-plug + clan-select UX is non-trivial in Godot 4.6. | Validate in MVP with 2-controller; expand to 4 in Vertical Slice. Reference the official Godot 4.6 `Input` documentation. |
 | **Projectile** | Technical | Wall-stick + 100%-recoverability requirement (per concept Edge Cases) is novel to the team. | Prototype shuriken physics in MVP alongside placeholder map; validate "no shuriken can become unrecoverable" via automated test. |
 
 ---
@@ -188,10 +188,10 @@ to Godot 4.6 + the retrievable-projectile mechanic.
 
 ## Next Steps
 
-- [ ] Approve this systems index (you're reading the result of `/map-systems`)
-- [ ] Design MVP systems in order using `/design-system [system-name]` (start with Game State Manager)
-- [ ] After each system GDD is written, run `/design-review design/gdd/[system].md` to validate
+- [ ] Approve this systems index
+- [ ] Write the MVP system GDDs in the order above, starting with Game State Manager
+- [ ] Review each system GDD against the design-doc standards before marking it approved
 - [ ] Update this index's Status column as each system progresses (Not Started → In Design → In Review → Approved)
-- [ ] When all MVP systems are designed, run `/gate-check pre-production` to validate readiness
-- [ ] Prototype the highest-risk systems early — recommend `/prototype movement-and-combat` once those two GDDs are drafted
-- [ ] Single ADR on input/state separation to keep online (v2+) viable: `/architecture-decision`
+- [ ] Re-check pre-production readiness once all MVP systems are designed
+- [ ] Prototype the highest-risk systems early — movement and combat, once those two GDDs are drafted
+- [ ] Write a single ADR on input/state separation to keep online (v2+) viable

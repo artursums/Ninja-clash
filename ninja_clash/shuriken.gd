@@ -1,7 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
-#
 # Shuriken Area2D — per-clan colored 9-frame sprite strip.
 # Frames cycle a spinning blade while flying, lay a fading comet trail behind it,
 # and snap to an impact pose when it sticks. Strip is chosen from the thrower's

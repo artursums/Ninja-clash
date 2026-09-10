@@ -6,7 +6,7 @@
 > in `archive/src-rewrite/`. The reconciled `movement.md` (no double jump, etc.) + pinned values
 > still inform the prototype. Kept here for history; not the active plan.
 
-> **Milestone**: [Milestone 01 — Production MVP](../milestones/milestone-01-production-mvp.md)
+> **Milestone**: [Milestone 01 — Production MVP](milestone-01-production-mvp.md)
 > **Capacity**: 1 week, full-time (~5 days) · solo
 > **Status**: Planned
 > **Follows**: [Sprint 1](sprint-01.md) (Foundation spine: GSM + Couch Input, 42 tests green)

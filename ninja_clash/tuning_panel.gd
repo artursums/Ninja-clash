@@ -1,7 +1,6 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
-# Live tuning panel for the 5 prototype levers. Visible during ROUND state only.
+# Live tuning panel for the five combat levers on the Combat autoload — dodge i-frames,
+# throw velocity, pickup radius, self-hit immunity and wall-grab fall speed. Visible
+# during the ROUND state only; a development aid for tuning feel without a rebuild.
 
 extends VBoxContainer
 

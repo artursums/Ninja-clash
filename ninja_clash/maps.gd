@@ -1,6 +1,7 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Question: Does the throw-dodge-retrieve loop with 1-hit-kill feel fun in 2P local?
-# Date: 2026-05-18
+# Autoload: Maps
+# The arena registry — four playable maps, each a pure data description (platform rects,
+# spawn points, theme colours, decoration commands) that main.gd renders. Adding a map is
+# a new entry in MAPS; the map-select screen and HUD read it with no per-map menu art.
 #
 # TowerFall-style floating platforms + visible side walls. Wall collision extends past the
 # viewport so a wall-slide stays continuous across the screen-wrap. Platforms placed with

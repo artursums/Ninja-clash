@@ -1,6 +1,3 @@
-# PROTOTYPE - NOT FOR PRODUCTION
-# Date: 2026-05-18
-#
 # Minimal HUD: map name banner (mid-screen, fades after 2s) + the running match score.
 # Per-player stash count is shown above each ninja's head (built in main.gd, owned by player).
 # (The kill feed — "<clan> eliminated <clan>" — was removed; not wanted.)

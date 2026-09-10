@@ -1,6 +1,6 @@
 # Sprint 1 Retrospective — 2026-05-26
 
-> Sprint: [Sprint 1](sprint-01.md) · Milestone: [Production MVP](../milestones/milestone-01-production-mvp.md)
+> Sprint: [Sprint 1](sprint-01.md) · Milestone: [Production MVP](milestone-01-production-mvp.md)
 > Closed at the Must-Have boundary (deliberate — clean checkpoint over momentum).
 
 ## Outcome

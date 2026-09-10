@@ -305,7 +305,7 @@ palettes, deliberate negative space.
 Concept-level rules locked at this layer. Implementation-level specifics —
 shuriken physics curves, dodge i-frame counts, retrieval radius, wall-stick
 behavior, controller hot-plug handling — are intentionally deferred to
-per-system GDDs created via `/design-system`. The **Dependencies** section
+per-system GDDs. The **Dependencies** section
 below shows which system GDD owns each detail.
 
 - **Lethality**: a single shuriken hit to any body part kills instantly.
@@ -358,8 +358,7 @@ deferred to the listed per-system GDD.
 The five systems identified in **Core Mechanics** (MDA section) have the
 following dependency relationships. Per-system GDDs MUST update the
 corresponding entry here when they specify additional dependencies.
-`/map-systems` will produce the canonical `design/gdd/systems-index.md`
-from this list.
+The canonical `docs/gdd/systems-index.md` is derived from this list.
 
 | System | Depends on | Depended on by |
 |---|---|---|
@@ -475,12 +474,12 @@ content production happens until this is validated.
 
 ## Next Steps
 
-- [ ] Validate this concept doc: `/design-review design/gdd/game-concept.md`
-- [ ] Configure engine: `/setup-engine godot 4.6` (version already pinned)
-- [ ] Optional pillar refinement conversation with `creative-director` agent
-- [ ] Decompose into systems: `/map-systems` (creates the systems index and dependency map)
-- [ ] Author per-system GDDs: `/design-system` (guided section-by-section writing)
-- [ ] First architecture decision record: `/architecture-decision` (likely subject: input/state separation to permit future online)
-- [ ] Prototype the MVP: `/prototype throw-dodge-retrieve` (validate core hypothesis)
-- [ ] Run playtest after MVP: `/playtest-report`
-- [ ] If validated, plan the first sprint: `/sprint-plan new`
+- [ ] Validate this concept doc against the design-doc standards
+- [ ] Configure the engine: Godot 4.6 (version already pinned)
+- [ ] Optional pillar refinement pass with the creative lead
+- [ ] Decompose into systems (produces the systems index and dependency map)
+- [ ] Author the per-system GDDs, section by section
+- [ ] First architecture decision record (likely subject: input/state separation to permit future online)
+- [ ] Prototype the MVP throw–dodge–retrieve loop (validate the core hypothesis)
+- [ ] Run a playtest once the MVP is up
+- [ ] If validated, plan the first sprint

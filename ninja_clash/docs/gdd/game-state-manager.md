@@ -150,8 +150,8 @@ on, not depending. Downstream consumers below.
 
 **Bidirectional consistency** (resolved 2026-05-17):
 
-- `design/gdd/systems-index.md` updated: Couch Input and Audio now list Game State Manager as a dependency; the Dependency Map's Foundation Layer entry for Couch Input notes the within-layer dep on GSM.
-- `design/gdd/game-concept.md` updated: Round Flow's "Depends on" column now includes Game State Manager.
+- `docs/gdd/systems-index.md` updated: Couch Input and Audio now list Game State Manager as a dependency; the Dependency Map's Foundation Layer entry for Couch Input notes the within-layer dep on GSM.
+- `docs/gdd/game-concept.md` updated: Round Flow's "Depends on" column now includes Game State Manager.
 
 ## Tuning Knobs
 
