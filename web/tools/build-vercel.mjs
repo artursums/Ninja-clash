@@ -16,9 +16,20 @@ const templatesHash = '942366dc4e27e7686a99da4d3cfb1b8ae8d3eb9444f6d8217eef16245
 
 async function run(command, args, env = process.env) {
   await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, env, stdio: 'inherit' });
+    const child = spawn(command, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let scriptError = false;
+    for (const [source, destination] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+      let tail = '';
+      source.on('data', chunk => {
+        destination.write(chunk);
+        const output = tail + chunk.toString();
+        scriptError ||= /SCRIPT ERROR:|Failed to load script/.test(output);
+        tail = output.slice(-256);
+      });
+    }
     child.once('error', reject);
-    child.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`${path.basename(command)} failed (${signal ?? code})`)));
+    // Godot can exit successfully even when a required GDScript failed to compile.
+    child.once('close', (code, signal) => code === 0 && !scriptError ? resolve() : reject(new Error(`${path.basename(command)} failed (${scriptError ? 'script errors' : signal ?? code})`)));
   });
 }
 

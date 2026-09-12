@@ -15,6 +15,11 @@ run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
+[audio]
+
+; Godot 4.6.2 Sample playback can disconnect custom buses on Web (godotengine/godot#119026).
+general/default_playback_type.web=0
+
 [autoload]
 
 Audio="*res://audio.gd"
