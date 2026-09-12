@@ -1,0 +1,10 @@
+**/.env*
+**/node_modules
+**/.godot
+.idea
+backups
+levels
+artifacts
+Screenshot*
+towerfall.png
+*.log

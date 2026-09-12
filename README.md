@@ -5,7 +5,7 @@ Throw shurikens, dash-dodge to catch them out of the air, retrieve spent blades,
 last ninja standing. TowerFall-inspired, built for the couch — with host-authoritative
 online 1v1.
 
-**▶ Play it in your browser: https://ninja-clash.vercel.app**
+**Browser version:** [create your Vercel project and invite a friend](web/SETUP.ru.md).
 
 ![Ninja Clash gameplay](ninja_clash/screenshots/04_gameplay.png)
 
@@ -40,8 +40,9 @@ Or headless: `/Applications/Godot.app/Contents/MacOS/Godot --path ninja_clash`
 
 Export presets and the web deploy pipeline: [`ninja_clash/EXPORT.md`](ninja_clash/EXPORT.md).
 
-Browser invitations require the room API, Redis and TURN to be configured and deployed.
-The previously published static build does not include them. See the
+Import this repository into Vercel with preset **Other** and Root Directory **./**.
+The root configuration builds Godot 4.6.2 and deploys the game together with the room API.
+Browser invitations require Redis and TURN environment variables. See the
 [step-by-step setup guide (Russian)](web/SETUP.ru.md).
 
 ## Tests

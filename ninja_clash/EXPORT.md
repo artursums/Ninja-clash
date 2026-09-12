@@ -10,11 +10,16 @@ Signed native distribution still requires the relevant platform credentials.
 ## Web (browser rooms — infrastructure setup required)
 
 The **Web preset exists** in `export_presets.cfg` (threads ON, GUT/tests excluded).
-The existing site is **https://ninja-clash.vercel.app**; its old static deployment needs to
-be replaced by a build containing the room API. Redis and TURN credentials must be configured
-first. See [the complete setup guide](../web/SETUP.ru.md).
+Create a Vercel project by importing this repository: select **Other** and keep Root
+Directory **./**. The root `vercel.json` installs the pinned Godot 4.6.2 Linux engine
+and Web release template, imports the source assets and exports the game. Both official
+downloads are SHA-256 verified. The first build downloads about 1.3 GB of build tools;
+these tools are temporary and are not served to players. The output is
+`build/ninja-clash/public`; `api/rooms.js` exposes the existing room service.
+Configure Redis and TURN credentials in the import form or project settings.
+See [the complete setup guide](../web/SETUP.ru.md).
 
-From the repository root, rebuild the release and publish after configuring the services:
+Alternatively, from the repository root, build locally and publish using the CLI:
 ```
 cd web
 npm ci

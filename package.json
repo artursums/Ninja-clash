@@ -1,0 +1,7 @@
+{
+  "name": "ninja-clash",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "scripts": { "build": "node web/tools/build-vercel.mjs" }
+}
