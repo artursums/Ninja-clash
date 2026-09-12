@@ -96,12 +96,13 @@ static func select(button_node: Button, selected: bool, accent: Color = GOLD) ->
 	button_node.add_theme_stylebox_override("normal", style(selected, accent))
 	button_node.add_theme_color_override("font_color", accent if selected else IVORY)
 
-static func backdrop(parent: Control, dim: float = 0.72) -> void:
+static func backdrop(parent: Control, dim: float = 0.72, rules: bool = true) -> void:
 	var bg := image(parent, BACKGROUND, Rect2(0, 0, 800, 450))
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	fill(parent, Rect2(0, 0, 800, 450), Color(0.025, 0.03, 0.08, dim))
-	fill(parent, Rect2(24, 20, 752, 1), Color("646075"))
-	fill(parent, Rect2(24, 409, 752, 1), EDGE)
+	if rules:
+		fill(parent, Rect2(24, 20, 752, 1), Color("646075"))
+		fill(parent, Rect2(24, 409, 752, 1), EDGE)
 
 static func header(parent: Control, title: String, step: int) -> void:
 	label(parent, "FOUR CLANS", Rect2(32, 28, 180, 18), 14, GOLD)

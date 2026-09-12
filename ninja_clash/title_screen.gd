@@ -1,9 +1,9 @@
 extends Control
 
 const UI = preload("res://menu_ui.gd")
+const Ambience = preload("res://title_ambience.gd")
 const BUTTON_SLUGS := ["start", "online", "options", "credits", "quit"]
 const BUTTON_NAMES := {"start": "LOCAL PLAY", "online": "ONLINE DUEL", "options": "OPTIONS", "credits": "CREDITS", "quit": "QUIT"}
-const DESCRIPTIONS := {"start": "Couch rivals. Relentless bots. Four clans.", "online": "Challenge a friend over LAN or internet.", "options": "Make yourself at home.", "credits": "The people behind the arena.", "quit": "Until the next duel."}
 const OPT_ROWS := ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "TUTORIAL", "BACK"]
 const OVERLAY_NONE := 0
 const OVERLAY_OPTIONS := 1
@@ -19,17 +19,16 @@ var _options_panel: Control
 var _credits_panel: Control
 var _opt_rows: Array[Button] = []
 var _opt_values: Array[Label] = []
-var _description: Label
-var _sparks: Array[ColorRect] = []
-var _elapsed := 0.0
-var _halves: Array[Control] = []
+var _pieces: Array[Dictionary] = []
+var _ambience: Control
+var _last_tick := 0
 var _content: Control
 var _intro: Tween
 var _intro_active := false
 var _intro_played := false
 
 func _platform_slugs() -> Array:
-	return ["start", "options", "credits"] if OS.has_feature("web") else BUTTON_SLUGS.duplicate()
+	return ["start", "online", "options", "credits"] if OS.has_feature("web") else BUTTON_SLUGS.duplicate()
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -48,21 +47,12 @@ func _on_visibility_changed() -> void:
 		_finish_intro()
 
 func _build() -> void:
-	UI.fill(self, Rect2(0, 0, 800, 450), UI.INK)
-	for side in 2:
-		var clip := Control.new()
-		clip.position = Vector2(side * 400, 0)
-		clip.size = Vector2(400, 450)
-		clip.clip_contents = true
-		clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(clip)
-		var picture := Control.new()
-		picture.position.x = -side * 400
-		picture.size = Vector2(800, 450)
-		picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		clip.add_child(picture)
-		UI.backdrop(picture, 0.12)
-		_halves.append(clip)
+	clip_contents = true
+	var background := UI.image(self, UI.BACKGROUND, Rect2(0, 0, 800, 450))
+	background.stretch_mode = TextureRect.STRETCH_SCALE
+	_ambience = Ambience.new()
+	add_child(_ambience)
+	UI.fill(self, Rect2(0, 0, 800, 450), Color(0.025, 0.03, 0.08, 0.08))
 	_content = Control.new()
 	_content.size = Vector2(800, 450)
 	_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -74,14 +64,21 @@ func _build() -> void:
 	shade.fill_to = Vector2(1, 0)
 	var veil := UI.image(_content, shade, Rect2(0, 0, 650, 450))
 	veil.stretch_mode = TextureRect.STRETCH_SCALE
-	UI.label(_content, "S H I N O B I   A R E N A", Rect2(58, 40, 370, 22), 16, UI.GOLD)
-	var title := UI.label(_content, "FOUR CLANS", Rect2(54, 61, 450, 66), 56)
-	title.add_theme_color_override("font_shadow_color", Color("352440"))
-	title.add_theme_constant_override("shadow_offset_x", 3)
-	title.add_theme_constant_override("shadow_offset_y", 4)
-	UI.fill(_content, Rect2(58, 137, 274, 2), UI.GOLD)
-	for i in 4:
-		UI.fill(_content, Rect2(58 + i * 18, 128, 12, 3), GameState.CLANS[i].color)
+	var eyebrow := UI.label(_content, "S H I N O B I   A R E N A", Rect2(58, 40, 370, 22), 16, UI.GOLD)
+	_register_piece(eyebrow, Vector2(0, -24), -0.015, 0.05)
+	var wordmark := "FOUR CLANS"
+	var letter_x := 54.0
+	for i in wordmark.length():
+		var letter := wordmark.substr(i, 1)
+		var advance := 18.0 if letter == " " else UI.FONT.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 56).x
+		if letter != " ":
+			var glyph := UI.label(_content, letter, Rect2(letter_x, 61, advance + 4, 66), 56)
+			glyph.add_theme_color_override("font_shadow_color", Color("352440"))
+			glyph.add_theme_constant_override("shadow_offset_x", 3)
+			glyph.add_theme_constant_override("shadow_offset_y", 4)
+			var lift := -48.0 if i % 2 == 0 else 38.0
+			_register_piece(glyph, Vector2((i - 4) * 9, lift), (i - 4) * 0.035, 0.08 + i * 0.025)
+		letter_x += advance
 	_slugs = _platform_slugs()
 	for i in _slugs.size():
 		var slug: String = _slugs[i]
@@ -89,41 +86,50 @@ func _build() -> void:
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.mouse_entered.connect(_hover.bind(i))
 		_buttons.append(btn)
-	_description = UI.label(_content, "", Rect2(58, 376, 540, 24), 16, UI.MUTED)
-	UI.footer(_content, "W/S  SELECT     ENTER / A  CONFIRM     MOUSE  POINT & CLICK")
-	for i in 12:
-		var spark := UI.fill(_content, Rect2(440 + (i * 37) % 320, 190 + (i * 53) % 210, 2, 2), UI.GOLD)
-		_sparks.append(spark)
+		_register_piece(btn, Vector2(36 + i * 8, 42 + i * 5), 0.025, 0.25 + i * 0.07)
 	_build_options()
 	_build_credits()
 
+func _register_piece(node: Control, offset: Vector2, angle: float, delay: float) -> void:
+	node.pivot_offset = node.size / 2.0
+	_pieces.append({"node": node, "home": node.position, "offset": offset, "angle": angle, "delay": delay})
+
 func _start_intro() -> void:
+	if _intro and _intro.is_valid():
+		_intro.kill()
 	_intro_played = true
 	_intro_active = true
-	_halves[0].position.x = -400
-	_halves[1].position.x = 800
-	_content.position.x = -34
-	_content.modulate.a = 0
+	for piece in _pieces:
+		var node: Control = piece.node
+		node.position = piece.home + piece.offset
+		node.rotation = piece.angle
+		node.scale = Vector2.ONE * 0.9
+		node.modulate.a = 0
 	# Let the first texture upload finish before advancing the entrance.
 	await get_tree().process_frame
 	await get_tree().process_frame
 	if not _intro_active or not visible:
 		return
 	_intro = create_tween().set_ignore_time_scale(true).set_parallel(true)
-	_intro.tween_property(_halves[0], "position:x", 0.0, 0.85).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_intro.tween_property(_halves[1], "position:x", 400.0, 0.85).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_intro.tween_property(_content, "position:x", 0.0, 0.5).set_delay(0.45).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_intro.tween_property(_content, "modulate:a", 1.0, 0.45).set_delay(0.45)
+	for piece in _pieces:
+		var node: Control = piece.node
+		var delay: float = piece.delay
+		_intro.tween_property(node, "position", piece.home, 0.48).set_delay(delay).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_intro.tween_property(node, "rotation", 0.0, 0.48).set_delay(delay).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_intro.tween_property(node, "scale", Vector2.ONE, 0.48).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_intro.tween_property(node, "modulate:a", 1.0, 0.22).set_delay(delay)
 	_intro.chain().tween_callback(_finish_intro)
 
 func _finish_intro() -> void:
 	if _intro and _intro.is_valid():
 		_intro.kill()
 	_intro_active = false
-	_halves[0].position.x = 0
-	_halves[1].position.x = 400
-	_content.position.x = 0
-	_content.modulate.a = 1
+	for piece in _pieces:
+		var node: Control = piece.node
+		node.position = piece.home
+		node.rotation = 0
+		node.scale = Vector2.ONE
+		node.modulate.a = 1
 	_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.18
 
 func _input(event: InputEvent) -> void:
@@ -181,17 +187,17 @@ func _activate(index: int) -> void:
 		"credits": _set_overlay(OVERLAY_CREDITS)
 		"quit": get_tree().quit()
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
+	var now := Time.get_ticks_msec()
+	var real_delta := clampf((now - _last_tick) / 1000.0, 0.0, 0.1)
+	_last_tick = now
 	if not visible:
 		return
+	_ambience.advance(real_delta)
 	if _intro_active:
 		if UI.confirm() or Input.is_action_just_pressed("menu_cancel"):
 			_finish_intro()
 		return
-	_elapsed += delta
-	for i in _sparks.size():
-		_sparks[i].position.y = 390.0 - fmod(_elapsed * (5 + i % 3) + i * 23, 220.0)
-		_sparks[i].modulate.a = 0.2 + 0.4 * (sin(_elapsed * 1.5 + i) + 1.0) / 2.0
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
 	if _overlay != OVERLAY_NONE and Input.is_action_just_pressed("menu_cancel"):
@@ -250,7 +256,6 @@ func _refresh() -> void:
 	for i in _buttons.size():
 		UI.select(_buttons[i], i == cursor)
 		_buttons[i].text = (">  " if i == cursor else "   ") + BUTTON_NAMES[_slugs[i]]
-	_description.text = DESCRIPTIONS[_slugs[cursor]]
 
 func _refresh_options() -> void:
 	var volumes := [Settings.master_volume, Settings.music_volume, Settings.sfx_volume]

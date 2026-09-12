@@ -1,187 +1,125 @@
-# Match-end screen. Shows the winning clan + round tally, then offers three choices:
-#   CHOOSE CHARACTERS → CLAN_SELECT (re-pick clans, same mode)
-#   CHOOSE ARENA      → MAP_SELECT  (re-pick map, same clans)
-#   MAIN MENU         → TITLE
-# Navigate ↑/↓ (either player / any pad), confirm ✕/Space, ◯/Esc → main menu.
-# Reuses the pause-menu sprite kit (backdrop + wooden button plates + pointer) for a consistent look.
 extends Control
 
-const MENU := "res://sprites/menu/"
-
-const PLATE_W := 320.0
-const PLATE_H := 46.0
-const PLATE_STEP := 60.0
-const PLATE_TOP := 224.0
-const PLATE_CX := (800.0 - PLATE_W) / 2.0
-
-const COL_SEL := Color("d4a830")    # highlighted item
-const COL_DIM := Color("f0eee8")    # idle item text
-
-# Option labels; the state each routes to is resolved at runtime by _option_state() (autoload enum
-# values aren't safe to embed in a const initializer).
-const OPT_TEXT: Array = ["CHOOSE CHARACTERS", "CHOOSE ARENA", "MAIN MENU"]
-
-func _option_state(i: int) -> int:
-	match i:
-		0: return GameState.State.CLAN_SELECT
-		1: return GameState.State.MAP_SELECT
-		_: return GameState.State.TITLE
-
+const UI := preload("res://menu_ui.gd")
+const Portraits := preload("res://clan_portraits.gd")
+const OPTIONS := ["REMATCH", "CHOOSE ARENA", "CHOOSE CLAN", "MAIN MENU"]
+const STATS := [["strikes", "KATANA STRIKES"], ["throws", "SHURIKEN THROWS"], ["hits", "HITS LANDED"], ["blocks", "BLOCKS"], ["eliminations", "ELIMINATIONS"]]
 var winner_label: Label
-var subline: Label
 var tally_label: Label
-var hint_label: Label
-var plates: Array = []     # button-plate TextureRects
-var opt_labels: Array = []
-var cursor_rect: TextureRect
-var _cursor: int = 0
-var _input_lockout_until: float = 0.0
-
+var portrait: TextureRect
+var actions: Array[Button] = []
+var stat_headers: Array[Label] = []
+var stat_values: Array[Array] = []
+var _cursor := 0
+var _input_lockout_until := 0.0
+var _entry: Tween
 
 func _ready() -> void:
-	anchor_right = 1.0
-	anchor_bottom = 1.0
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_build()
+	UI.image(self, UI.BACKGROUND, Rect2(0, 0, 800, 450))
+	UI.fill(self, Rect2(0, 0, 800, 450), Color(0.025, 0.03, 0.08, 0.83))
+	var portrait_frame := UI.panel(self, Rect2(40, 26, 160, 218), UI.GOLD)
+	portrait = UI.image(portrait_frame, null, Rect2(14, 10, 132, 198))
+	UI.label(self, "VICTORY", Rect2(224, 42, 272, 28), 21, UI.GOLD)
+	winner_label = UI.label(self, "", Rect2(220, 78, 284, 58), 48)
+	tally_label = UI.label(self, "", Rect2(224, 150, 268, 30), 22, UI.GOLD)
+	for i in OPTIONS.size():
+		var button := UI.button(self, OPTIONS[i], Rect2(520, 40+i*49, 240, 40), _activate.bind(i), 19)
+		button.mouse_entered.connect(_hover.bind(i))
+		actions.append(button)
+	UI.label(self, "BATTLE RECORD", Rect2(40, 255, 190, 26), 17, UI.GOLD)
+	for slot in 4:
+		stat_headers.append(UI.label(self, "", Rect2(), 16, UI.IVORY, true))
+	for row in STATS.size():
+		var y := 296+row*26
+		UI.fill(self, Rect2(40, y, 720, 25), Color(0.08, 0.09, 0.16, 0.9 if row%2 == 0 else 0.55))
+		UI.label(self, STATS[row][1], Rect2(52, y, 198, 25), 14, UI.MUTED)
+		var values: Array = []
+		for slot in 4:
+			values.append(UI.label(self, "0", Rect2(), 19, UI.IVORY, true))
+		stat_values.append(values)
 	visibility_changed.connect(_on_visibility_changed)
-
+	GameState.state_changed.connect(func(value: int):
+		if value == GameState.State.MATCH_END:
+			_refresh()
+	)
 
 func _on_visibility_changed() -> void:
-	if visible:
-		_cursor = 0
-		_refresh()
-		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 1.0
-		Audio.play_win_fanfare()
-
-
-func _build() -> void:
-	var backdrop := TextureRect.new()
-	backdrop.texture = load(MENU + "pause_backdrop_native.png")
-	backdrop.anchor_right = 1.0
-	backdrop.anchor_bottom = 1.0
-	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
-	backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(backdrop)
-
-	winner_label = _label(0, 60, 800, 80, 60)
-	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	subline = _label(0, 142, 800, 28, 18)
-	subline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subline.text = "match victory"
-	subline.add_theme_color_override("font_color", COL_SEL)
-
-	tally_label = _label(0, 176, 800, 30, 22)
-	tally_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tally_label.add_theme_color_override("font_color", COL_DIM)
-
-	for i in OPT_TEXT.size():
-		var y: float = PLATE_TOP + i * PLATE_STEP
-		var plate := _tex_sized(load(MENU + "pause_button_normal_native.png"), PLATE_CX, y, PLATE_W, PLATE_H)
-		plates.append(plate)
-		var lbl := _label(PLATE_CX, y, PLATE_W, PLATE_H, 22)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.text = String(OPT_TEXT[i])
-		opt_labels.append(lbl)
-
-	cursor_rect = _tex_sized(load(MENU + "pause_cursor_native.png"), 0, 0, 28, 32)
-
-	hint_label = _label(0, 414, 800, 22, 12)
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.text = "↑/↓ select     ✕ / Space / Enter confirm     ◯ / Esc — highlight main menu"
-	hint_label.add_theme_color_override("font_color", Color("6a6e88"))
-
-
-# --- Node helpers ---
-
-func _tex_sized(tex: Texture2D, x: float, y: float, w: float, h: float) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = tex
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.position = Vector2(x, y)
-	tr.size = Vector2(w, h)
-	add_child(tr)
-	return tr
-
-func _label(x: float, y: float, w: float, h: float, font_size: int) -> Label:
-	var lbl := Label.new()
-	lbl.position = Vector2(x, y)
-	lbl.size = Vector2(w, h)
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	return lbl
-
-
-# --- Refresh / input ---
-
-func _refresh() -> void:
-	var winner_slot: int = GameState.match_winner_slot
-	var clan: Dictionary = GameState.get_clan(winner_slot)
-	winner_label.text = "%s WINS" % clan.name
-	winner_label.add_theme_color_override("font_color", clan.color)
-
-	var parts: PackedStringArray = PackedStringArray()
-	for slot in range(1, GameState.num_players() + 1):
-		# "P<N> CLAN score" — a first-timer shouldn't have to remember which clan they picked;
-		# the winner's row gets a star so the big headline maps to a line at a glance.
-		var mark: String = "★ " if slot == winner_slot else ""
-		parts.append("%sP%d %s %d" % [mark, slot, GameState.get_clan(slot).name, Combat.scores.get(slot, 0)])
-	tally_label.text = "    ·    ".join(parts)
-
-	for i in plates.size():
-		var sel: bool = (i == _cursor)
-		plates[i].texture = load(MENU + "pause_button_%s_native.png" % ("hover" if sel else "normal"))
-		opt_labels[i].add_theme_color_override("font_color", COL_SEL if sel else COL_DIM)
-		# Online guest: the options belong to the host — shown dimmed, watch-only.
-		plates[i].modulate.a = 0.4 if Net.is_client() else 1.0
-		opt_labels[i].modulate.a = 0.4 if Net.is_client() else 1.0
-
-	var cy: float = PLATE_TOP + _cursor * PLATE_STEP
-	cursor_rect.position = Vector2(PLATE_CX - 38.0, cy + (PLATE_H - 32.0) / 2.0)
-	cursor_rect.visible = not Net.is_client()
-	if Net.is_client():
-		hint_label.text = "P1 (host) chooses what happens next      ESC / ◯ — leave the session"
-
-
-func _nav(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
-
-
-func _process(_delta: float) -> void:
+	if _entry != null:
+		_entry.kill()
 	if not visible:
 		return
-	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
-		return
-	# Online guest: the host drives the rematch flow; the guest may only leave the session.
+	_cursor = 0
+	_input_lockout_until = Time.get_ticks_msec()/1000.0+0.65
+	_refresh()
+	portrait.modulate.a = 0
+	_entry = create_tween().set_parallel(true).set_ignore_time_scale(true)
+	_entry.tween_property(portrait, "modulate:a", 1.0, 0.3)
+	Audio.play_win_fanfare()
+
+func _refresh() -> void:
 	if Net.is_client():
-		if Input.is_action_just_pressed("menu_cancel"):
-			Audio.play("click")
+		_cursor = 3
+	var slot := clampi(GameState.match_winner_slot, 1, 4)
+	var clan: Dictionary = GameState.get_clan(slot)
+	Portraits.apply(portrait, GameState.clan_index(slot), GameState.SKIN_STYLES[GameState.skin_index(slot)])
+	winner_label.text = clan.name
+	winner_label.add_theme_color_override("font_color", clan.color)
+	tally_label.text = "P%d   %d WINS" % [slot, Combat.scores.get(slot, 0)]
+	var count := GameState.num_players()
+	var width := 500.0/count
+	for index in 4:
+		var shown := index < count
+		var x := 260+index*width
+		var header: Label = stat_headers[index]
+		header.visible = shown
+		header.position = Vector2(x, 260)
+		header.size = Vector2(width, 28)
+		header.text = "P%d  %s · %d" % [index+1, GameState.get_clan(index+1).name, Combat.scores.get(index+1,0)]
+		header.add_theme_font_size_override("font_size", 13 if count == 4 else 16)
+		header.add_theme_color_override("font_color", GameState.get_clan(index+1).color)
+		for row in STATS.size():
+			var value: Label = stat_values[row][index]
+			value.visible = shown
+			value.position = Vector2(x, 296+row*26)
+			value.size = Vector2(width, 25)
+			value.text = str(Combat.stat(index+1, STATS[row][0]))
+	for i in actions.size():
+		actions[i].disabled = Net.is_client() and i != 3
+		actions[i].text = "LEAVE MATCH" if Net.is_client() and i == 3 else OPTIONS[i]
+		UI.select(actions[i], i == _cursor and not actions[i].disabled)
+
+func _hover(index: int) -> void:
+	if actions[index].disabled:
+		return
+	_cursor = index
+	_refresh()
+
+func _activate(index: int) -> void:
+	if not visible or Time.get_ticks_msec()/1000.0 < _input_lockout_until:
+		return
+	if Net.is_client():
+		if index == 3:
 			Net.leave("")
 			GameState.change_state(GameState.State.ONLINE_MENU)
 		return
-	if Input.is_action_just_pressed("menu_cancel"):
-		# Esc no longer discards the results instantly (an accidental press right after the
-		# fanfare used to throw the match screen away) — it highlights MAIN MENU; confirm executes.
-		Audio.play("click")
-		_cursor = OPT_TEXT.size() - 1
-		_refresh()
+	Audio.play("confirm")
+	match index:
+		0: GameState.start_new_match()
+		1: GameState.change_state(GameState.State.MAP_SELECT)
+		2: GameState.change_state(GameState.State.CLAN_SELECT)
+		3: GameState.change_state(GameState.State.TITLE)
+
+func _process(_delta: float) -> void:
+	if not visible or Time.get_ticks_msec()/1000.0 < _input_lockout_until:
 		return
-	if _nav("aim_up"):
-		_cursor = (_cursor + OPT_TEXT.size() - 1) % OPT_TEXT.size()
+	if Input.is_action_just_pressed("menu_cancel"):
+		_cursor = 3
+		_refresh()
+	elif UI.nav("aim_up") or UI.nav("aim_down"):
+		_cursor = 3 if Net.is_client() else posmod(_cursor+(1 if UI.nav("aim_down") else -1), actions.size())
 		Audio.play("click")
 		_refresh()
-	elif _nav("aim_down"):
-		_cursor = (_cursor + 1) % OPT_TEXT.size()
-		Audio.play("click")
-		_refresh()
-	elif Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
-			or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm"):
-		Audio.play("confirm")
-		GameState.change_state(_option_state(_cursor))
+	elif UI.confirm():
+		_activate(3 if Net.is_client() else _cursor)

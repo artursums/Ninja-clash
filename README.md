@@ -14,7 +14,7 @@ online 1v1.
 | **Engine** | Godot 4.6 · GDScript · Forward+ · GodotPhysics2D · 800×450 |
 | **Players** | 1–4 local (2 keyboard schemes + up to 4 gamepads) · 1v1 online |
 | **Content** | 4 arenas · 4 clans · 15 skins · 3 AI difficulty tiers · 9 match variants |
-| **Networking** | ENet, host-authoritative, 30 Hz snapshots (desktop only) |
+| **Networking** | Host-authoritative, 30 Hz snapshots · desktop ENet · browser WebRTC rooms (service setup required) |
 | **Tests** | 46 GUT unit tests across 10 suites, all passing |
 | **Targets** | macOS · Windows · Linux · Web (WASM, live) |
 
@@ -39,6 +39,10 @@ architecture, how to run and test it.
 Or headless: `/Applications/Godot.app/Contents/MacOS/Godot --path ninja_clash`
 
 Export presets and the web deploy pipeline: [`ninja_clash/EXPORT.md`](ninja_clash/EXPORT.md).
+
+Browser invitations require the room API, Redis and TURN to be configured and deployed.
+The previously published static build does not include them. See the
+[step-by-step setup guide (Russian)](web/SETUP.ru.md).
 
 ## Tests
 

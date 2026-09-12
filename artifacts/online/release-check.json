@@ -1,0 +1,12 @@
+{
+  "release": true,
+  "debugTelemetry": false,
+  "inviteClipboard": true,
+  "hostState": "ROUND",
+  "guestState": "ROUND",
+  "route": {
+    "local": "relay",
+    "remote": "relay"
+  },
+  "scriptErrors": []
+}

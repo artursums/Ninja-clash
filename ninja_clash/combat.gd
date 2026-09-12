@@ -24,6 +24,19 @@ var _clash_lock_until: float = 0.0          # de-dupe: both fighters detect the 
 
 # === Match state === (up to 4 fighters for free-for-all)
 var scores: Dictionary = {1: 0, 2: 0, 3: 0, 4: 0}
+const STAT_KEYS := ["strikes", "throws", "hits", "blocks", "eliminations"]
+var match_stats: Dictionary = {}
+
+func record(slot: int, key: String) -> void:
+	if slot < 1 or slot > 4 or not STAT_KEYS.has(key) or not GameState.is_round_active() or Net.is_client():
+		return
+	if not match_stats.has(slot):
+		match_stats[slot] = {}
+	match_stats[slot][key] = stat(slot, key) + 1
+
+func stat(slot: int, key: String) -> int:
+	return int(match_stats.get(slot, {}).get(key, 0))
+
 
 # === Signals ===
 signal score_changed
@@ -35,6 +48,8 @@ signal clash_occurred(player_a: Node, player_b: Node, midpoint: Vector2)
 # records the kill for the feed/FX and credits the ACTUAL killer (needed for free-for-all,
 # where "the other player" is no longer well-defined).
 func on_kill(victim_slot: int, killer_slot: int = 0) -> void:
+	if killer_slot != victim_slot:
+		record(killer_slot, "eliminations")
 	if killer_slot < 1:
 		killer_slot = victim_slot   # unknown source — keep the feed's clan lookup valid
 	GameState.last_kill_killer = killer_slot
@@ -48,6 +63,7 @@ func award_survivor(slot: int) -> void:
 	score_changed.emit()
 
 func reset_scores() -> void:
+	match_stats.clear()
 	scores = {1: 0, 2: 0, 3: 0, 4: 0}
 	emit_signal("score_changed")
 

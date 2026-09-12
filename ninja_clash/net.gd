@@ -1,5 +1,5 @@
 # Autoload: Net
-# Online multiplayer session manager (ADR-0003) — LAN/internet 1v1 over ENet.
+# Online multiplayer session manager — desktop ENet / browser WebRTC 1v1.
 #
 # Model: HOST-AUTHORITATIVE. The host runs the exact same simulation as a local match; the
 # client is a renderer + input device:
@@ -31,6 +31,12 @@ var _peer_id: int = 0                   # the other side's peer id (host side: t
 var _tick: int = 0
 var _next_net_id: int = 0
 var _join_deadline: float = 0.0
+var _web_room: Node = null
+var invitation_code := ""
+var _last_remote_input := 0.0
+
+signal room_created(code: String)
+signal connection_status(message: String)
 
 # Host-side: latest remote intent from the client (slot 2).
 var _remote_held_mask: int = 0
@@ -46,6 +52,7 @@ signal session_ended(reason: String)            # any disconnect / failure / del
 signal lobby_peer_pick(cursor: int, skin: int, confirmed: bool)   # host ← client clan pick
 signal lobby_host_state(cursor: int, skin: int, confirmed: bool)  # client ← host clan pick
 signal lobby_pick_rejected(reason: String)      # client ← host: confirm refused (clan taken)
+signal map_roll_started(from: int, target: int)
 signal map_cursor_changed(cursor: int)          # client ← host: map-select browsing
 
 
@@ -84,6 +91,8 @@ func next_id() -> int:
 ## Open a server and wait for one opponent. Returns "" on success, an error text otherwise.
 func host_game(port: int = DEFAULT_PORT) -> String:
 	leave("")
+	if OS.has_feature("web"):
+		return _start_web_room(true, "")
 	var peer := ENetMultiplayerPeer.new()
 	var err: int = peer.create_server(port, 1)
 	if err != OK:
@@ -96,6 +105,12 @@ func host_game(port: int = DEFAULT_PORT) -> String:
 
 ## Connect to a host. Returns "" when the attempt started, an error text otherwise.
 func join_game(ip: String, port: int = DEFAULT_PORT) -> String:
+	if OS.has_feature("web"):
+		var code: String = preload("res://web_room.gd").parse_room(ip)
+		if code == "":
+			return "ENTER A ROOM CODE OR INVITE LINK"
+		leave("")
+		return _start_web_room(false, code)
 	leave("")
 	var peer := ENetMultiplayerPeer.new()
 	var err: int = peer.create_client(ip, port)
@@ -108,6 +123,33 @@ func join_game(ip: String, port: int = DEFAULT_PORT) -> String:
 	return ""
 
 
+func _start_web_room(as_host: bool, code: String) -> String:
+	mode = NetMode.HOST if as_host else NetMode.CLIENT
+	last_status = ""
+	_web_room = preload("res://web_room.gd").new()
+	add_child(_web_room)
+	_web_room.prepared.connect(func(peer): multiplayer.multiplayer_peer = peer)
+	_web_room.room_created.connect(func(room: String):
+		invitation_code = room
+		room_created.emit(room))
+	_web_room.status_changed.connect(func(message: String): connection_status.emit(message))
+	_web_room.failed.connect(func(message: String): _shutdown(message, true))
+	_web_room.start(as_host, code)
+	return ""
+
+
+func invitation_url() -> String:
+	if not OS.has_feature("web") or invitation_code == "":
+		return ""
+	return String(JavaScriptBridge.eval("window.location.origin + window.location.pathname", true)) + "#room=" + invitation_code
+
+
+func pending_invitation() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	return preload("res://web_room.gd").parse_room(String(JavaScriptBridge.eval("window.location.href", true)))
+
+
 ## Deliberate leave (menu back / quit to menu). Notifies the other side first when connected.
 func leave(reason: String = "") -> void:
 	if is_online() and _peer_id != 0:
@@ -118,6 +160,12 @@ func leave(reason: String = "") -> void:
 ## Tear the session down. `notify_screens` routes the local player to the online menu with a
 ## status message (used for unexpected drops mid-flow).
 func _shutdown(reason: String, notify_screens: bool) -> void:
+	if _web_room != null:
+		var room: Node = _web_room
+		_web_room = null
+		room.stop()
+		room.queue_free()
+	invitation_code = ""
 	_peer_id = 0
 	_join_deadline = 0.0
 	_remote_held_mask = 0
@@ -160,6 +208,8 @@ func _on_peer_connected(id: int) -> void:
 	if not is_host():
 		return
 	_peer_id = id
+	if _web_room != null:
+		_web_room.mark_connected()
 	# Opponent is in — go straight to the online lobby (clan select). The state change is
 	# relayed to the client by on_local_state_changed below.
 	GameState.game_mode = GameState.Mode.HUMAN_VS_HUMAN
@@ -174,6 +224,8 @@ func _on_peer_disconnected(_id: int) -> void:
 func _on_connected_to_server() -> void:
 	_peer_id = 1
 	_join_deadline = 0.0
+	if _web_room != null:
+		_web_room.mark_connected()
 	# Wait: the host's state bundle (CLAN_SELECT) arrives via _apply_state.
 
 
@@ -197,6 +249,9 @@ func _physics_process(_delta: float) -> void:
 		NetMode.HOST:
 			if _peer_id == 0:
 				return
+			if _now() - _last_remote_input > 0.25:
+				_remote_held_mask = 0
+				_remote_pressed_accum = 0
 			_tick += 1
 			if _tick % SNAPSHOT_EVERY_N_TICKS == 0 and _main != null:
 				_snapshot.rpc(_build_snapshot())
@@ -235,8 +290,9 @@ func _local_pressed_mask() -> int:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _intent(held_mask: int, pressed_mask: int) -> void:
-	if not is_host():
+	if not is_host() or multiplayer.get_remote_sender_id() != _peer_id:
 		return
+	_last_remote_input = _now()
 	_remote_held_mask = held_mask
 	_remote_pressed_accum |= pressed_mask   # accumulate so a tap between snapshots is never lost
 
@@ -266,13 +322,26 @@ func _build_snapshot() -> Dictionary:
 	var waves: Array = []
 	for w in get_tree().get_nodes_in_group("blade_waves"):
 		waves.append(NetCodec.encode_wave(w))
-	return {"p": players, "s": shuris, "w": waves}
+	var platforms: Array = []
+	for platform in _main.current_map_nodes:
+		if platform.is_in_group("crumble_platforms"):
+			platforms.append([platform.phase, platform.remaining])
+	return {"p": players, "s": shuris, "w": waves, "c": platforms, "map": _main._current_loaded_map}
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _snapshot(snap: Dictionary) -> void:
 	if not is_client() or _main == null:
 		return
+	if int(snap.get("map", -1)) != _main._current_loaded_map:
+		return
+	var platforms: Array = snap.get("c", [])
+	var index := 0
+	for platform in _main.current_map_nodes:
+		if platform.is_in_group("crumble_platforms"):
+			if index < platforms.size():
+				platform.apply_snapshot(platforms[index])
+			index += 1
 	var now: float = _now()
 	for arr in snap.get("p", []):
 		var slot: int = int(arr[NetCodec.P.SLOT])
@@ -365,6 +434,7 @@ func _build_state_bundle() -> Dictionary:
 		"round_winner": _main._round_winner_slot if _main != null else 0,
 		"last_killer": GameState.last_kill_killer, "last_victim": GameState.last_kill_victim,
 		"scores": Combat.scores,
+		"stats": Combat.match_stats.duplicate(true),
 		"cfg": {
 			"katana_enabled": MatchConfig.katana_enabled,
 			"katana_recharge": MatchConfig.katana_recharge,
@@ -393,6 +463,7 @@ func _apply_state(s: int, bundle: Dictionary) -> void:
 	GameState.match_winner_slot = int(bundle.get("winner", 0))
 	GameState.last_kill_killer = int(bundle.get("last_killer", 0))
 	GameState.last_kill_victim = int(bundle.get("last_victim", 0))
+	Combat.match_stats = bundle.get("stats", {}).duplicate(true)
 	Combat.scores = bundle.get("scores", Combat.scores)
 	Combat.score_changed.emit()
 	var cfg: Dictionary = bundle.get("cfg", {})
@@ -506,3 +577,11 @@ func _strip_fx(path: String, frame_count: int, fps: float, pos: Vector2, fx_scal
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
+
+func send_map_roll(from: int, target: int) -> void:
+	if is_host() and _peer_id != 0:
+		_map_roll.rpc(from,target)
+
+@rpc("authority", "call_remote", "reliable")
+func _map_roll(from: int, target: int) -> void:
+	map_roll_started.emit(from,target)

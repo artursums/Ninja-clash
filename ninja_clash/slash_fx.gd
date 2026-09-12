@@ -1,47 +1,41 @@
-extends Sprite2D
-## Film-style katana slash trail — a 5-frame swept crescent sprite sheet (same approach as the
-## clash-lightning FX: a horizontal strip, additive). Frames are baked white, so modulate tints the
-## crescent to the fighter's clan colour. Plays OVER the blade swing (it doesn't replace it): the
-## owning player drives the frame from swing progress so the trail sweeps in sync with the blade.
+extends Node2D
 
-const SHEET := "res://sprites/fx/katana_slash_5frame_native_400x80.png"
-const FRAMES := 5
-const FRAME_PX := 80.0
-# The hand/pivot baked into each frame (see generate_slash.py PIVOT); offset anchors it on the origin
-# so the arc stays pinned to the hand and mirrors cleanly via a negative scale.x.
-const PIVOT := Vector2(34.0, 46.0)
-
-var _tint: Color = Color(0.7, 0.9, 1.0)
-
+const Art := preload("res://fighter_art.gd")
+var _tint := Color(0.7, 0.9, 1.0)
+var _progress := 0.0
+var _outer := PackedVector2Array()
+var _inner := PackedVector2Array()
 
 func _ready() -> void:
-	texture = load(SHEET)
-	hframes = FRAMES
-	vframes = 1
-	frame = 0
-	centered = true
-	offset = Vector2(FRAME_PX, FRAME_PX) * 0.5 - PIVOT   # put the baked hand pivot on the node origin
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR    # smooth (film-style), not pixelated
-	z_index = 55                                         # above the blade + fighters
-	var mat := CanvasItemMaterial.new()
-	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	material = mat
+	z_index = 2
 	visible = false
+	_outer.resize(9)
+	_inner.resize(9)
 
+func set_tint(color: Color) -> void:
+	_tint = color
 
-func set_tint(c: Color) -> void:
-	_tint = c
+func play(progress: float, direction: int) -> void:
+	_progress = progress
+	visible = progress > 0.16 and progress < 0.78
+	if not visible:
+		return
+	var hand := Art.sword_hand(progress)
+	position = Vector2(hand.x * direction, hand.y)
+	scale = Vector2(direction, 1)
+	var start := Art.sword_angle(maxf(0.12, progress - 0.17))
+	var end := Art.sword_angle(progress)
+	for i in 9:
+		var angle := lerpf(start, end, i / 8.0)
+		_outer[i] = (Vector2.RIGHT.rotated(angle) * 29).round()
+		_inner[i] = (Vector2.RIGHT.rotated(angle) * 24).round()
+	queue_redraw()
 
-
-# Drive the slash for swing progress p∈[0,1] facing `dir` (+1 right / -1 left). The blade is drawn
-# separately by the player; this is the trailing crescent over it.
-func play(p: float, dir: int) -> void:
-	visible = true
-	position = Vector2(dir * 7.0, -1.0)        # anchored at the hand, same spot as the blade
-	scale = Vector2(dir * 0.72, 0.72)          # tucked in so the arc grazes the blade edge, not ahead of it
-	frame = clampi(int(p * FRAMES), 0, FRAMES - 1)
-	modulate = _tint                           # per-frame fade is baked into the sheet
-
+func _draw() -> void:
+	var strength := sin(clampf((_progress - 0.16) / 0.62, 0, 1) * PI)
+	draw_polyline(_inner, Color(_tint, strength * 0.25), 4)
+	draw_polyline(_outer, Color(_tint.lightened(0.45), strength * 0.8), 2)
+	draw_rect(Rect2(_outer[8] - Vector2.ONE, Vector2(2, 2)), Color(1, 1, 0.9, strength))
 
 func stop() -> void:
 	visible = false

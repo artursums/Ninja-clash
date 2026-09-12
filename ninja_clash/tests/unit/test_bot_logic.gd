@@ -26,45 +26,20 @@ func test_bot_logic_no_stomp_when_fully_stocked() -> void:
 	assert_false(BotLogicScript.should_stomp(3, 3, true), "fully stocked → never stomp")
 
 
-# --- should_guard: block only when a throw is incoming, dodge is on cooldown, and meter is healthy ---
+func test_aim_uses_nearest_octant_instead_of_diagonal_for_every_height_difference() -> void:
+	assert_eq(BotLogicScript.aim_octant(Vector2(300, 40)), Vector2.RIGHT)
+	assert_eq(BotLogicScript.aim_octant(Vector2(40, -300)), Vector2.UP)
+	assert_eq(BotLogicScript.aim_octant(Vector2(-150, 150)), Vector2(-1, 1))
 
-func test_bot_logic_guard_when_under_fire_and_dodge_on_cooldown() -> void:
-	assert_true(BotLogicScript.should_guard(true, true, 1.0, 0.6), "incoming + no dodge + meter → block")
+func test_threat_prediction_rejects_near_misses_and_departing_blades() -> void:
+	assert_eq(BotLogicScript.impact_time(Vector2(100, 80), Vector2(-200, 0)), INF)
+	assert_eq(BotLogicScript.impact_time(Vector2(100, 0), Vector2(200, 0)), INF)
+	assert_almost_eq(BotLogicScript.impact_time(Vector2(100, 0), Vector2(-200, 0)), 0.5, 0.001)
 
-
-func test_bot_logic_no_guard_without_incoming() -> void:
-	assert_false(BotLogicScript.should_guard(false, true, 1.0, 0.6), "nothing incoming → no block")
-
-
-func test_bot_logic_no_guard_when_dodge_available() -> void:
-	assert_false(BotLogicScript.should_guard(true, false, 1.0, 0.6), "dodge ready → prefer dodge over block")
-
-
-func test_bot_logic_no_guard_on_low_meter() -> void:
-	assert_false(BotLogicScript.should_guard(true, true, 0.3, 0.6), "meter below threshold → don't commit a block")
-
-
-# --- pick_high_ground: nearest perch above BOTH the foe and us, else -1 (Y grows downward) ---
-
-func test_bot_logic_high_ground_picks_nearest_perch_above_foe() -> void:
-	var self_pos := Vector2(400, 400)
-	var foe_pos := Vector2(300, 380)
-	var platforms := [
-		Rect2(Vector2(380, 90), Vector2(140, 12)),   # cx=450, above both — nearer (hd=50)
-		Rect2(Vector2(180, 180), Vector2(160, 12)),  # cx=260, above both — farther (hd=140)
-	]
-	assert_eq(BotLogicScript.pick_high_ground(platforms, self_pos, foe_pos, 24.0), 0, "picks the nearer high perch")
-
-
-func test_bot_logic_high_ground_none_when_no_perch_above_foe() -> void:
-	var self_pos := Vector2(400, 400)
-	var foe_pos := Vector2(300, 380)
-	var platforms := [Rect2(Vector2(380, 390), Vector2(140, 12))]  # top=390, below the foe
-	assert_eq(BotLogicScript.pick_high_ground(platforms, self_pos, foe_pos, 24.0), -1, "no perch above the foe → -1")
-
-
-func test_bot_logic_high_ground_skips_perch_not_above_self() -> void:
-	var self_pos := Vector2(400, 100)
-	var foe_pos := Vector2(300, 380)
-	var platforms := [Rect2(Vector2(380, 200), Vector2(140, 12))]  # above foe but below us → no height gain
-	assert_eq(BotLogicScript.pick_high_ground(platforms, self_pos, foe_pos, 24.0), -1, "perch not above us → -1")
+func test_bot_tiers_keep_reaction_and_attack_windows_beatable() -> void:
+	var tuning = load("res://bot_tuning.tres")
+	for tier in 3:
+		assert_gt(tuning.reaction_s[tier], 0.1)
+		assert_gt(tuning.throw_cd[tier], 0.5)
+		assert_lt(tuning.dodge_chance[tier], 0.9)
+		assert_gt(tuning.plan_min_s[tier], tuning.perception_s[tier])

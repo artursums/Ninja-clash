@@ -33,7 +33,7 @@ the last ninja standing. TowerFall-inspired, built for couch play — with LAN/o
 | **Players** | 1–4 local (keyboard ×2 + up to 4 gamepads), or 1v1 online |
 | **Arenas** | 4 — Sakura Temple, Neo Tokyo, Verdant Cistern, Sky Temple |
 | **Clans** | 4 — Shadow, Storm, Frost, Fire |
-| **Skins** | 15 appearance styles, layered over any clan colour |
+| **Skins** | 15 original appearance styles with expanded movement animations, in all 4 clan colours |
 | **Modes** | P1 vs P2 · P1 vs AI · AI vs AI · P1 vs 3 (free-for-all) · Online 1v1 |
 | **AI** | 3 tiers — Genin, Chunin, Jonin |
 | **Rulesets** | Fight Setup screen — 9 configurable variants, persisted between sessions |
@@ -147,12 +147,12 @@ stick somewhere and stay retrievable, so ammo thins out only when someone actual
 ## Match flow
 
 1. **Title** → Start / Online / Options / Credits / Quit
-2. **Mode select** — the four modes plus AI difficulty
+2. **Mode select** — choose a mode; modes with CPU opponents then require a Genin / Chunin / Jonin choice
 3. **Clan select** — pick clan and skin (**Tab** opens Fight Setup here)
-4. **Map select** — 4 arenas with live backdrop previews
+4. **Map select** — Up/Down browses arenas and actions; confirm an arena to highlight **Fight**, then confirm again to start. **Random** runs a slowing carousel and highlights Fight on its result.
 5. **Match** — first to the target score (default 5 round-wins); a round ends when one
    ninja is left standing, opening on a 3-2-1-FIGHT countdown
-6. **Match end** — winning clan, final score, rematch or return to title
+6. **Match end** — selected winner portrait, final round scores, and a per-player battle record; rematch, choose arena/clan, or return to title
 
 ---
 
@@ -186,8 +186,14 @@ from the network instead of from a keyboard — the simulation cannot tell the d
 There is no client-side prediction: the client renders host-authoritative positions, so
 input latency scales with ping. Wire formats live in `net_codec.gd` and are unit-tested.
 
-Online is **desktop only** — the web build hides the option, since browsers cannot open raw
-UDP sockets.
+Desktop online uses ENet and the host's IP address. The browser build uses **WebRTC**:
+**Online Duel → Create Room → Copy Invite Link**, then the guest opens the link and chooses
+**Join Room**. A Vercel Function exchanges the handshake through Redis; gameplay travels
+directly between browsers or through TURN when direct connectivity is blocked.
+The host tab must remain active. Desktop IP sessions and browser rooms are separate transports.
+
+The new browser mode requires deploying the room API and configuring Redis/TURN; exporting
+the static game alone is insufficient. Follow [the setup guide](../web/SETUP.ru.md).
 
 Dev shortcuts: `-- --host`, `-- --join=<ip>`, `-- --online-autotest`.
 

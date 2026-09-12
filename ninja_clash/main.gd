@@ -2,6 +2,8 @@
 
 extends Node2D
 
+const FighterArt := preload("res://fighter_art.gd")
+
 const Arena := preload("res://arena_rules.gd")
 const MAP_W := int(Arena.WIDTH)
 const MAP_H := int(Arena.HEIGHT)
@@ -71,7 +73,6 @@ var banner_label: Label
 var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites during the countdown
 var round_display: Node2D        # composed "ROUND N" (wordmark + digit sprites) at countdown stage 0
 var win_display: Node2D          # composed "P<N> WINS" shown at ROUND_END for the round's winner
-var mode_label: Label   # small "P1 vs AI · CHUNIN" tag shown during a match
 var tutorial_overlay: Control   # HOW TO PLAY (tutorial_overlay.gd) — shown before the round-1 countdown
 
 var _in_countdown: bool = false
@@ -93,6 +94,12 @@ func _ready() -> void:
 	Combat.clash_occurred.connect(_on_clash)
 	GameState.change_state(GameState.State.TITLE)
 	_handle_dev_args()
+	if Net.pending_invitation() != "":
+		GameState.change_state(GameState.State.ONLINE_MENU)
+	if OS.is_debug_build() and OS.has_feature("web"):
+		var probe := Node.new()
+		probe.set_script(load("res://dev_web_probe.gd"))
+		add_child(probe)
 	print("[MAIN] _ready() complete")
 
 # Dev/CI launch shortcuts (after `--` on the command line):
@@ -350,17 +357,11 @@ func _make_player(slot: int) -> CharacterBody2D:
 	var sprite: Sprite2D = Sprite2D.new()
 	sprite.name = "Visual"
 	sprite.centered = true
-	# 5-frame horizontal sprite sheet (idle/walk1/walk2/jump/attack)
-	sprite.hframes = 5
-	sprite.vframes = 1
-	sprite.frame = 0
-	# Pixel-perfect: nearest filter, integer 2x scale (16x16 → 32x32)
+	sprite.hframes = FighterArt.COLUMNS
+	sprite.vframes = FighterArt.ANIMATIONS.size()
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	sprite.scale = Vector2(2.0, 2.0)
-	# Offset.y=3 (×2 scale = 6px display) aligns feet with hitbox bottom
-	sprite.offset = Vector2(0.0, 3.0)
-	# Default texture — replaced per-clan in _enter_match_intro
-	sprite.texture = load("res://sprites/ninjas/ninja_cyan_native_80x16.png")
+	sprite.texture = load(FighterArt.path(0, GameState.get_clan(slot).sprite))
+	sprite.material = null
 	p.add_child(sprite)
 	arena_root.add_child(p)
 	return p
@@ -469,28 +470,6 @@ func _build_overlays() -> void:
 	tutorial_layer.add_child(tutorial_overlay)
 	tutorial_overlay.closed.connect(_start_countdown)
 
-	# Match mode tag (top-right) — e.g. "P1 vs AI · CHUNIN". Shown only during a match.
-	mode_label = Label.new()
-	mode_label.position = Vector2(540, 6)
-	mode_label.size = Vector2(254, 18)
-	mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	mode_label.add_theme_font_size_override("font_size", 13)
-	mode_label.add_theme_color_override("font_color", Color("aab0c8"))
-	mode_label.visible = false
-	canvas.add_child(mode_label)
-
-func _update_mode_label() -> void:
-	if mode_label == null:
-		return
-	var names: Array = ["P1 vs P2", "P1 vs AI", "AI vs AI", "P1 vs 3 · FFA"]
-	var txt: String = names[GameState.game_mode]
-	if GameState.game_mode != GameState.Mode.HUMAN_VS_HUMAN:
-		txt += "  ·  " + GameState.DIFFICULTY_NAMES[GameState.ai_difficulty]
-	# Online: remind each side which fighter is theirs (host = P1, guest = P2).
-	if Net.is_online():
-		txt = "ONLINE — YOU ARE %s" % ("P1" if Net.is_host() else "P2")
-	mode_label.text = txt
-
 func _on_state_changed(s: int) -> void:
 	# Safety: never carry a clash freeze across a state change (e.g. ESC mid-clash).
 	if Engine.time_scale != 1.0:
@@ -506,10 +485,7 @@ func _on_state_changed(s: int) -> void:
 	online_menu_screen.visible = (s == S.ONLINE_MENU)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
-	mode_label.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
 	win_display.visible = false   # only _enter_round_end re-shows it (for the round's winner)
-	if mode_label.visible:
-		_update_mode_label()
 
 	if s == S.MATCH_INTRO:
 		_enter_match_intro()
@@ -525,43 +501,32 @@ func _enter_match_intro() -> void:
 	_clear_shurikens()
 	if _current_loaded_map != GameState.selected_map_index:
 		_load_map(GameState.selected_map_index)
+	for node in current_map_nodes:
+		if node.has_method("reset_platform"):
+			node.reset_platform()
 	_ensure_player_count(GameState.num_players())
 	for p in players:
 		var clan = GameState.get_clan(p.slot)
 		var sprite: Sprite2D = p.get_node("Visual")
-		var sprite_name: String = clan.get("sprite", "cyan")
-		# Pose sheet (5 frames) + optional idle sheet (6 frames), resolved for this slot's skin.
 		var skin_idx: int = GameState.skin_index(p.slot)
-		var pose_path: String = GameState.skin_pose_path(sprite_name, skin_idx)
-		var idle_path: String = GameState.skin_idle_path(sprite_name, skin_idx)
-		var walk_path: String = GameState.skin_walk_path(sprite_name, skin_idx)
-		var swing_path: String = GameState.skin_swing_path(sprite_name, skin_idx)
-		if ResourceLoader.exists(pose_path):
-			p.pose_texture = load(pose_path)
-		# Costume/elemental skins ship no idle sheet → null so player.gd uses the pose idle frame.
-		p.idle_texture = load(idle_path) if idle_path != "" and ResourceLoader.exists(idle_path) else null
-		# Optional richer 6-frame run + katana-swing sheets; null → player.gd falls back to the pose frames.
-		p.walk_texture = load(walk_path) if walk_path != "" and ResourceLoader.exists(walk_path) else null
-		p.swing_texture = load(swing_path) if swing_path != "" and ResourceLoader.exists(swing_path) else null
-		# Start in pose mode (idle mode kicks in via _update_visual when truly idle)
-		sprite.texture = p.pose_texture
-		sprite.hframes = 5
+		sprite.texture = load(FighterArt.path(skin_idx, clan.sprite))
+		sprite.hframes = FighterArt.COLUMNS
+		sprite.vframes = FighterArt.ANIMATIONS.size()
 		sprite.frame = 0
-		p.current_visual_mode = "pose"
+		sprite.scale = Vector2.ONE
+		sprite.offset = Vector2.ZERO
+		sprite.material = null
 		sprite.modulate = Color.WHITE
-		var kat_path: String = "res://sprites/katanas/katana_v2/katana_%s_v2_6frame_native_192x16.png" % sprite_name
-		# Katana swing visual (child "Katana", hidden until a swing)
+		var kat_path := "res://sprites/fighters/katana.png"
 		var old_kat: Node = p.get_node_or_null("Katana")
 		if old_kat != null:
+			old_kat.name = "_old_katana"
 			old_kat.queue_free()
-		var kat: Sprite2D = Sprite2D.new()
+		var kat := Sprite2D.new()
 		kat.name = "Katana"
-		if ResourceLoader.exists(kat_path):
-			kat.texture = load(kat_path)
-		kat.hframes = 6
-		kat.frame = 2
+		kat.texture = load(kat_path)
 		kat.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		kat.scale = Vector2(1.5, 1.5)
+		kat.material = FighterArt.material_for(clan.color)
 		kat.visible = false
 		p.add_child(kat)
 		p.katana_sprite = kat
@@ -601,8 +566,8 @@ func _enter_match_intro() -> void:
 		p.stash_icons = sres["icons"]
 		if stash_row > 0:
 			y = sres["top_y"] - ROW_GAP
-		# Katana charges use the sheet's VERTICAL blade pose (frame 2) so the marks pack tightly.
-		var kres: Dictionary = _make_icon_grid(ind_root, katana_row, kat_path, 2, 6, 0.5, 6.0, ROW_GAP, 99, y, Color(0.85, 0.88, 0.95, 1.0))
+		# Original vertical blade marks retain their familiar size and spacing.
+		var kres: Dictionary = _make_icon_grid(ind_root, katana_row, "res://sprites/katanas/katana_%s_6frame_native_144x16.png" % clan.sprite, 2, 6, 0.5, 6.0, ROW_GAP, 99, y, Color(0.85, 0.88, 0.95, 1.0))
 		p.katana_icons = kres["icons"]
 		if katana_row > 0:
 			y = kres["top_y"] - ROW_GAP
@@ -625,6 +590,8 @@ func _enter_match_intro() -> void:
 		p.respawn(_player_spawn(p.slot))
 		p.is_bot = GameState.slot_is_bot(p.slot)
 		p.bot_difficulty = GameState.ai_difficulty
+		if p.is_bot:
+			p._prepare_bot()
 	# De-overlap AT SPAWN TIME (not only at the round-start transition) so two fighters can never
 	# even appear stacked during the countdown — covers any rare upstream corruption immediately.
 	_separate_overlapping_spawns()
@@ -870,11 +837,21 @@ func _load_map(index: int) -> void:
 	terrain.walls = data.walls
 	terrain.atlas = load(data.walls[0].sprite)
 	terrain.edge_color = data.wall_edge_color
+	terrain.theme = data.ambience
 	arena_root.add_child(terrain)
 	current_map_nodes.append(terrain)
 	for w in data.walls:
 		var body := _make_wall(w.center, w.size, data.wall_color, data.wall_edge_color, true)
 		current_map_nodes.append(body)
+
+	for index_in_map in data.crumble_platforms.size():
+		var platform := preload("res://crumble_platform.gd").new()
+		platform.name = "Crumble%d" % index_in_map
+		platform.bounds = data.crumble_platforms[index_in_map]
+		platform.tint = data.wall_edge_color
+		platform.atlas = terrain.atlas
+		arena_root.add_child(platform)
+		current_map_nodes.append(platform)
 
 	# Non-colliding scenery sprites (e.g. neon gate pillars, ladder tower) drawn behind the
 	# platforms but in front of the sky image. Pure decoration — no collision, no gameplay.
@@ -886,6 +863,7 @@ func _load_map(index: int) -> void:
 	var amb := Node2D.new()
 	amb.set_script(preload("res://arena_ambience.gd"))
 	amb.theme = data.get("ambience", "cistern")
+	amb.lamp_anchors = data.lamp_anchors
 	arena_root.add_child(amb)
 	current_map_nodes.append(amb)
 
@@ -978,6 +956,12 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 	rect.size = size
 	col.shape = rect
 	body.add_child(col)
+	# Continue collision across the seam while a body straddles the screen boundary.
+	for offset in Arena.seam_offsets(Rect2(center-size/2,size)):
+		var continuation := CollisionShape2D.new()
+		continuation.shape = rect
+		continuation.position = offset
+		body.add_child(continuation)
 	# Priority 1: sprite-based wall/platform
 	if sprite_path != "" and ResourceLoader.exists(sprite_path):
 		var sprite: Sprite2D = Sprite2D.new()

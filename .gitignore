@@ -26,6 +26,7 @@ dist/
 .godot/
 *.translation
 export_presets.cfg
+!ninja_clash/export_presets.cfg
 # Uncomment if using Godot:
 # *.import
 
@@ -80,6 +81,8 @@ Saved/
 *.temp
 *.cache
 *.log
+web/test-results/
+web/playwright-report/
 __pycache__/
 *.pyc
 node_modules/

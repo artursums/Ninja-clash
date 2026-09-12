@@ -1,25 +1,22 @@
 extends Control
 
+const Portraits := preload("res://clan_portraits.gd")
 const UI = preload("res://menu_ui.gd")
-const STANDARDS = preload("res://sprites/menu/clan_standards.webp")
 
 const BANNER_W := 164.0
-const BANNER_H := 160.0
 const BANNER_GAP := 24.0
-const BANNER_Y := 120.0
+const BANNER_Y := 112.0
 const CHIP_SCALE := 1.6
-const NINJA_SIZE := 72.0       # skin preview on the hovered banner (16×16 frame, scaled up)
-const NINJA_Y_OFF := 82.0
-const NAME_Y := 284.0          # clan-name label row, just below the flags
+const PORTRAIT_SIZE := Vector2(128, 192)
+const NAME_Y := 310.0
 
 var p1_cursor: int = 3
 var p2_cursor: int = 1
 var p1_confirmed: bool = false
 var p2_confirmed: bool = false
 
-var banners: Array = []        # TextureRect per clan
 var stamps: Array[Label] = []
-var clan_ninjas: Array = []    # base-skin preview ON EVERY flag (so all 4 clan colours are visible at once)
+var clan_ninjas: Array[TextureRect] = []
 var name_labels: Array = []    # clan name shown BELOW each flag
 var p1_chip: Label
 var p2_chip: Label
@@ -31,6 +28,7 @@ var _skin_buttons: Array[Button] = []
 var _selection_labels: Array[Label] = []
 var _docks: Array[Panel] = []
 var _input_lockout_until: float = 0.0
+var _opened_frame := -1
 
 func _ready() -> void:
 	anchor_right = 1.0
@@ -47,6 +45,7 @@ func _ready() -> void:
 
 func _on_visibility_changed() -> void:
 	if visible:
+		_opened_frame = Engine.get_process_frames()
 		p1_cursor = GameState.p1_clan
 		p2_cursor = GameState.p2_clan
 		p1_confirmed = false
@@ -56,6 +55,7 @@ func _on_visibility_changed() -> void:
 		if Net.is_online():
 			_send_local_pick()   # both sides announce their pick on entry, so each sees the other
 		_refresh()
+		_input_lockout_until = Time.get_ticks_msec()/1000.0+0.2
 
 func _banner_x(i: int) -> float:
 	var total: float = 4.0 * BANNER_W + 3.0 * BANNER_GAP
@@ -65,18 +65,14 @@ func _build() -> void:
 	UI.backdrop(self, 0.78)
 	UI.header(self, "CHOOSE YOUR CLAN", 1)
 	for i in 4:
-		var card := UI.button(self, "", Rect2(_banner_x(i), BANNER_Y, BANNER_W, 192), _mouse_pick.bind(i))
+		var card := UI.button(self, "", Rect2(_banner_x(i), BANNER_Y, BANNER_W, 222), _mouse_pick.bind(i))
 		_card_buttons.append(card)
-		var atlas := AtlasTexture.new()
-		atlas.atlas = STANDARDS
-		atlas.region = Rect2(i * 384, 0, 384, 1024)
-		var banner := UI.image(self, atlas, Rect2(_banner_x(i) + 10, BANNER_Y + 2, 144, BANNER_H))
-		banner.stretch_mode = TextureRect.STRETCH_SCALE
-		banners.append(banner)
-		var cn := _ninja_rect()
-		cn.position = Vector2(_banner_x(i) + (BANNER_W - NINJA_SIZE) / 2.0, BANNER_Y + NINJA_Y_OFF)
+		var cn := UI.image(self, Portraits.texture(i, "base"), Rect2(Vector2(_banner_x(i) + (BANNER_W - PORTRAIT_SIZE.x) / 2.0, BANNER_Y + 4), PORTRAIT_SIZE))
 		clan_ninjas.append(cn)
-		var stamp := UI.label(self, "LOCKED", Rect2(_banner_x(i), BANNER_Y + 126, BANNER_W, 30), 24, UI.GOLD, true)
+		var stamp := UI.label(self, "LOCKED", Rect2(_banner_x(i), BANNER_Y + 158, BANNER_W, 30), 22, UI.GOLD, true)
+		stamp.add_theme_color_override("font_shadow_color", UI.INK)
+		stamp.add_theme_constant_override("shadow_offset_x", 2)
+		stamp.add_theme_constant_override("shadow_offset_y", 2)
 		stamps.append(stamp)
 		name_labels.append(UI.label(self, "", Rect2(_banner_x(i), NAME_Y, BANNER_W, 24), 21, UI.IVORY, true))
 	p1_chip = UI.label(self, "P1", Rect2(0, 0, 45, 27), 22, UI.IVORY, true)
@@ -87,7 +83,8 @@ func _build() -> void:
 		_selection_labels.append(UI.label(self, "", Rect2(x + 12, 348, 196, 20), 16))
 		_skin_buttons.append(UI.button(self, "", Rect2(x + 12, 373, 190, 26), _mouse_skin.bind(slot), 14))
 		_player_buttons.append(UI.button(self, "", Rect2(x + 218, 352, 122, 46), _mouse_lock.bind(slot), 18))
-	status_label = UI.label(self, "", Rect2(150, 314, 500, 24), 14, UI.MUTED, true)
+	status_label = UI.label(self, "", Rect2(398, 62, 370, 26), 12, UI.MUTED, true)
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
 	UI.button(self, "TAB  RULES", Rect2(650, 416, 118, 24), _setup, 14)
 	UI.label(self, "A/D  SELECT   ENTER  READY   P  SKIN   P2  NUM 4/6 + 0", Rect2(144, 416, 496, 24), 12, UI.MUTED, true)
@@ -115,8 +112,10 @@ func _mouse_skin(slot: int) -> void:
 		return
 	if slot == 1 and not p1_confirmed:
 		GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
+		_mouse_slot = slot
 	elif slot == 2 and not p2_confirmed:
 		GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
+		_mouse_slot = slot
 	Audio.play("click")
 	_send_local_pick()
 	_refresh()
@@ -173,26 +172,8 @@ func _setup() -> void:
 	Audio.play("confirm")
 	GameState.change_state(GameState.State.MATCH_SETUP)
 
-func _ninja_rect() -> TextureRect:
-	var tr := TextureRect.new()
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.size = Vector2(NINJA_SIZE, NINJA_SIZE)
-	add_child(tr)
-	return tr
-
-# Frame-0 idle-pose texture for a clan colour + skin style.
-func _ninja_atlas(clan_idx: int, skin_idx: int) -> AtlasTexture:
-	var color: String = GameState.CLANS[clan_idx].sprite
-	var atlas := AtlasTexture.new()
-	atlas.atlas = load(GameState.skin_pose_path(color, skin_idx))
-	atlas.region = Rect2(0, 0, 16, 16)   # frame 0 = idle pose
-	return atlas
-
 func _process(_delta: float) -> void:
-	if not visible:
+	if not visible or Engine.get_process_frames() <= _opened_frame+1:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
@@ -231,6 +212,7 @@ func _process(_delta: float) -> void:
 	if not p1_confirmed:
 		if Input.is_action_just_pressed("p1_skin"):
 			GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
+			_mouse_slot = 1
 			Audio.play("click")
 			_refresh()
 		if Input.is_action_just_pressed("p1_left"):
@@ -260,6 +242,7 @@ func _process(_delta: float) -> void:
 	if not p2_confirmed:
 		if Input.is_action_just_pressed("p2_skin"):
 			GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
+			_mouse_slot = 2
 			Audio.play("click")
 			_refresh()
 		if Input.is_action_just_pressed("p2_left"):
@@ -404,24 +387,19 @@ func _refresh() -> void:
 	for i in 4:
 		var attended: bool = (i == p1_cursor) or (not solo and i == p2_cursor)
 		UI.select(_card_buttons[i], attended, GameState.CLANS[i].color)
-		banners[i].modulate = Color.WHITE if attended else Color(0.55, 0.55, 0.65)
+		clan_ninjas[i].modulate = Color.WHITE if attended else Color(0.72, 0.72, 0.78)
 		var locked: bool = (p1_confirmed and i == p1_cursor) or (not solo and p2_confirmed and i == p2_cursor)
 		stamps[i].visible = locked
 
-		# Exactly ONE character per flag — never duplicated when two players share it (the chips
-		# above show who's there, TowerFall-style). Skin: a player hovering alone previews their own
-		# skin; a shared or unattended flag shows the base skin. Hidden only under the locked-in stamp.
-		var p1_here: bool = (i == p1_cursor and not p1_confirmed)
-		var p2_here: bool = (not solo and i == p2_cursor and not p2_confirmed)
-		var skin_to_show: int = 0   # base ("CLASSIC")
-		if p1_here and not p2_here:
+		var p1_here: bool = i == p1_cursor
+		var p2_here: bool = not solo and i == p2_cursor
+		var active_slot: int = (1 if Net.is_host() else 2) if Net.is_online() else _mouse_slot
+		var skin_to_show: int = 0
+		if p1_here and (not p2_here or p1_confirmed or (not p2_confirmed and active_slot == 1)):
 			skin_to_show = GameState.p1_skin
-		elif p2_here and not p1_here:
+		elif p2_here:
 			skin_to_show = GameState.p2_skin
-		clan_ninjas[i].visible = not locked
-		if clan_ninjas[i].visible:
-			clan_ninjas[i].texture = _ninja_atlas(i, skin_to_show)
-			clan_ninjas[i].flip_h = false
+		Portraits.apply(clan_ninjas[i], i, GameState.SKIN_STYLES[skin_to_show])
 
 		# Clan name below the flag, tinted to the clan colour.
 		name_labels[i].text = GameState.CLANS[i].name

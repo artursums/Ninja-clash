@@ -1,24 +1,30 @@
 # Ninja Clash — Export & Store-Readiness Guide
 
-Export presets and signed builds are created in the **Godot editor** (Project ▸ Export), because
-they need the platform **export templates** installed and (for shipping) **code signing** — neither
-of which can be scripted headless here. This guide is the checklist; the owner runs the editor steps.
+Web exports can be built headlessly using the checked-in preset and installed templates.
+Signed native distribution still requires the relevant platform credentials.
 
 ## Prerequisites
 - Install export templates matching the engine: **Godot 4.6.2** (Editor ▸ Manage Export Templates).
   (Web templates are already installed at `~/Library/Application Support/Godot/export_templates/4.6.2.stable/`.)
 
-## Web (LIVE — friend-testable build)
+## Web (browser rooms — infrastructure setup required)
 
-The **Web preset exists** in `export_presets.cfg` (threads ON, GUT/tests excluded) and the game
-is deployed on Vercel: **https://ninja-clash.vercel.app**
+The **Web preset exists** in `export_presets.cfg` (threads ON, GUT/tests excluded).
+The existing site is **https://ninja-clash.vercel.app**; its old static deployment needs to
+be replaced by a build containing the room API. Redis and TURN credentials must be configured
+first. See [the complete setup guide](../web/SETUP.ru.md).
 
-Rebuild + redeploy after changes:
+From the repository root, rebuild the release and publish after configuring the services:
 ```
-/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
-    --export-release "Web" ../build/ninja-clash/index.html
-cd build/ninja-clash && npx vercel deploy --prod --yes
+cd web
+npm ci
+npm run export
+cd ../build/ninja-clash
+npx vercel login
+npx vercel deploy --prod
 ```
+The export tool prepares `build/ninja-clash/public/` (game), `api/` and `server/` (room service)
+plus the Vercel configuration. Deploy this directory, not just its `public` subdirectory.
 `build/ninja-clash/vercel.json` ships the `Cross-Origin-Opener-Policy` /
 `Cross-Origin-Embedder-Policy` headers Godot 4 web builds need for SharedArrayBuffer —
 without them the game will not boot in the browser. Gamepads work via the browser

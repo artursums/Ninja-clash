@@ -1,0 +1,149 @@
+[
+  {
+    "id": "classic-fire",
+    "clan": "FIRE",
+    "skin": "base",
+    "label": "Classic",
+    "path": "res://sprites/portraits/classic-fire.webp"
+  },
+  {
+    "id": "classic-shadow",
+    "clan": "SHADOW",
+    "skin": "base",
+    "label": "Classic",
+    "path": "res://sprites/portraits/classic-shadow.webp"
+  },
+  {
+    "id": "classic-storm",
+    "clan": "STORM",
+    "skin": "base",
+    "label": "Classic",
+    "path": "res://sprites/portraits/classic-storm.webp"
+  },
+  {
+    "id": "classic-frost",
+    "clan": "FROST",
+    "skin": "base",
+    "label": "Classic",
+    "path": "res://sprites/portraits/classic-frost.webp"
+  },
+  {
+    "id": "elemental-inferno",
+    "clan": "FIRE",
+    "skin": "elemental",
+    "label": "Inferno",
+    "path": "res://sprites/portraits/elemental-inferno.webp"
+  },
+  {
+    "id": "elemental-wraith",
+    "clan": "SHADOW",
+    "skin": "elemental",
+    "label": "Wraith",
+    "path": "res://sprites/portraits/elemental-wraith.webp"
+  },
+  {
+    "id": "elemental-tempest",
+    "clan": "STORM",
+    "skin": "elemental",
+    "label": "Tempest",
+    "path": "res://sprites/portraits/elemental-tempest.webp"
+  },
+  {
+    "id": "elemental-glacier",
+    "clan": "FROST",
+    "skin": "elemental",
+    "label": "Glacier",
+    "path": "res://sprites/portraits/elemental-glacier.webp"
+  },
+  {
+    "id": "ronin-shadow",
+    "clan": "SHADOW",
+    "skin": "ronin",
+    "label": "Ronin",
+    "path": "res://sprites/portraits/ronin-shadow.webp"
+  },
+  {
+    "id": "chef-fire",
+    "clan": "FIRE",
+    "skin": "chef",
+    "label": "Chef",
+    "path": "res://sprites/portraits/chef-fire.webp"
+  },
+  {
+    "id": "cyber-storm",
+    "clan": "STORM",
+    "skin": "cyber",
+    "label": "Cyber",
+    "path": "res://sprites/portraits/cyber-storm.webp"
+  },
+  {
+    "id": "edo-frost",
+    "clan": "FROST",
+    "skin": "edo",
+    "label": "Edo",
+    "path": "res://sprites/portraits/edo-frost.webp"
+  },
+  {
+    "id": "office-storm",
+    "clan": "STORM",
+    "skin": "office",
+    "label": "Office",
+    "path": "res://sprites/portraits/office-storm.webp"
+  },
+  {
+    "id": "pirate-shadow",
+    "clan": "SHADOW",
+    "skin": "pirate",
+    "label": "Pirate",
+    "path": "res://sprites/portraits/pirate-shadow.webp"
+  },
+  {
+    "id": "vacation-frost",
+    "clan": "FROST",
+    "skin": "vacation",
+    "label": "Vacation",
+    "path": "res://sprites/portraits/vacation-frost.webp"
+  },
+  {
+    "id": "piggy-fire",
+    "clan": "FIRE",
+    "skin": "pig",
+    "label": "Piggy",
+    "path": "res://sprites/portraits/piggy-fire.webp"
+  },
+  {
+    "id": "endobot-storm",
+    "clan": "STORM",
+    "skin": "endobot",
+    "label": "Endobot",
+    "path": "res://sprites/portraits/endobot-storm.webp"
+  },
+  {
+    "id": "neko-frost",
+    "clan": "FROST",
+    "skin": "neko",
+    "label": "Neko",
+    "path": "res://sprites/portraits/neko-frost.webp"
+  },
+  {
+    "id": "stalker-shadow",
+    "clan": "SHADOW",
+    "skin": "stalker",
+    "label": "Stalker",
+    "path": "res://sprites/portraits/stalker-shadow.webp"
+  },
+  {
+    "id": "ironclad-fire",
+    "clan": "FIRE",
+    "skin": "ironclad",
+    "label": "Ironclad",
+    "path": "res://sprites/portraits/ironclad-fire.webp"
+  },
+  {
+    "id": "bakeneko-shadow",
+    "clan": "SHADOW",
+    "skin": "bakeneko",
+    "label": "Bakeneko",
+    "path": "res://sprites/portraits/bakeneko-shadow.webp"
+  }
+]

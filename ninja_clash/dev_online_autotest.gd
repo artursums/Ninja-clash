@@ -42,6 +42,8 @@ func _process(delta: float) -> void:
 				_once("confirm_map", 1.2, func() -> void:
 					print("[AUTOTEST] host: confirming arena")
 					_tap(KEY_ENTER))
+				_once("start_fight", 1.8, func() -> void:
+					_tap(KEY_ENTER))
 		S.MATCH_INTRO:
 			_once("close_tutorial", 1.2, func() -> void:
 				_tap(KEY_ENTER))

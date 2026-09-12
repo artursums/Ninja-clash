@@ -15,7 +15,7 @@
 | **Engine** | Godot 4.6 · GDScript · Forward+ · GodotPhysics2D |
 | **Monetization** | Premium one-time purchase. No microtransactions, no battle pass. |
 | **Scope** | Small — ~3 months to v1 |
-| **Status** | **Playable and shipped** — web build live, 4 arenas, 4 clans, 15 skins, bots, online 1v1, 46 unit tests. Design docs below are the original vision; divergences are noted inline. |
+| **Status** | **Playable and shipped** — web build live, 4 arenas, 4 clans, 15 skins, bots, online 1v1, 57 unit tests. Design docs below are the original vision; divergences are noted inline. |
 
 ---
 

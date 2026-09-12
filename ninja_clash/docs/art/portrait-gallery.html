@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ninja Clash · Character portraits</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #110f19; color: #f4ead8; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1320px; margin: auto; padding: 48px 28px 72px; }
+header { border-bottom: 1px solid #44364a; padding-bottom: 28px; }
+.eyebrow { color: #e0ae62; text-transform: uppercase; letter-spacing: .18em; font-size: 12px; font-weight: 700; }
+h1 { font-size: clamp(30px, 5vw, 54px); line-height: 1.1; margin: 12px 0; }
+p { color: #b9aec4; line-height: 1.6; }
+nav { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+nav a { border: 1px solid #594660; padding: 10px 16px; text-decoration: none; border-radius: 4px; }
+a { color: inherit; }
+a:hover, a:focus-visible { outline: 2px solid #e0ae62; outline-offset: 4px; }
+section { margin-top: 40px; scroll-margin-top: 24px; }
+h2 { font-size: 24px; display: flex; align-items: center; gap: 14px; }
+h2 span { color: #b9aec4; font-weight: 400; font-size: 14px; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+figure { margin: 0; background: #1d1827; border: 1px solid #3b3046; border-top: 3px solid var(--clan); border-radius: 4px; overflow: hidden; }
+figure a { display: block; }
+img { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; image-rendering: pixelated; }
+figcaption { padding: 16px; }
+.clan { display: block; color: var(--clan); font-size: 11px; font-weight: 700; letter-spacing: .15em; margin-bottom: 6px; }
+.name { font-size: 19px; font-weight: 650; }
+footer { margin-top: 40px; color: #b9aec4; font-size: 13px; }
+@media (max-width: 960px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 680px) { main { padding: 28px 16px 48px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } figcaption { padding: 12px; } }
+@media (max-width: 360px) { .grid { grid-template-columns: 1fr; } }
+</style></head><body><main>
+<header><div class="eyebrow">Ninja Clash / Character art</div><h1>The four clans.</h1><p>21 portraits · 4 classic fighters · 4 elemental forms · 13 costumes<br>Open any portrait to view the full 1024 × 1536 artwork.</p>
+<nav aria-label="Portrait collections"><a href="#classic">Classic</a><a href="#elemental">Elemental</a><a href="#costumes">Costumes</a></nav></header>
+<section id="classic"><h2>Classic <span>4 portraits</span></h2><div class="grid">
+<figure style="--clan:#ff9132"><a href="../../sprites/portraits/classic-fire.webp" aria-label="Open Fire · Classic ninja portrait"><img src="portrait-thumbnails/classic-fire.webp" alt="Fire · Classic ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FIRE</span><span class="name">Classic</span></figcaption></figure>
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/classic-shadow.webp" aria-label="Open Shadow · Classic ninja portrait"><img src="portrait-thumbnails/classic-shadow.webp" alt="Shadow · Classic ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Classic</span></figcaption></figure>
+<figure style="--clan:#50d2e6"><a href="../../sprites/portraits/classic-storm.webp" aria-label="Open Storm · Classic ninja portrait"><img src="portrait-thumbnails/classic-storm.webp" alt="Storm · Classic ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">STORM</span><span class="name">Classic</span></figcaption></figure>
+<figure style="--clan:#8cdc64"><a href="../../sprites/portraits/classic-frost.webp" aria-label="Open Frost · Classic ninja portrait"><img src="portrait-thumbnails/classic-frost.webp" alt="Frost · Classic ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FROST</span><span class="name">Classic</span></figcaption></figure>
+</div></section>
+<section id="elemental"><h2>Elemental <span>4 portraits</span></h2><div class="grid">
+<figure style="--clan:#ff9132"><a href="../../sprites/portraits/elemental-inferno.webp" aria-label="Open Fire · Inferno ninja portrait"><img src="portrait-thumbnails/elemental-inferno.webp" alt="Fire · Inferno ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FIRE</span><span class="name">Inferno</span></figcaption></figure>
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/elemental-wraith.webp" aria-label="Open Shadow · Wraith ninja portrait"><img src="portrait-thumbnails/elemental-wraith.webp" alt="Shadow · Wraith ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Wraith</span></figcaption></figure>
+<figure style="--clan:#50d2e6"><a href="../../sprites/portraits/elemental-tempest.webp" aria-label="Open Storm · Tempest ninja portrait"><img src="portrait-thumbnails/elemental-tempest.webp" alt="Storm · Tempest ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">STORM</span><span class="name">Tempest</span></figcaption></figure>
+<figure style="--clan:#8cdc64"><a href="../../sprites/portraits/elemental-glacier.webp" aria-label="Open Frost · Glacier ninja portrait"><img src="portrait-thumbnails/elemental-glacier.webp" alt="Frost · Glacier ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FROST</span><span class="name">Glacier</span></figcaption></figure>
+</div></section>
+<section id="costumes"><h2>Costumes <span>13 portraits</span></h2><div class="grid">
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/ronin-shadow.webp" aria-label="Open Shadow · Ronin ninja portrait"><img src="portrait-thumbnails/ronin-shadow.webp" alt="Shadow · Ronin ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Ronin</span></figcaption></figure>
+<figure style="--clan:#ff9132"><a href="../../sprites/portraits/chef-fire.webp" aria-label="Open Fire · Chef ninja portrait"><img src="portrait-thumbnails/chef-fire.webp" alt="Fire · Chef ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FIRE</span><span class="name">Chef</span></figcaption></figure>
+<figure style="--clan:#50d2e6"><a href="../../sprites/portraits/cyber-storm.webp" aria-label="Open Storm · Cyber ninja portrait"><img src="portrait-thumbnails/cyber-storm.webp" alt="Storm · Cyber ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">STORM</span><span class="name">Cyber</span></figcaption></figure>
+<figure style="--clan:#8cdc64"><a href="../../sprites/portraits/edo-frost.webp" aria-label="Open Frost · Edo ninja portrait"><img src="portrait-thumbnails/edo-frost.webp" alt="Frost · Edo ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FROST</span><span class="name">Edo</span></figcaption></figure>
+<figure style="--clan:#50d2e6"><a href="../../sprites/portraits/office-storm.webp" aria-label="Open Storm · Office ninja portrait"><img src="portrait-thumbnails/office-storm.webp" alt="Storm · Office ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">STORM</span><span class="name">Office</span></figcaption></figure>
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/pirate-shadow.webp" aria-label="Open Shadow · Pirate ninja portrait"><img src="portrait-thumbnails/pirate-shadow.webp" alt="Shadow · Pirate ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Pirate</span></figcaption></figure>
+<figure style="--clan:#8cdc64"><a href="../../sprites/portraits/vacation-frost.webp" aria-label="Open Frost · Vacation ninja portrait"><img src="portrait-thumbnails/vacation-frost.webp" alt="Frost · Vacation ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FROST</span><span class="name">Vacation</span></figcaption></figure>
+<figure style="--clan:#ff9132"><a href="../../sprites/portraits/piggy-fire.webp" aria-label="Open Fire · Piggy ninja portrait"><img src="portrait-thumbnails/piggy-fire.webp" alt="Fire · Piggy ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FIRE</span><span class="name">Piggy</span></figcaption></figure>
+<figure style="--clan:#50d2e6"><a href="../../sprites/portraits/endobot-storm.webp" aria-label="Open Storm · Endobot ninja portrait"><img src="portrait-thumbnails/endobot-storm.webp" alt="Storm · Endobot ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">STORM</span><span class="name">Endobot</span></figcaption></figure>
+<figure style="--clan:#8cdc64"><a href="../../sprites/portraits/neko-frost.webp" aria-label="Open Frost · Neko ninja portrait"><img src="portrait-thumbnails/neko-frost.webp" alt="Frost · Neko ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FROST</span><span class="name">Neko</span></figcaption></figure>
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/stalker-shadow.webp" aria-label="Open Shadow · Stalker ninja portrait"><img src="portrait-thumbnails/stalker-shadow.webp" alt="Shadow · Stalker ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Stalker</span></figcaption></figure>
+<figure style="--clan:#ff9132"><a href="../../sprites/portraits/ironclad-fire.webp" aria-label="Open Fire · Ironclad ninja portrait"><img src="portrait-thumbnails/ironclad-fire.webp" alt="Fire · Ironclad ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">FIRE</span><span class="name">Ironclad</span></figcaption></figure>
+<figure style="--clan:#eb50af"><a href="../../sprites/portraits/bakeneko-shadow.webp" aria-label="Open Shadow · Bakeneko ninja portrait"><img src="portrait-thumbnails/bakeneko-shadow.webp" alt="Shadow · Bakeneko ninja portrait" width="256" height="384" loading="lazy" decoding="async"></a><figcaption><span class="clan">SHADOW</span><span class="name">Bakeneko</span></figcaption></figure>
+</div></section>
+<footer>Lossless WebP artwork. Gallery previews are 256 × 384.</footer></main></body></html>

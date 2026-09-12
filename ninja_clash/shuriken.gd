@@ -48,6 +48,7 @@ const AIM_ASSIST_DURATION: float = 0.8         # only steer for this long after 
 
 var velocity_v: Vector2 = Vector2.ZERO
 var max_fall: float = TERMINAL   # per-shuriken vertical-speed cap; a straight-down throw raises it
+var _stuck_surface: WeakRef
 var stuck: bool = false
 var thrower_slot: int = 0
 # Online (ADR-0003): the host tags every blade with a net_id for the snapshot stream; on the
@@ -61,9 +62,11 @@ var _clash_cooldown_until: float = 0.0  # brief gap after a shuriken-vs-shuriken
 var _sprite: Sprite2D = null            # head blade
 var _trail: Array = []                  # TRAIL_COUNT afterimage Sprite2D, newest→oldest
 var _pos_history: Array = []            # recent global positions, index 0 = most recent
+var _previous_position := Vector2.ZERO
 var _spin_t: float = 0.0                # accumulated scaled flight-time → spin frame
 
 func _ready() -> void:
+	_previous_position = global_position
 	_setup_visuals()
 	if puppet:
 		# Client-side visual ghost: never collides, never joins the sim's "shurikens" group
@@ -126,20 +129,29 @@ func _physics_process(delta: float) -> void:
 		_puppet_tick(delta)
 		return
 	if stuck:
-		_check_pickup()
-		return
+		var surface: Node = _stuck_surface.get_ref() if _stuck_surface != null else null
+		if _stuck_surface != null and (not is_instance_valid(surface) or surface.collision_layer == 0):
+			stuck = false
+			ricocheted = true
+			velocity_v = Vector2(0, 40)
+			_stuck_surface = null
+		else:
+			_check_pickup()
+			return
 	# All time-based physics use scaled dt so the trajectory plays out in slow motion
 	# while keeping the same arc shape (apex, range) as the original speed.
 	var dt: float = delta * FLIGHT_TIME_SCALE
 	velocity_v.y += GRAVITY * dt
 	velocity_v.y = min(velocity_v.y, max_fall)
 	_apply_aim_assist(dt)
+	_previous_position = global_position
 	position += velocity_v * dt
 	# Screen wrap. Clearing the path history on a wrap stops the comet trail from streaking
 	# across the whole screen between the old and new sides.
-	var wrapped := Arena.wrap_position(position, Vector2(16, 16))
+	var wrapped := Arena.wrap_position(position)
 	if not wrapped.is_equal_approx(position):
 		position = wrapped
+		_previous_position = global_position
 		_pos_history.clear()
 	_advance_spin(dt)
 	_record_history()
@@ -153,7 +165,13 @@ func _puppet_tick(delta: float) -> void:
 	var dt: float = delta * FLIGHT_TIME_SCALE
 	velocity_v.y += GRAVITY * dt
 	velocity_v.y = min(velocity_v.y, max_fall)
+	_previous_position = global_position
 	position += velocity_v * dt
+	var wrapped := Arena.wrap_position(position)
+	if not position.is_equal_approx(wrapped):
+		position = wrapped
+		_previous_position = global_position
+		_pos_history.clear()
 	_advance_spin(dt)
 	_record_history()
 	_update_trail()
@@ -275,6 +293,7 @@ func _on_body_entered(body: Node) -> void:
 					queue_free()
 					return
 		stuck = true
+		_stuck_surface = weakref(body)
 		velocity_v = Vector2.ZERO
 		_hide_trail()
 		if _sprite != null and _sprite.hframes > 1:
@@ -290,6 +309,7 @@ func deflect(by_slot: int, by_facing: int) -> void:
 	if stuck:
 		return
 	thrower_slot = by_slot
+	_previous_position = global_position
 	velocity_v = Vector2(by_facing * 260.0, -170.0)   # away in swing dir + upward arc
 	throw_time = Time.get_ticks_msec() / 1000.0        # fresh immunity window for new owner
 	stuck = false

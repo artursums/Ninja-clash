@@ -41,6 +41,10 @@ func run() -> void:
 		for node in game.current_map_nodes:
 			if node.get_script() == preload("res://arena_ambience.gd"):
 				check(node._lamps.size() >= 4, "Every arena retains its lamps and glows")
+				check(node._lamps.size() == data.lamp_anchors.size(), "All authored fixtures are rendered")
+				for lamp_index in node._lamps.size():
+					var base: Vector2 = (node._lamps[lamp_index] + Vector2(0, 8)) * node.scale
+					check(base.is_equal_approx(data.lamp_anchors[lamp_index]), "Scaled lamps stay anchored to arena geometry")
 				check(node.get_child_count() == 1, "Atmosphere uses two drawing nodes")
 				check(node._points.size() <= node.MAX_PARTICLES, "Particles stay bounded")
 				if data.ambience == "tokyo":
@@ -59,28 +63,28 @@ func run() -> void:
 	# Both projectiles and fighters must survive travelling beyond the former viewport.
 	state.current_state = state.State.ROUND
 	var fighter: Node2D = game.players[0]
-	fighter.position = Vector2(900, 500)
+	fighter.position = Arena.SIZE - Vector2(40, 40)
 	fighter._check_screen_wrap()
-	check(fighter.position == Vector2(900, 500), "Fighter can use expanded world")
-	fighter.position = Vector2(985, 220)
+	check(fighter.position == Arena.SIZE - Vector2(40, 40), "Fighter can use expanded world")
+	fighter.position = Vector2(Arena.WIDTH + 25, 220)
 	fighter._check_screen_wrap()
-	check(fighter.position.is_equal_approx(Vector2(-15, 220)), "Fighter wraps at new right edge")
+	check(fighter.position.is_equal_approx(Vector2(25, 220)), "Fighter wraps at new right edge")
 	var star: Node = load("res://shuriken.gd").new()
 	star.thrower_slot = 1
 	game.arena_root.add_child(star)
 	star.set_physics_process(false)
-	star.position = Vector2(900, 500)
+	star.position = Arena.SIZE - Vector2(40, 40)
 	star._physics_process(0.0)
-	check(star.position.is_equal_approx(Vector2(900, 500)), "Shuriken can use expanded world")
-	star.position = Vector2(980, 220)
-	star._pos_history = [Vector2(970, 220)]
+	check(star.position.is_equal_approx(Arena.SIZE - Vector2(40, 40)), "Shuriken can use expanded world")
+	star.position = Vector2(Arena.WIDTH + 20, 220)
+	star._pos_history = [Vector2(Arena.WIDTH + 10, 220)]
 	star._physics_process(0.0)
-	check(star.position.is_equal_approx(Vector2(-12, 220)), "Shuriken uses new wrap bounds")
+	check(star.position.is_equal_approx(Vector2(20, 220)), "Shuriken uses new wrap bounds")
 	check(star._pos_history.size() <= 1, "Wrap clears projectile trail")
 	var wave: Node = load("res://blade_wave.gd").new()
-	wave.position = Vector2(900, 500)
+	wave.position = Arena.SIZE - Vector2(40, 40)
 	check(not wave._offscreen(), "Blade wave survives in expanded world")
-	wave.position.x = 1010
+	wave.position.x = Arena.WIDTH + 50
 	check(wave._offscreen(), "Blade wave expires beyond new boundary")
 	wave.free()
 	state.change_state(state.State.TITLE)
@@ -92,7 +96,9 @@ func run() -> void:
 func verify_jump_routes(game: Node, data: Dictionary) -> void:
 	var bodies: Array = []
 	for node in game.current_map_nodes:
-		if node is StaticBody2D:
+		if node.is_in_group("crumble_platforms"):
+			node.collision_layer = 0
+		elif node is StaticBody2D:
 			node.set_meta("surface_index", bodies.size())
 			bodies.append(node)
 	var probe := CharacterBody2D.new()
