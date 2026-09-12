@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test('browser music and menu effects produce audio through separate buses', async ({ page }) => {
   const errors = [];
-  let ready = false;
+  let state = '';
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
-    if (message.text().includes('[STATE] -> TITLE')) ready = true;
+    const screen = message.text().match(/\[STATE\] -> (\w+)/);
+    if (screen) state = screen[1];
     if (/SCRIPT ERROR:|Failed to load script/.test(message.text())) errors.push(message.text());
   });
   await page.addInitScript(() => {
@@ -23,7 +24,7 @@ test('browser music and menu effects produce audio through separate buses', asyn
   });
   const base = process.env.NINJA_AUDIO_TEST_URL || (process.env.NINJA_TEST_TURN ? 'http://127.0.0.1:8788' : 'http://127.0.0.1:8787');
   await page.goto(base);
-  await expect.poll(() => ready).toBe(true);
+  await expect.poll(() => state).toBe('PROLOGUE');
   async function click(x, y) {
     const box = await page.locator('canvas').boundingBox();
     const scale = Math.min(box.width / 800, box.height / 450);
@@ -43,9 +44,13 @@ test('browser music and menu effects produce audio through separate buses', asyn
       return value;
     });
   }
-  await click(20, 20);
+  expect(await peak(), 'The start screen stays silent until the player begins').toBeLessThan(0.001);
+  await click(400, 342);
   await page.waitForTimeout(500);
   expect(await peak(), 'Music must reach the browser audio output after interaction').toBeGreaterThan(0.01);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => state).toBe('TITLE');
+  await page.waitForTimeout(1300);
   await click(190, 262);
   await page.waitForTimeout(300);
   await page.keyboard.press('ArrowDown');

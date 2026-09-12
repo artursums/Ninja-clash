@@ -67,6 +67,7 @@ var match_setup_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
 var online_menu_screen: Control   # ONLINE host/join screen (ADR-0003)
+var prologue_screen: Control
 var hud: Control
 var mode_select_screen: Control
 var banner_label: Label
@@ -92,10 +93,8 @@ func _ready() -> void:
 	GameState.state_changed.connect(_on_state_changed)
 	Combat.kill_logged.connect(_on_kill_logged)
 	Combat.clash_occurred.connect(_on_clash)
-	GameState.change_state(GameState.State.TITLE)
+	GameState.change_state(GameState.State.PROLOGUE)
 	_handle_dev_args()
-	if Net.pending_invitation() != "":
-		GameState.change_state(GameState.State.ONLINE_MENU)
 	if OS.is_debug_build() and OS.has_feature("web"):
 		var probe := Node.new()
 		probe.set_script(load("res://dev_web_probe.gd"))
@@ -380,6 +379,7 @@ func _build_overlays() -> void:
 
 	var TitleScript: Script = load("res://title_screen.gd")
 	title_screen = Control.new()
+	title_screen.hide()
 	title_screen.set_script(TitleScript)
 	canvas.add_child(title_screen)
 
@@ -412,6 +412,9 @@ func _build_overlays() -> void:
 	online_menu_screen = Control.new()
 	online_menu_screen.set_script(OnlineScript)
 	canvas.add_child(online_menu_screen)
+	prologue_screen = Control.new()
+	prologue_screen.set_script(load("res://prologue.gd"))
+	canvas.add_child(prologue_screen)
 
 	var HudScript: Script = load("res://hud.gd")
 	hud = Control.new()
@@ -476,6 +479,7 @@ func _on_state_changed(s: int) -> void:
 		Engine.time_scale = 1.0
 	_clash_freeze_until = 0.0
 	var S = GameState.State
+	prologue_screen.visible = (s == S.PROLOGUE)
 	title_screen.visible = (s == S.TITLE)
 	mode_select_screen.visible = (s == S.MODE_SELECT)
 	clan_select_screen.visible = (s == S.CLAN_SELECT)

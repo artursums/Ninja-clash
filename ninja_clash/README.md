@@ -4,7 +4,7 @@ A 2D single-screen arena fighter for 1–4 players, built in **Godot 4.6 / GDScr
 Throw shurikens, dash-dodge to catch them out of the air, retrieve spent blades, and be
 the last ninja standing. TowerFall-inspired, built for couch play — with LAN/online 1v1.
 
-**▶ Play in the browser: https://ninja-clash.vercel.app**
+**▶ Play in the browser: https://ninja-clash-ffay.vercel.app**
 
 ![Ninja Clash gameplay — Sakura Temple arena](screenshots/04_gameplay.png)
 
@@ -63,6 +63,11 @@ Xbox pads both work; button constants are positional, so one mapping covers both
 ---
 
 ## Controls
+
+Click **Begin** or press **Enter** to start the music and the opening chronicle. Its three
+chapters advance automatically; click or press Enter to continue sooner, or press Esc to
+skip to the main menu. Room invitations go straight to the online menu after Begin.
+The opening screen waits for interaction so browsers can enable audio before the story starts.
 
 Bindings are built at runtime in `main.gd::_setup_input_map()` — there are no bindings
 stored in `project.godot`, so gamepad assignment can be re-derived on every hot-plug.

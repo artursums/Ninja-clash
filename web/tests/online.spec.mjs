@@ -30,6 +30,15 @@ async function openGame(context, url = base, forceRelay = false) {
   }, forceRelay);
   await page.goto(url);
   await expect.poll(async () => (await state(page))?.state).toBeTruthy();
+  if ((await state(page)).state === 'PROLOGUE') {
+    await page.keyboard.press('Enter');
+    if (!url.includes('#room=')) {
+      await page.waitForTimeout(400);
+      await page.keyboard.press('Escape');
+    }
+    await expect.poll(async () => (await state(page))?.state).not.toBe('PROLOGUE');
+    await page.waitForTimeout(1300);
+  }
   return { page, errors };
 }
 

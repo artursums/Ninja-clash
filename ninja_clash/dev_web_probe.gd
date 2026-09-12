@@ -17,6 +17,7 @@ func _process(delta: float) -> void:
 		fighters.append({"slot": p.slot, "x": p.position.x, "y": p.position.y, "hp": p.hp, "stash": p.stash})
 	var main: Node = get_parent()
 	var data := {"state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
+		"prologueChapter": main.prologue_screen.chapter,
 		"peer": Net._peer_id, "room": Net.invitation_code, "fighters": fighters,
 		"shurikens": get_tree().get_nodes_in_group("shurikens").size(), "puppets": Net._puppet_shurikens.size(),
 		"remoteHeld": Net._remote_held_mask, "status": main.online_menu_screen.status_label.text,

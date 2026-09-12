@@ -123,7 +123,7 @@ func play_win_fanfare() -> void:
 func _hook_game_state() -> void:
 	if GameState != null and GameState.has_signal("state_changed"):
 		GameState.state_changed.connect(_on_state_changed)
-		_on_state_changed(GameState.current_state)   # start music for the boot state (TITLE)
+		_on_state_changed(GameState.current_state)
 
 
 # Music per screen:
@@ -140,7 +140,9 @@ func _on_state_changed(new_state: int) -> void:
 		GameState.State.MATCH_END, GameState.State.ONLINE_MENU,
 	]
 	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
-	if new_state in menu_states:
+	if new_state == GameState.State.PROLOGUE:
+		stop_music()
+	elif new_state in menu_states:
 		play_music(MENU_MUSIC_PATH)
 	elif new_state in fight_states:
 		play_music(_match_music_path())
