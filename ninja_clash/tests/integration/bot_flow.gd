@@ -46,9 +46,17 @@ func run() -> void:
 		game.arena_root.add_child(probe)
 		await physics_frame
 		await process_frame
+		var advanced_links: Array = []
+		if data.ambience == "tokyo":
+			for outgoing in nav.edges:
+				for link in outgoing:
+					if link.kind == "boost":
+						advanced_links.append(link.from * 1000 + link.to)
 		for source in nav.ledges.size():
 			for target in nav.ledges.size():
 				check(source == target or not nav.route(source, target).is_empty(), "%s has a route %d -> %d" % [data.name, source, target])
+				if data.ambience == "tokyo":
+					check(source == target or not nav.route(source, target, advanced_links).is_empty(), "Neo Tokyo connects %d -> %d with ordinary jumps and drops" % [source, target])
 			for link in nav.edges[source]:
 				var landed := actual_landing(probe, nav, link)
 				check(landed == link.to, "%s %s route %d -> %d lands on %d in real physics" % [data.name, link.kind, source, link.to, landed])

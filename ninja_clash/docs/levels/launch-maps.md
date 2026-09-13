@@ -11,7 +11,7 @@ remain 800 × 450, and movement speeds, jump strength, and combat timings stay i
 | --- | --- | --- |
 | Verdant Cistern | A broad aqueduct with solid support piers and a contested upper perch. | Two side tunnels, thick lower banks, and a central vertical passage. |
 | Sakura Temple | A solid moon-gate roof above an open courtyard. | Climb either outer shrine, flank the gate, or cross the unobstructed lower courtyard. |
-| Neo Tokyo | Staggered rooftop machinery and asymmetric upper catwalks. | Climb the service-tunnel steps, contest asymmetric catwalks, or flank the central machinery. |
+| Neo Tokyo | Two broad rooftop balconies with raised inner ends frame an open courtyard and a lower central pillar. | Climb either side through 65–70 px steps or cross the lower pillar; every landing is reachable with ordinary jumps and drops. |
 | Sky Temple | Broken cloisters and hanging garden decks around an open aerial centre. | A ring of side landings, offset upper perches, and lower recovery banks. |
 
 Each arena has four dedicated spawn points. Duel modes use the first pair;
@@ -46,11 +46,12 @@ Positions remain assigned by fighter slot across rounds.
 Each arena uses one **960 × 540 panorama** and its original **384 × 128 masonry
 atlas** at native pixel density. The four materials retain their authored detail:
 moss and carved stone, petal-strewn temple bricks, industrial panels and vents,
-and pale sanctuary masonry with gold inlays. The approved geometry is unchanged.
+and pale sanctuary masonry with gold inlays.
 A single static renderer tiles the interiors and samples textured caps, side faces,
 and undersides only along exposed contours. Opposite screen edges share their contour.
 Terrain and collision read the same rectangles; art is cropped, never stretched.
-There are at most 32 permanent bodies and one or two optional crumbling bodies per map.
+There are at most 32 permanent bodies and up to two optional crumbling bodies per map.
+Neo Tokyo uses 17 permanent bodies (reduced from 28) and no crumbling slabs to keep its courtyard open.
 An opaque panorama replaces the fallback background fill, avoiding redundant overdraw.
 
 Atmosphere uses two drawing nodes, updated at 30 Hz, with bounded arrays:
@@ -80,7 +81,7 @@ godot --headless --path ninja_clash --editor --import --quit
 
 ## Crumbling shortcuts
 
-Each arena has one or two visibly cracked optional slabs. Landing starts a **0.65 s**
+The other three arenas have one or two visibly cracked optional slabs; Neo Tokyo uses permanent terrain only. Landing starts a **0.65 s**
 warning; the top collision remains stable while the stones shake and the crack brightens.
 Hairline cracks progressively spread through the original textured slab, followed
 by lower-stone vibration and falling grit. The slab then loses collision for **4 s**.

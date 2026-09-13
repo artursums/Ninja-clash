@@ -28,18 +28,16 @@ var MAPS: Array = [
 		Rect2(308, 106, 112, 30), Rect2(460, 106, 112, 30),
 	], [Vector2(191, 385), Vector2(689, 385), Vector2(213, 143), Vector2(667, 143)], [Vector2(132, 165), Vector2(748, 165), Vector2(338, 224), Vector2(542, 224)]),
 
-	_arena("Neo Tokyo", "service tunnels · neon rooftops", "neo_tokyo", "tokyo", Color("102334"), Color("50deef"), [
-		Rect2(0, 0, 59, 88), Rect2(821, 0, 59, 88), Rect2(59, 0, 141, 29),
-		Rect2(264, 0, 557, 29), Rect2(0, 392, 200, 103), Rect2(641, 392, 239, 103),
-		Rect2(264, 451, 377, 44), Rect2(147, 328, 77, 20), Rect2(675, 328, 205, 20),
-		Rect2(264, 275, 44, 52), Rect2(601, 275, 40, 52), Rect2(367, 271, 146, 16),
-		 Rect2(161, 200, 88, 16), Rect2(411, 211, 117, 16),
-		Rect2(660, 204, 92, 22), Rect2(59, 158, 88, 29), Rect2(279, 151, 205, 16),
-		Rect2(763, 158, 117, 36), Rect2(159, 99, 61, 29), Rect2(528, 99, 176, 37),
-		Rect2(0, 158, 59, 117), Rect2(851, 194, 29, 81), Rect2(0, 328, 73, 64),
-		Rect2(308, 391, 59, 16), Rect2(513, 391, 88, 16),
-		Rect2(348, 331, 64, 16), Rect2(505, 331, 64, 16), Rect2(851, 348, 29, 44),
-	], [Vector2(103, 370), Vector2(651, 370), Vector2(367, 129), Vector2(724, 182)], [Vector2(120, 158), Vector2(796, 158), Vector2(286, 275), Vector2(616, 275), Vector2(440, 271)]),
+	_arena("Neo Tokyo", "twin rooftops · open neon courtyard", "neo_tokyo", "tokyo", Color("102334"), Color("50deef"), [
+		Rect2(0, 0, 96, 100), Rect2(784, 0, 96, 100), Rect2(96, 0, 688, 32),
+		Rect2(336, 32, 208, 64),
+		Rect2(0, 435, 376, 60), Rect2(504, 435, 376, 60), Rect2(376, 365, 128, 130),
+		Rect2(0, 365, 96, 70), Rect2(784, 365, 96, 70),
+		Rect2(96, 295, 240, 24), Rect2(544, 295, 240, 24),
+		Rect2(288, 255, 48, 40), Rect2(544, 255, 48, 40),
+		Rect2(48, 230, 96, 20), Rect2(736, 230, 96, 20),
+		Rect2(96, 165, 144, 20), Rect2(640, 165, 144, 20),
+	], [Vector2(180, 413), Vector2(700, 413), Vector2(190, 143), Vector2(690, 143)], [Vector2(190, 165), Vector2(690, 165), Vector2(312, 255), Vector2(568, 255)]),
 
 	_arena("Sky Temple", "broken cloisters · hanging sanctuary", "sky_temple", "sky", Color("4b655e"), Color("dbdc94"), [
 		Rect2(0, 0, 176, 37), Rect2(704, 0, 176, 37), Rect2(0, 37, 59, 194),
@@ -133,5 +131,5 @@ static func _crumble_platforms(ambience: String) -> Array[Rect2]:
 	match ambience:
 		"cistern": return [Rect2(348, 390, 72, 16), Rect2(460, 390, 72, 16)]
 		"sakura": return [Rect2(336, 352, 72, 16), Rect2(472, 352, 72, 16)]
-		"tokyo": return [Rect2(407, 391, 64, 16)]
+		"tokyo": return []
 		_: return [Rect2(320, 407, 64, 16), Rect2(496, 407, 64, 16)]

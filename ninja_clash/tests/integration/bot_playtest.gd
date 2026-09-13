@@ -23,7 +23,7 @@ func run() -> void:
 	var pairs := [
 		[Vector2(440, 101), Vector2(440, 277)],
 		[Vector2(364, 90), Vector2(440, 208)],
-		[Vector2(380, 135), Vector2(440, 435)],
+		[Vector2(190, 149), Vector2(440, 349)],
 		[Vector2(352, 149), Vector2(440, 281)],
 	]
 	for index in 4:
