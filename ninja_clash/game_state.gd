@@ -19,7 +19,8 @@ enum State {
 }
 
 # Who controls each fighter this match. FFA = P1 (human) vs three bots, free-for-all.
-enum Mode { HUMAN_VS_HUMAN, HUMAN_VS_AI, AI_VS_AI, FFA }
+# Keep the remaining IDs stable in network state bundles.
+enum Mode { HUMAN_VS_HUMAN = 0, HUMAN_VS_AI = 1, FFA = 3 }
 
 # AI skill tier — named after ninja ranks. GENIN (1) is already a competent fighter;
 # CHUNIN (2) is hard; JONIN (3) is brutal.
@@ -138,7 +139,6 @@ func num_players() -> int:
 func slot_is_bot(slot: int) -> bool:
 	match game_mode:
 		Mode.HUMAN_VS_AI: return slot == 2
-		Mode.AI_VS_AI:    return true
 		Mode.FFA:         return slot != 1   # P1 is human, the other three are bots
 		_:                return false       # HUMAN_VS_HUMAN
 
@@ -154,13 +154,6 @@ func assign_ffa_clans() -> void:
 
 func is_round_active() -> bool:
 	return current_state == State.ROUND
-
-# Which fighters are AI-controlled this match (P1 is the human side in HUMAN_VS_AI).
-func p1_is_bot() -> bool:
-	return game_mode == Mode.AI_VS_AI
-
-func p2_is_bot() -> bool:
-	return game_mode == Mode.HUMAN_VS_AI or game_mode == Mode.AI_VS_AI
 
 func start_new_match() -> void:
 	current_round = 1

@@ -25,7 +25,7 @@ They retain a visible Leave Match button.
 
 ## Input flow
 
-Duel proceeds directly to clan selection. Solo, Spectate and Free For All open a rank
+Duel proceeds directly to clan selection. Solo and Free For All open a rank
 dialog on Continue. Up/Down selects Genin, Chunin or Jonin; confirm accepts it; Back
 returns to the mode cards. Clicking a rank accepts it. The dialog blocks clicks behind it.
 Clan selection ignores the opening frame so a confirmation cannot carry into that screen,

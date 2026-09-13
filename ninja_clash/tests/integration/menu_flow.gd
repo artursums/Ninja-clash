@@ -53,11 +53,21 @@ func run() -> void:
 	click_control(title._buttons[0])
 	check(state.current_state == state.State.MODE_SELECT, "Local play opens mode selection")
 	var modes: Control = game.mode_select_screen
-	for index in 4:
+	check(modes.tiles.size() == 3, "Battle selection offers Duel, Solo and Free For All")
+	for index in modes.tiles.size():
 		click_control(modes.illustrations[index])
 		check(modes.cursor == index, "Clicking mode artwork selects the matching mode")
 		check(modes.illustrations[index].texture.get_size() == Vector2(512, 512), "Mode illustrations use bounded menu textures")
 		check(not modes._rank_modal.visible, "Browsing modes does not expose a hidden difficulty shortcut")
+	modes._choose(2)
+	unlock(modes)
+	modes._continue()
+	unlock(modes)
+	modes._confirm_rank(2)
+	check(state.game_mode == state.Mode.FFA and state.num_players() == 4, "The third card starts a four-player match")
+	check(not state.slot_is_bot(1) and state.slot_is_bot(2) and state.slot_is_bot(3) and state.slot_is_bot(4), "Free For All keeps one human and three bots")
+	state.change_state(state.State.MODE_SELECT)
+	check(modes.cursor == 2, "Returning from Free For All selects its card by mode ID")
 	modes._choose(1)
 	unlock(modes)
 	modes._continue()

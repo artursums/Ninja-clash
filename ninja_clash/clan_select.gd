@@ -187,7 +187,7 @@ func _process(_delta: float) -> void:
 		return
 	# Solo-pick modes: only P1 chooses, the bots are assigned automatically on confirm.
 	# FFA — the three bots split the remaining clans; P1 vs AI — the bot takes a random
-	# other clan. (AI vs AI keeps manual confirms — you're staging both sides of the demo.)
+	# other clan.
 	if GameState.game_mode == GameState.Mode.FFA or GameState.game_mode == GameState.Mode.HUMAN_VS_AI:
 		if Input.is_action_just_pressed("p1_skin"):
 			GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()

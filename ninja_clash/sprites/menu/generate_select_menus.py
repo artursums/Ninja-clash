@@ -16,10 +16,9 @@ Outputs (all under sprites/menu/, all transparent PNGs at native + 4x):
         clan_shadow.png   clan_storm.png
         clan_frost.png    clan_fire.png
 
-    Mode select (4 mode tiles with ninja silhouettes):
+    Mode select (3 mode tiles with ninja silhouettes):
         mode_p1_vs_p2.png        — two ninjas facing
         mode_p1_vs_ai.png        — ninja vs goggled bot
-        mode_ai_vs_ai.png        — two bots
         mode_p1_vs_3.png         — ninja vs three bots (FFA)
         mode_<slug>_selected.png — selected/glow variant for each
 
@@ -1304,9 +1303,6 @@ def generate_all():
         ('mode_p1_vs_ai', 'P1 vs AI', 'beat the bot',
          [(-12, 1, False), (12, -1, True)],
          (80, 210, 230)),
-        ('mode_ai_vs_ai', 'AI vs AI', 'watch a demo',
-         [(-12, 1, True), (12, -1, True)],
-         (235, 80, 175)),
         ('mode_p1_vs_3',  'P1 vs 3',  'free-for-all',
          [(-20, 1, False), (-2, -1, True), (10, -1, True),
           (22, -1, True)],
@@ -1449,21 +1445,20 @@ def preview_clan_select():
 
 
 def preview_mode_select():
-    """Mockup: header + 4 mode tiles + difficulty stamp row."""
+    """Mockup: header + 3 mode tiles + difficulty stamp row."""
     W, H = 2400, 1200
     bg = _checker_bg(W, H)
     header = Image.open(f'{OUT_DIR}/header_select_mode_4x.png').convert('RGBA')
     bg.alpha_composite(header, ((W - header.size[0]) // 2, 60))
 
-    tiles_slugs = ['mode_p1_vs_p2', 'mode_p1_vs_ai',
-                   'mode_ai_vs_ai', 'mode_p1_vs_3']
+    tiles_slugs = ['mode_p1_vs_p2', 'mode_p1_vs_ai', 'mode_p1_vs_3']
     tiles = []
     for i, slug in enumerate(tiles_slugs):
         suffix = '_selected' if slug == 'mode_p1_vs_ai' else ''
         tiles.append(Image.open(
             f'{OUT_DIR}/{slug}{suffix}_4x.png').convert('RGBA'))
     tw = tiles[0].size[0]; gap = 40
-    total = tw * 4 + gap * 3
+    total = tw * len(tiles) + gap * (len(tiles) - 1)
     x = (W - total) // 2; y = 280
     for t in tiles:
         bg.alpha_composite(t, (x, y))

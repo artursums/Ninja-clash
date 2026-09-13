@@ -34,7 +34,7 @@ the last ninja standing. TowerFall-inspired, built for couch play — with LAN/o
 | **Arenas** | 4 — Sakura Temple, Neo Tokyo, Verdant Cistern, Sky Temple |
 | **Clans** | 4 — Shadow, Storm, Frost, Fire |
 | **Skins** | 15 original appearance styles with expanded movement animations, in all 4 clan colours |
-| **Modes** | P1 vs P2 · P1 vs AI · AI vs AI · P1 vs 3 (free-for-all) · Online 1v1 |
+| **Modes** | P1 vs P2 · P1 vs AI · P1 vs 3 (free-for-all) · Online 1v1 |
 | **AI** | 3 tiers — Genin, Chunin, Jonin |
 | **Rulesets** | Fight Setup screen — 9 configurable variants, persisted between sessions |
 | **Audio** | 3 Suno-generated music tracks on a dedicated bus; procedural SFX with drop-in override |

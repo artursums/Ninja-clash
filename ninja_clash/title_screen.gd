@@ -64,7 +64,7 @@ func _build() -> void:
 	shade.fill_to = Vector2(1, 0)
 	var veil := UI.image(_content, shade, Rect2(0, 0, 650, 450))
 	veil.stretch_mode = TextureRect.STRETCH_SCALE
-	var eyebrow := UI.label(_content, "S H I N O B I   A R E N A", Rect2(58, 40, 370, 22), 16, UI.GOLD)
+	var eyebrow := UI.label(_content, "S H I N O B I   A R E N A", Rect2(58, 130, 370, 22), 16, UI.GOLD)
 	_register_piece(eyebrow, Vector2(0, -24), -0.015, 0.05)
 	var wordmark := "FOUR CLANS"
 	var letter_x := 54.0

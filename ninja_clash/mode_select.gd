@@ -4,14 +4,12 @@ const UI = preload("res://menu_ui.gd")
 const MODE_ART := [
 	preload("res://sprites/menu/modes/duel.webp"),
 	preload("res://sprites/menu/modes/solo.webp"),
-	preload("res://sprites/menu/modes/spectate.webp"),
 	preload("res://sprites/menu/modes/free-for-all.webp"),
 ]
 const MODES := [
-	{"name": "DUEL", "tag": "P1 vs P2", "mode": 0},
-	{"name": "SOLO", "tag": "P1 vs AI", "mode": 1},
-	{"name": "SPECTATE", "tag": "AI vs AI", "mode": 2},
-	{"name": "FREE FOR ALL", "tag": "P1 vs 3 AI", "mode": 3},
+	{"name": "DUEL", "tag": "P1 vs P2", "mode": GameState.Mode.HUMAN_VS_HUMAN},
+	{"name": "SOLO", "tag": "P1 vs AI", "mode": GameState.Mode.HUMAN_VS_AI},
+	{"name": "FREE FOR ALL", "tag": "P1 vs 3 AI", "mode": GameState.Mode.FFA},
 ]
 var cursor := 0
 var diff := 1
@@ -35,7 +33,11 @@ func _ready() -> void:
 func _on_visibility_changed() -> void:
 	if visible:
 		_rank_open = false
-		cursor = GameState.game_mode
+		cursor = 0
+		for i in MODES.size():
+			if MODES[i].mode == GameState.game_mode:
+				cursor = i
+				break
 		diff = GameState.ai_difficulty
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 		_refresh()
@@ -44,12 +46,12 @@ func _build() -> void:
 	UI.backdrop(self,0.72,false)
 	UI.header(self, "CHOOSE YOUR BATTLE", 0)
 	for i in MODES.size():
-		var x := 32 + i * 188
-		var tile := UI.button(self, "", Rect2(x, 104, 172, 218), _choose.bind(i))
+		var x := 32 + i * 252
+		var tile := UI.button(self, "", Rect2(x, 104, 232, 218), _choose.bind(i))
 		tiles.append(tile)
-		illustrations.append(UI.image(tile, MODE_ART[i], Rect2(8, 8, 156, 156)))
-		UI.label(tile, MODES[i].name, Rect2(0, 167, 172, 28), 22, UI.IVORY, true)
-		UI.label(tile, MODES[i].tag, Rect2(0, 195, 172, 20), 16, UI.GOLD, true)
+		illustrations.append(UI.image(tile, MODE_ART[i], Rect2(38, 8, 156, 156)))
+		UI.label(tile, MODES[i].name, Rect2(0, 167, 232, 28), 22, UI.IVORY, true)
+		UI.label(tile, MODES[i].tag, Rect2(0, 195, 232, 20), 16, UI.GOLD, true)
 	_continue_button = UI.button(self, "CONTINUE", Rect2(572, 359, 196, 40), _continue)
 	_back_button = UI.button(self, "BACK", Rect2(32, 359, 116, 40), _back, 17)
 	_rank_modal = Control.new()
