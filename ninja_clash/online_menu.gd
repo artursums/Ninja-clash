@@ -45,7 +45,6 @@ var cursor_rect: TextureRect
 var ip_edit: LineEdit
 var ip_caption: Label
 var status_label: Label
-var hint_label: Label
 var invite_edit: LineEdit
 
 
@@ -179,15 +178,6 @@ func _build() -> void:
 	invite_edit.add_theme_font_size_override("font_size", 12)
 	invite_edit.visible = false
 	add_child(invite_edit)
-
-	hint_label = Label.new()
-	hint_label.position = Vector2(0, 414)
-	hint_label.size = Vector2(800, 22)
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.add_theme_font_size_override("font_size", 12)
-	hint_label.add_theme_color_override("font_color", COL_MUT)
-	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(hint_label)
 
 
 func _row_y(i: int) -> float:
@@ -344,12 +334,6 @@ func _refresh() -> void:
 			ip_edit.caret_column = ip_edit.text.length()
 	elif ip_edit.has_focus():
 		ip_edit.release_focus()
-	if _mode == Mode.IDLE:
-		hint_label.text = "↑/↓ — SELECT      ENTER / SPACE / ✕ — CONFIRM      ESC / ◯ — BACK"
-	else:
-		hint_label.text = "ESC / ◯ — CANCEL"
-		if can_share:
-			hint_label.text = "KEEP THIS TAB OPEN WHILE PLAYING      ESC / ◯ — CANCEL"
 
 func _mouse_activate(row: int) -> void:
 	if _mode != Mode.IDLE:
