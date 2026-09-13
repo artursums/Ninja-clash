@@ -8,8 +8,8 @@ const MODE_ART := [
 ]
 const MODES := [
 	{"name": "DUEL", "tag": "P1 vs P2", "mode": GameState.Mode.HUMAN_VS_HUMAN},
-	{"name": "SOLO", "tag": "P1 vs AI", "mode": GameState.Mode.HUMAN_VS_AI},
-	{"name": "FREE FOR ALL", "tag": "P1 vs 3 AI", "mode": GameState.Mode.FFA},
+	{"name": "SOLO", "tag": "P1 vs CPU", "mode": GameState.Mode.HUMAN_VS_AI},
+	{"name": "FREE FOR ALL", "tag": "P1 vs 3 CPUs", "mode": GameState.Mode.FFA},
 ]
 var cursor := 0
 var diff := 1

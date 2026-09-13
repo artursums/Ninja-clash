@@ -1300,7 +1300,7 @@ def generate_all():
         ('mode_p1_vs_p2', 'P1 vs P2', 'two players, one couch',
          [(-12, 1, False), (12, -1, False)],
          (255, 145, 50)),
-        ('mode_p1_vs_ai', 'P1 vs AI', 'beat the bot',
+        ('mode_p1_vs_ai', 'P1 vs CPU', 'beat the CPU',
          [(-12, 1, False), (12, -1, True)],
          (80, 210, 230)),
         ('mode_p1_vs_3',  'P1 vs 3',  'free-for-all',
@@ -1465,7 +1465,7 @@ def preview_mode_select():
         x += tw + gap
 
     # Label above difficulty row
-    diff_label = render_stone_text('AI DIFFICULTY', font_size=28, seed=42)
+    diff_label = render_stone_text('CPU DIFFICULTY', font_size=28, seed=42)
     bg.alpha_composite(diff_label,
                        ((W - diff_label.size[0]) // 2,
                         y + tiles[0].size[1] + 40))
