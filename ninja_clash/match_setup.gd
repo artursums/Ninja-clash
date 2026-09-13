@@ -89,16 +89,6 @@ func _build() -> void:
 		add_child(val)
 		row_values.append(val)
 
-	var hint := Label.new()
-	hint.position = Vector2(0, 410)
-	hint.size = Vector2(800, 20)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Color("8a8ea8"))
-	hint.text = "UP/DOWN  MOVE     LEFT/RIGHT  CHANGE     BACK: ESC / SELECT"
-	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(hint)
-
 
 func _build_rows() -> void:
 	rows = [

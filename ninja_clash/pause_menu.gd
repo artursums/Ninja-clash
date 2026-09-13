@@ -76,7 +76,6 @@ func _build() -> void:
 	_tut_label = UI.label(self, "", Rect2(PLATE_CX, PLATE_TOP + 3 * PLATE_STEP, PLATE_W, PLATE_H), 18, UI.IVORY, true)
 	_back_label = UI.label(self, "BACK", Rect2(PLATE_CX, PLATE_TOP + 4 * PLATE_STEP, PLATE_W, PLATE_H), 22, UI.IVORY, true)
 	_cursor = UI.label(self, ">", Rect2(0, 0, 28, 32), 24, UI.GOLD)
-	UI.label(self, "ESC / START  RESUME    LEFT/RIGHT  ADJUST", Rect2(210, 383, 380, 24), 14, UI.MUTED, true)
 
 func _mouse_hover(row: int) -> void:
 	if _page == PAGE_MENU:

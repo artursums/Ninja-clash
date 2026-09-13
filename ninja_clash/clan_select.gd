@@ -86,8 +86,7 @@ func _build() -> void:
 	status_label = UI.label(self, "", Rect2(398, 62, 370, 26), 12, UI.MUTED, true)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
-	UI.button(self, "TAB  RULES", Rect2(650, 416, 118, 24), _setup, 14)
-	UI.label(self, "A/D  SELECT   ENTER  READY   P  SKIN   P2  NUM 4/6 + 0", Rect2(144, 416, 496, 24), 12, UI.MUTED, true)
+	UI.button(self, "RULES", Rect2(650, 416, 118, 24), _setup, 14)
 
 func _solo() -> bool:
 	return not Net.is_online() and GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]
@@ -442,11 +441,7 @@ func _refresh() -> void:
 			_player_buttons[index].text = "READY  >"
 		UI.select(_player_buttons[index], local and (solo or _mouse_slot == slot), clan.color)
 	if solo:
-		if GameState.game_mode == GameState.Mode.FFA:
-			status_label.text = "P1: pick your clan — the 3 bots take the rest"
-		else:
-			status_label.text = "P1: pick your clan — the bot takes another"
-		status_label.add_theme_color_override("font_color", Color("a8a498"))
+		status_label.text = ""
 		return
 	if Net.is_online():
 		var my_locked: bool = p1_confirmed if Net.is_host() else p2_confirmed
@@ -470,4 +465,4 @@ func _refresh() -> void:
 		status_label.text = "waiting for P1 to lock..."
 		status_label.add_theme_color_override("font_color", Color("a8a498"))
 	else:
-		status_label.text = "P%d: CHOOSE A CLAN, THEN LOCK IN" % _mouse_slot
+		status_label.text = ""

@@ -159,7 +159,6 @@ func _build_options() -> void:
 		if i < 3:
 			UI.button(row, "-", Rect2(292, 3, 30, 29), _option_adjust.bind(i, -0.1), 20)
 			UI.button(row, "+", Rect2(400, 3, 30, 29), _option_adjust.bind(i, 0.1), 20)
-	UI.label(_options_panel, "UP/DOWN  SELECT    LEFT/RIGHT  ADJUST    ESC  BACK", Rect2(170, 360, 460, 24), 14, UI.MUTED, true)
 
 func _build_credits() -> void:
 	_credits_panel = _make_overlay("CREDITS", Rect2(180, 52, 440, 342))

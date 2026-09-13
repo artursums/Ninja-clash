@@ -105,7 +105,6 @@ static func backdrop(parent: Control, dim: float = 0.72, rules: bool = true) -> 
 		fill(parent, Rect2(24, 409, 752, 1), EDGE)
 
 static func header(parent: Control, title: String, step: int) -> void:
-	label(parent, "FOUR CLANS", Rect2(32, 28, 180, 18), 14, GOLD)
 	label(parent, title, Rect2(32, 50, 620, 40), 32)
 	var names := ["01  MODE", "02  CLAN", "03  ARENA"]
 	for i in 3:
