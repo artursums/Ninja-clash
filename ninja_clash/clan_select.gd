@@ -86,7 +86,7 @@ func _build() -> void:
 	status_label = UI.label(self, "", Rect2(398, 62, 370, 26), 12, UI.MUTED, true)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
-	UI.button(self, "RULES", Rect2(650, 416, 118, 24), _setup, 14)
+	UI.button(self, "MATCH SETUP", Rect2(650, 416, 118, 24), _setup, 14)
 
 func _solo() -> bool:
 	return not Net.is_online() and GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]

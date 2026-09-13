@@ -50,7 +50,7 @@ func _build() -> void:
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	header.add_theme_font_size_override("font_size", 30)
 	header.add_theme_color_override("font_color", Color("d4a830"))
-	header.text = "FIGHT SETUP"
+	header.text = "MATCH SETUP"
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
 
