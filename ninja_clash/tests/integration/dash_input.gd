@@ -86,6 +86,8 @@ func run() -> void:
 	for request in [[p1, key(KEY_SHIFT, true), key(KEY_SHIFT, false), "p1_dodge"],
 		[p2, key(KEY_KP_ADD, true), key(KEY_KP_ADD, false), "p2_dodge"],
 		[p2, button(JOY_BUTTON_B, true), button(JOY_BUTTON_B, false), "p2_dodge"],
+		[p2, button(JOY_BUTTON_LEFT_SHOULDER, true), button(JOY_BUTTON_LEFT_SHOULDER, false), "p2_dodge"],
+		[p2, button(JOY_BUTTON_RIGHT_SHOULDER, true), button(JOY_BUTTON_RIGHT_SHOULDER, false), "p2_dodge"],
 		[p2, stick(JOY_AXIS_TRIGGER_RIGHT, 1.0), stick(JOY_AXIS_TRIGGER_RIGHT, 0.0), "p2_slide"]]:
 		request[0].respawn(Vector2(440, 200))
 		step(request[0], request[1], request[3], true)

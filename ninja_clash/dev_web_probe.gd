@@ -4,6 +4,7 @@ extends Node
 var _elapsed := 0.0
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not OS.is_debug_build() or not OS.has_feature("web") or not JavaScriptBridge.eval("window.__ninjaTest === true", true):
 		queue_free()
 
@@ -15,12 +16,13 @@ func _process(delta: float) -> void:
 	var fighters: Array = []
 	for p in get_tree().get_nodes_in_group("players"):
 		fighters.append({"slot": p.slot, "x": p.position.x, "y": p.position.y, "hp": p.hp, "stash": p.stash,"perk": p.perk_kind,"charges": p.perk_charges,"reverse": p.reverse_left,
+			"throws": Combat.stat(p.slot, "throws"), "strikes": Combat.stat(p.slot, "strikes"), "dashing": p.is_sliding, "aiming": p.is_aiming,
 			"isBot": p.is_bot, "katanaCharges": p.katana_charges,
 			"guard": p.is_defending, "grounded": p.is_on_floor(), "frame": p.visual.frame,
 			"bladeVisible": p.katana_sprite != null and p.katana_sprite.visible})
 	var main: Node = get_parent()
 	var focus := get_viewport().gui_get_focus_owner()
-	var data := {"state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
+	var data := {"paused": get_tree().paused, "controllers": Input.get_connected_joypads(), "state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
 		"menuSelection": {"title": main.title_screen.cursor,
 			"online": main.online_menu_screen._cursor, "focus": focus.text if focus is Button else "field" if focus is LineEdit else ""},
 		"localCount": GameState.local_player_count,

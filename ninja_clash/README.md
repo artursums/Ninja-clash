@@ -57,8 +57,7 @@ the last ninja standing. TowerFall-inspired, built for couch play — with 2–4
 /Applications/Godot.app/Contents/MacOS/Godot --path ninja_clash
 ```
 
-Plug in gamepads before launching — they are detected on hot-plug too. DualSense and
-Xbox pads both work; button constants are positional, so one mapping covers both.
+Connect controllers before launching or during play. Actions use Godot’s normalized button positions, with no manufacturer-name checks.
 
 ---
 
@@ -104,24 +103,46 @@ stored in `project.godot`, so gamepad assignment can be re-derived on every hot-
 
 ### Gamepad — up to 4 pads
 
-TowerFall-on-PlayStation layout. First connected pad → P1, second → P2, and so on.
+Xbox, PlayStation and compatible third-party gamepads share the same positional layout.
+Controllers occupy the player slots left after the keyboard layouts, as described above.
 
-| Action | Button |
-|---|---|
-| Move / aim | **D-pad** or **Left Stick** |
-| Jump | **Cross ✕** |
-| Throw shuriken | **Square ▢** — hold to aim, release to fire |
-| Katana | **Triangle △** |
-| Dash-dodge | **Circle ◯**, **L1** or **R1** |
-| Guard | **L2** · Dash **R2** |
+| Action | Xbox | PlayStation | Standard position |
+|---|---|---|---|
+| Move / aim | D-pad / left stick | D-pad / left stick | D-pad / left stick |
+| Jump / confirm | A | Cross | Bottom face button |
+| Throw / choose skin | X | Square | Left face button |
+| Katana / random arena | Y | Triangle | Top face button |
+| Dash / menu back | B | Circle | Right face button |
+| Dash | LB / RB / RT | L1 / R1 / R2 | Either shoulder / right trigger |
+| Guard | LT | L2 | Left trigger |
+| Pause | Menu / Start | Options | Start |
+| Match setup | View / Back | Share / Create | Back |
+
+Hold the throw button to aim and release it to fire. Printed letters on some controllers
+(such as Nintendo layouts) differ; follow the physical button position.
+
+Godot 4.6 uses SDL 3 for native desktop controller support. The browser build relies on
+the browser's Gamepad API and recognized device mappings. USB and Bluetooth devices
+work through the same game actions once the system recognizes them. An unknown or
+incorrectly mapped device can require a driver, another device mode or a custom mapping;
+connecting a device alone does not guarantee compatibility.
+See [Godot controller support](https://docs.godotengine.org/en/4.6/tutorials/inputs/controllers_gamepads_joysticks.html)
+and [browser standard mapping](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad/mapping).
+
+Browser automation verifies standard input profiles with different device names, button
+counts and axis counts, including mixed controllers and reconnecting at a new device
+index. It covers menus, movement, jumping, throwing, katana, triggers, pause and resume.
+These are simulated inputs, not hardware certification for individual controller models.
+The web export includes a compatibility shim that keeps the standard four stick axes
+separate from additional axes, preventing Godot 4.6.2 from overwriting trigger input.
+Unknown mappings are passed through unchanged. Build with `node web/tools/export.mjs`
+from the repository root to include this shim.
 
 ### Global
 
-**Esc** / **Circle ◯** back · **Esc** / **Start** pause · **Tab** / **Select** Fight Setup ·
-**X** / **Triangle △** random map
-
-A **HOW TO PLAY** overlay covers all three schemes on the first round of a match. It can be
-switched off in *Options* or *Pause ▸ Settings*; the choice persists.
+**Esc** backs out or pauses; **Tab** opens match setup; **X** randomizes the arena.
+The optional **HOW TO PLAY** overlay is off by default. Enable it in *Options* or
+*Pause ▸ Settings*; the choice persists.
 
 ---
 

@@ -1,4 +1,4 @@
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -12,6 +12,11 @@ const child = spawn(godot, ['--headless', '--path', path.join(root, 'ninja_clash
   debug ? '--export-debug' : '--export-release', 'Web', path.join(destination, 'public/index.html')], { stdio: 'inherit' });
 const code = await new Promise(resolve => { child.on('error', () => resolve(1)); child.on('exit', resolve); });
 if (code !== 0) process.exit(code ?? 1);
+const htmlPath = path.join(destination, 'public/index.html');
+const html = await readFile(htmlPath, 'utf8');
+if (!html.includes('</head>')) throw new Error('The web shell is missing its closing head tag.');
+await cp(path.join(root, 'web/client/gamepad-compat.js'), path.join(destination, 'public/gamepad-compat.js'));
+await writeFile(htmlPath, html.replace('</head>', '<script src="gamepad-compat.js"></script>\n</head>'));
 for (const entry of ['api', 'server', 'vercel.json', '.vercelignore']) {
   await cp(path.join(root, 'web', entry), path.join(destination, entry), { recursive: true });
 }

@@ -9,7 +9,7 @@ test('a controller starts the web game and selects visible menu buttons', async 
   await page.addInitScript(() => {
     window.__ninjaTest = true;
     window.__pads = [];
-    Object.defineProperty(navigator, 'getGamepads', { value: () => window.__pads });
+    Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => window.__pads });
   });
   await page.goto(process.env.NINJA_TEST_URL || 'http://127.0.0.1:8787');
   const state = () => page.evaluate(() => window.__ninjaState);
