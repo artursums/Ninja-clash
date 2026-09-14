@@ -2,7 +2,8 @@
 
 > **Status**: Draft
 > **Created**: 2026-05-17
-> **Last Updated**: 2026-05-18 (post-Round Flow design — **8/13 systems Approved; MVP design path COMPLETE (8/8)**)
+> **Last Updated**: 2026-09-14 (added system 14, Kintsugi Blades & Round Clock — In Design)
+> **Prior**: 2026-05-18 (post-Round Flow design — **8/13 systems Approved; MVP design path COMPLETE (8/8)**)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -43,6 +44,7 @@ are correctly placed in the MVP tier and at the front of the design queue.
 | 11 | Visual FX *(inferred)* | Presentation | Alpha | Not Started | — | Movement, Combat, Round Flow, Character Controller |
 | 12 | Audio *(inferred)* | Presentation | Alpha | Not Started | — | Combat, Movement, Round Flow, Game State Manager |
 | 13 | UI Flow *(inferred)* | Meta | Alpha | Not Started | — | Game State Manager, Couch Input, Map, Clan Cosmetics |
+| 14 | Kintsugi Blades & Round Clock | Feature | v1.x | In Design | [kintsugi-blades.md](kintsugi-blades.md) | Projectile, Combat, Movement, Round Flow, Net (ADR-0003) |
 
 ### Deferred (post-v1)
 

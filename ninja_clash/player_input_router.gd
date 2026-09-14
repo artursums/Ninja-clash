@@ -29,27 +29,22 @@ func _physics_process(_delta: float) -> void:
 ## Snapshot every slot's action states for this tick. The sole place that reads Godot Input.
 ##
 ## Online (host side) this is exactly the seam ADR-0001 promised: slot 1 is the LOCAL human
-## (merged p1_*/p2_* devices — one person per machine, whatever they hold), slot 2 is the
-## REMOTE human's intent bitmask received by Net. The simulation reads the same snapshot API
+## (merged p1_*/p2_* devices — one person per machine), slots 2–4 use per-peer
+## REMOTE intent bitmasks received by Net. The simulation reads the same snapshot API
 ## either way and cannot tell the difference.
 func capture() -> void:
 	var net: Node = get_node_or_null("/root/Net") if is_inside_tree() else null
 	if net != null and net.is_host():
-		var pressed_mask: int = net.consume_remote_pressed()
-		for a in ACTIONS:
-			# Local human drives slot 1 with ANY local device (either keyboard scheme or a pad).
-			# suppress_local: the host's pause overlay is open — menu keys must not steer P1.
-			var p1 := "p1_%s" % a
-			var p2 := "p2_%s" % a
-			var h1: bool = InputMap.has_action(p1) and Input.is_action_pressed(p1)
-			var h2: bool = InputMap.has_action(p2) and Input.is_action_pressed(p2)
-			var j1: bool = InputMap.has_action(p1) and Input.is_action_just_pressed(p1)
-			var j2: bool = InputMap.has_action(p2) and Input.is_action_just_pressed(p2)
-			_held[p1] = (h1 or h2) and not suppress_local
-			_pressed[p1] = (j1 or j2) and not suppress_local
-			# Remote human drives slot 2 from the network intent.
-			_held[p2] = net.remote_held(a)
-			_pressed[p2] = NetCodec.mask_has(pressed_mask, a)
+		for slot in SLOTS:
+			var pressed_mask: int = net.consume_remote_pressed(slot) if slot != 1 else 0
+			for a in ACTIONS:
+				var action := "p%d_%s" % [slot, a]
+				if slot == 1:
+					_held[action] = (Input.is_action_pressed("p1_" + a) or Input.is_action_pressed("p2_" + a)) and not suppress_local
+					_pressed[action] = (Input.is_action_just_pressed("p1_" + a) or Input.is_action_just_pressed("p2_" + a)) and not suppress_local
+				else:
+					_held[action] = net.remote_held(slot, a)
+					_pressed[action] = NetCodec.mask_has(pressed_mask, a)
 		return
 	for slot in SLOTS:
 		for a in ACTIONS:

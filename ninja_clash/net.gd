@@ -1,18 +1,7 @@
 # Autoload: Net
-# Online multiplayer session manager — desktop ENet / browser WebRTC 1v1.
-#
-# Model: HOST-AUTHORITATIVE. The host runs the exact same simulation as a local match; the
-# client is a renderer + input device:
-#   • client → host: its local input as intent bitmasks, every physics tick (unreliable)
-#   • host → client: a world snapshot (fighters + projectiles) at 30 Hz (unreliable),
-#     plus reliable events: screen/state changes, scores, lobby picks, SFX/FX cues.
-# The PlayerInputRouter (ADR-0001) already separates device reads from the simulation, so the
-# host simply feeds slot 2 from the network instead of the keyboard. player.gd/shuriken.gd/
-# blade_wave.gd gain a lightweight "puppet" mode on the client (see those files).
-#
-# The client's own fighter is shown at host-authority positions (no client-side prediction) —
-# on LAN the round trip is a frame or two; over the internet expect input latency to rise
-# with ping. Wire formats live in net_codec.gd (pure, unit-tested).
+# Online multiplayer session manager — 2–4 players over ENet / WebRTC.
+# The host simulates every fighter. Guests send per-peer input and render authoritative
+# snapshots; no client-side prediction. Reliable RPCs carry roster, rules and match state.
 
 extends Node
 
@@ -27,20 +16,26 @@ enum NetMode { OFFLINE, HOST, CLIENT }
 
 var mode: int = NetMode.OFFLINE
 var last_status: String = ""            # shown on the online menu (disconnect reasons etc.)
-var _peer_id: int = 0                   # the other side's peer id (host side: the client)
+var _peer_id: int = 0                   # A connected peer, or zero when waiting alone.
 var _tick: int = 0
 var _next_net_id: int = 0
 var _join_deadline: float = 0.0
 var _web_room: Node = null
 var invitation_code := ""
-var _last_remote_input := 0.0
+const Roster := preload("res://online_roster.gd")
+const PROTOCOL := 3
+var lobby := Roster.new()
+var player_name := ""
+var lobby_message := ""
+var _remote_inputs: Dictionary = {}
+var _pending_peers: Dictionary = {}
+var _starting := false
+var _start_generation := 0
+signal lobby_changed
+signal lobby_error(message: String)
 
 signal room_created(code: String)
 signal connection_status(message: String)
-
-# Host-side: latest remote intent from the client (slot 2).
-var _remote_held_mask: int = 0
-var _remote_pressed_accum: int = 0
 
 # Client-side: puppet projectile registries (net_id → node).
 var _puppet_shurikens: Dictionary = {}
@@ -49,9 +44,6 @@ var _puppet_waves: Dictionary = {}
 var _main: Node = null                  # main.gd registers itself (arena root + players live there)
 
 signal session_ended(reason: String)            # any disconnect / failure / deliberate leave
-signal lobby_peer_pick(cursor: int, skin: int, confirmed: bool)   # host ← client clan pick
-signal lobby_host_state(cursor: int, skin: int, confirmed: bool)  # client ← host clan pick
-signal lobby_pick_rejected(reason: String)      # client ← host: confirm refused (clan taken)
 signal map_roll_started(from: int, target: int)
 signal map_cursor_changed(cursor: int)          # client ← host: map-select browsing
 
@@ -88,30 +80,35 @@ func next_id() -> int:
 
 # === Session lifecycle =======================================================
 
-## Open a server and wait for one opponent. Returns "" on success, an error text otherwise.
+## Open a server with room for three guests. Returns "" on success, an error text otherwise.
 func host_game(port: int = DEFAULT_PORT) -> String:
-	leave("")
+	_shutdown("", false)
+	if player_name == "":
+		return "ENTER YOUR PLAYER NAME"
 	if OS.has_feature("web"):
 		return _start_web_room(true, "")
 	var peer := ENetMultiplayerPeer.new()
-	var err: int = peer.create_server(port, 1)
+	var err: int = peer.create_server(port, Roster.MAX_PLAYERS - 1)
 	if err != OK:
 		return "CAN'T OPEN SERVER — PORT %d BUSY?" % port
 	multiplayer.multiplayer_peer = peer
 	mode = NetMode.HOST
 	last_status = ""
+	_open_host_lobby()
 	return ""
 
 
 ## Connect to a host. Returns "" when the attempt started, an error text otherwise.
 func join_game(ip: String, port: int = DEFAULT_PORT) -> String:
+	if player_name == "":
+		return "ENTER YOUR PLAYER NAME"
 	if OS.has_feature("web"):
 		var code: String = preload("res://web_room.gd").parse_room(ip)
 		if code == "":
 			return "ENTER A ROOM CODE OR INVITE LINK"
-		leave("")
+		_shutdown("", false)
 		return _start_web_room(false, code)
-	leave("")
+	_shutdown("", false)
 	var peer := ENetMultiplayerPeer.new()
 	var err: int = peer.create_client(ip, port)
 	if err != OK:
@@ -125,15 +122,18 @@ func join_game(ip: String, port: int = DEFAULT_PORT) -> String:
 
 func _start_web_room(as_host: bool, code: String) -> String:
 	mode = NetMode.HOST if as_host else NetMode.CLIENT
+	invitation_code = code
 	last_status = ""
 	_web_room = preload("res://web_room.gd").new()
 	add_child(_web_room)
 	_web_room.prepared.connect(func(peer): multiplayer.multiplayer_peer = peer)
 	_web_room.room_created.connect(func(room: String):
 		invitation_code = room
-		room_created.emit(room))
+		room_created.emit(room)
+		_open_host_lobby())
 	_web_room.status_changed.connect(func(message: String): connection_status.emit(message))
 	_web_room.failed.connect(func(message: String): _shutdown(message, true))
+	_web_room.lock_completed.connect(_on_room_locked)
 	_web_room.start(as_host, code)
 	return ""
 
@@ -152,14 +152,17 @@ func pending_invitation() -> String:
 
 ## Deliberate leave (menu back / quit to menu). Notifies the other side first when connected.
 func leave(reason: String = "") -> void:
-	if is_online() and _peer_id != 0:
-		_session_closed.rpc("OPPONENT LEFT")
+	if is_host() and _peer_id != 0:
+		_session_closed.rpc("HOST LEFT")
+	player_name = ""
 	_shutdown(reason, false)
 
 
 ## Tear the session down. `notify_screens` routes the local player to the online menu with a
 ## status message (used for unexpected drops mid-flow).
 func _shutdown(reason: String, notify_screens: bool) -> void:
+	var was_online := is_online()
+	mode = NetMode.OFFLINE
 	if _web_room != null:
 		var room: Node = _web_room
 		_web_room = null
@@ -168,14 +171,16 @@ func _shutdown(reason: String, notify_screens: bool) -> void:
 	invitation_code = ""
 	_peer_id = 0
 	_join_deadline = 0.0
-	_remote_held_mask = 0
-	_remote_pressed_accum = 0
+	_remote_inputs.clear()
+	_pending_peers.clear()
+	lobby = Roster.new()
+	_starting = false
+	_start_generation += 1
+	GameState.online_players.clear()
 	_clear_puppets()
 	if multiplayer.multiplayer_peer != null and not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
-	var was_online: bool = mode != NetMode.OFFLINE
-	mode = NetMode.OFFLINE
 	if reason != "":
 		last_status = reason
 	if was_online and notify_screens:
@@ -204,29 +209,69 @@ func local_ipv4_addresses() -> Array:
 
 # === Connection signals ======================================================
 
+func _open_host_lobby() -> void:
+	lobby.add(1, player_name)
+	GameState.game_mode = GameState.Mode.HUMAN_VS_HUMAN
+	_publish_lobby()
+	GameState.change_state(GameState.State.ONLINE_LOBBY)
+
+
 func _on_peer_connected(id: int) -> void:
 	if not is_host():
 		return
-	_peer_id = id
+	_pending_peers[id] = _now() + JOIN_TIMEOUT_S
 	if _web_room != null:
-		_web_room.mark_connected()
-	# Opponent is in — go straight to the online lobby (clan select). The state change is
-	# relayed to the client by on_local_state_changed below.
-	GameState.game_mode = GameState.Mode.HUMAN_VS_HUMAN
-	GameState.change_state(GameState.State.CLAN_SELECT)
+		_web_room.mark_connected(id)
 
 
-func _on_peer_disconnected(_id: int) -> void:
-	if is_host():
-		_shutdown("OPPONENT LEFT", true)
+@rpc("any_peer", "call_remote", "reliable")
+func _hello(display_name: String, protocol: int) -> void:
+	if not is_host():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not _pending_peers.has(id):
+		return
+	_pending_peers.erase(id)
+	if protocol != PROTOCOL or _starting or not lobby.add(id, display_name):
+		_session_closed.rpc_id(id, "ROOM FULL, STARTED OR INCOMPATIBLE")
+		_disconnect_peer.call_deferred(id)
+		return
+	_peer_id = id
+	_remote_inputs[id] = {"held": 0, "pressed": 0, "seen": 0.0}
+	lobby_message = "%s JOINED" % lobby.member(id).name
+	_publish_lobby()
+	_apply_state.rpc_id(id, GameState.State.ONLINE_LOBBY, _build_state_bundle())
+
+
+func _disconnect_peer(id: int) -> void:
+	if _web_room != null:
+		_web_room.remove_guest(id)
+	elif multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+
+
+func _on_peer_disconnected(id: int) -> void:
+	if not is_host():
+		return
+	_pending_peers.erase(id)
+	_remote_inputs.erase(id)
+	var player := lobby.member(id)
+	if player.is_empty():
+		return
+	var departed := String(player.name)
+	lobby.remove(id)
+	_peer_id = int(lobby.members[1].peer) if lobby.members.size() > 1 else 0
+	if _web_room != null:
+		_web_room.remove_guest(id)
+	return_to_lobby("%s LEFT — READY AGAIN TO CONTINUE" % departed)
 
 
 func _on_connected_to_server() -> void:
 	_peer_id = 1
 	_join_deadline = 0.0
 	if _web_room != null:
-		_web_room.mark_connected()
-	# Wait: the host's state bundle (CLAN_SELECT) arrives via _apply_state.
+		_web_room.mark_connected(1)
+	_hello.rpc_id(1, player_name, PROTOCOL)
 
 
 func _on_connection_failed() -> void:
@@ -237,7 +282,7 @@ func _on_server_disconnected() -> void:
 	_shutdown("CONNECTION LOST", true)
 
 
-@rpc("any_peer", "call_remote", "reliable")
+@rpc("authority", "call_remote", "reliable")
 func _session_closed(reason: String) -> void:
 	_shutdown(reason, true)
 
@@ -247,13 +292,18 @@ func _session_closed(reason: String) -> void:
 func _physics_process(_delta: float) -> void:
 	match mode:
 		NetMode.HOST:
+			for id in _pending_peers.keys():
+				if _now() > _pending_peers[id]:
+					_pending_peers.erase(id)
+					_disconnect_peer(id)
+			for input in _remote_inputs.values():
+				if _now() - input.seen > 0.25:
+					input.held = 0
+					input.pressed = 0
 			if _peer_id == 0:
 				return
-			if _now() - _last_remote_input > 0.25:
-				_remote_held_mask = 0
-				_remote_pressed_accum = 0
 			_tick += 1
-			if _tick % SNAPSHOT_EVERY_N_TICKS == 0 and _main != null:
+			if _tick % SNAPSHOT_EVERY_N_TICKS == 0 and _main != null and GameState.current_state in [GameState.State.MATCH_INTRO, GameState.State.ROUND, GameState.State.ROUND_END]:
 				_snapshot.rpc(_build_snapshot())
 		NetMode.CLIENT:
 			if _peer_id != 0:
@@ -290,23 +340,32 @@ func _local_pressed_mask() -> int:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _intent(held_mask: int, pressed_mask: int) -> void:
-	if not is_host() or multiplayer.get_remote_sender_id() != _peer_id:
+	var id := multiplayer.get_remote_sender_id()
+	if not is_host() or not _remote_inputs.has(id):
 		return
-	_last_remote_input = _now()
-	_remote_held_mask = held_mask
-	_remote_pressed_accum |= pressed_mask   # accumulate so a tap between snapshots is never lost
+	var input: Dictionary = _remote_inputs[id]
+	input.seen = _now()
+	input.held = held_mask
+	input.pressed |= pressed_mask
 
 
-func remote_held(action_suffix: String) -> bool:
-	return NetCodec.mask_has(_remote_held_mask, action_suffix)
+func remote_held(slot: int, action_suffix: String) -> bool:
+	var input := _input_for_slot(slot)
+	return NetCodec.mask_has(int(input.get("held", 0)), action_suffix)
 
 
-## The just-pressed edges accumulated since the previous consume. Called exactly once per
-## physics tick by PlayerInputRouter.capture so each tap fires exactly one edge.
-func consume_remote_pressed() -> int:
-	var m: int = _remote_pressed_accum
-	_remote_pressed_accum = 0
-	return m
+func consume_remote_pressed(slot: int) -> int:
+	var input := _input_for_slot(slot)
+	var mask := int(input.get("pressed", 0))
+	input.pressed = 0
+	return mask
+
+
+func _input_for_slot(slot: int) -> Dictionary:
+	for player in lobby.members:
+		if int(player.slot) == slot:
+			return _remote_inputs.get(int(player.peer), {})
+	return {}
 
 
 # === World snapshot (host → client) =========================================
@@ -410,7 +469,7 @@ func _spawn_puppet_wave(arr: Array) -> Node:
 ## the full match context, EXCEPT the host-local Fight Setup screen (the client keeps its lobby
 ## while the host tweaks variants; the config ships inside the next state bundle).
 func on_local_state_changed(s: int) -> void:
-	if not is_host() or _peer_id == 0:
+	if not is_host():
 		return
 	if s == GameState.State.MATCH_SETUP:
 		return
@@ -419,12 +478,14 @@ func on_local_state_changed(s: int) -> void:
 	if s == GameState.State.TITLE or s == GameState.State.MODE_SELECT:
 		leave("")
 		return
-	_apply_state.rpc(s, _build_state_bundle())
+	if _peer_id != 0:
+		_apply_state.rpc(s, _build_state_bundle())
 
 
 func _build_state_bundle() -> Dictionary:
 	return {
 		"mode": GameState.game_mode,
+		"players": lobby.members.duplicate(true),
 		"round": GameState.current_round,
 		"map": GameState.selected_map_index,
 		"p1_clan": GameState.p1_clan, "p2_clan": GameState.p2_clan,
@@ -453,6 +514,7 @@ func _apply_state(s: int, bundle: Dictionary) -> void:
 	if not is_client():
 		return
 	GameState.game_mode = int(bundle.get("mode", GameState.game_mode))
+	GameState.apply_online_players(bundle.get("players", []))
 	GameState.current_round = int(bundle.get("round", 1))
 	GameState.selected_map_index = int(bundle.get("map", 0))
 	GameState.p1_clan = int(bundle.get("p1_clan", 0))
@@ -466,60 +528,13 @@ func _apply_state(s: int, bundle: Dictionary) -> void:
 	Combat.match_stats = bundle.get("stats", {}).duplicate(true)
 	Combat.scores = bundle.get("scores", Combat.scores)
 	Combat.score_changed.emit()
-	var cfg: Dictionary = bundle.get("cfg", {})
-	# The match variants come from the host verbatim — do NOT persist them into the client's own
-	# saved config (direct field writes, no set_* mutators).
-	if not cfg.is_empty():
-		MatchConfig.katana_enabled = bool(cfg.get("katana_enabled", true))
-		MatchConfig.katana_recharge = bool(cfg.get("katana_recharge", true))
-		MatchConfig.katana_charges = int(cfg.get("katana_charges", 3))
-		MatchConfig.shurikens_enabled = bool(cfg.get("shurikens_enabled", true))
-		MatchConfig.start_shurikens = int(cfg.get("start_shurikens", 3))
-		MatchConfig.infinite_shurikens = bool(cfg.get("infinite_shurikens", false))
-		MatchConfig.max_hp = int(cfg.get("max_hp", 5))
-		MatchConfig.blade_wave_enabled = bool(cfg.get("blade_wave_enabled", false))
+	_apply_rules(bundle)
 	if _main != null:
 		_main._round_winner_slot = int(bundle.get("round_winner", 0))
 	GameState.change_state(s)
 
 
 # === Lobby sync (clan + map select) =========================================
-
-## Client → host: my clan pick changed (cursor / skin / lock state).
-func send_client_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if is_client() and _peer_id != 0:
-		_client_pick.rpc_id(1, cursor, skin, confirmed)
-
-
-@rpc("any_peer", "call_remote", "reliable")
-func _client_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if is_host():
-		lobby_peer_pick.emit(cursor, skin, confirmed)
-
-
-## Host → client: the host's own pick changed (mirrored on the client's lobby screen).
-func send_host_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if is_host() and _peer_id != 0:
-		_host_pick.rpc(cursor, skin, confirmed)
-
-
-@rpc("authority", "call_remote", "reliable")
-func _host_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if is_client():
-		lobby_host_state.emit(cursor, skin, confirmed)
-
-
-## Host → client: your confirm was refused (clan already taken).
-func send_pick_rejected(reason: String) -> void:
-	if is_host() and _peer_id != 0:
-		_pick_rejected.rpc(reason)
-
-
-@rpc("authority", "call_remote", "reliable")
-func _pick_rejected(reason: String) -> void:
-	if is_client():
-		lobby_pick_rejected.emit(reason)
-
 
 ## Host → client: map-select browsing position (the client watches the host choose).
 func send_map_cursor(cursor: int) -> void:
@@ -585,3 +600,158 @@ func send_map_roll(from: int, target: int) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _map_roll(from: int, target: int) -> void:
 	map_roll_started.emit(from,target)
+
+func local_member() -> Dictionary:
+	return lobby.member(multiplayer.get_unique_id()) if is_online() and multiplayer.multiplayer_peer != null else {}
+
+
+func _publish_lobby() -> void:
+	GameState.apply_online_players(lobby.members)
+	lobby_changed.emit()
+	if _peer_id != 0:
+		_lobby_state.rpc(_build_state_bundle(), lobby.rules_revision, lobby.editing_rules, lobby.locked, lobby_message)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _lobby_state(bundle: Dictionary, revision: int, editing: bool, locked: bool, message: String) -> void:
+	if not is_client():
+		return
+	lobby.members = bundle.get("players", []).duplicate(true)
+	lobby.rules_revision = revision
+	lobby.editing_rules = editing
+	lobby.locked = locked
+	lobby_message = message
+	GameState.apply_online_players(lobby.members)
+	GameState.selected_map_index = int(bundle.get("map", 0))
+	_apply_rules(bundle)
+	lobby_changed.emit()
+
+
+func choose_character(clan: int, skin: int, ready: bool) -> void:
+	if is_host():
+		_accept_pick(1, clan, skin, ready, lobby.rules_revision)
+	elif is_client():
+		_lobby_pick.rpc_id(1, clan, skin, ready, lobby.rules_revision)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _lobby_pick(clan: int, skin: int, ready: bool, revision: int) -> void:
+	if is_host():
+		_accept_pick(multiplayer.get_remote_sender_id(), clan, skin, ready, revision)
+
+
+func _accept_pick(id: int, clan: int, skin: int, ready: bool, revision: int) -> void:
+	var error := lobby.pick(id, clan, skin, ready, revision, GameState.skin_count())
+	if error != "":
+		if id == 1:
+			lobby_error.emit(error)
+		else:
+			_pick_error.rpc_id(id, error)
+		return
+	lobby_message = ""
+	_publish_lobby()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _pick_error(error: String) -> void:
+	if is_client():
+		lobby_error.emit(error)
+
+
+func choose_map() -> void:
+	if not is_host() or lobby.locked:
+		return
+	GameState.selected_map_index = (GameState.selected_map_index + 1) % Maps.count()
+	lobby.invalidate_ready()
+	lobby_message = "ARENA CHANGED — READY AGAIN"
+	_publish_lobby()
+
+
+func edit_rules() -> void:
+	if not is_host() or lobby.locked:
+		return
+	lobby.editing_rules = true
+	lobby.invalidate_ready()
+	lobby_message = "HOST IS CHOOSING THE RULES"
+	_publish_lobby()
+	GameState.change_state(GameState.State.MATCH_SETUP)
+
+
+func finish_rules() -> void:
+	if not is_host():
+		return
+	lobby.editing_rules = false
+	lobby_message = "CHECK THE RULES AND READY UP"
+	_publish_lobby()
+	GameState.change_state(GameState.State.ONLINE_LOBBY)
+
+
+func start_lobby_match() -> void:
+	if not is_host() or not lobby.can_start() or _starting:
+		return
+	if not _pending_peers.is_empty():
+		lobby_error.emit("A PLAYER IS STILL CONNECTING")
+		return
+	_starting = true
+	_start_generation += 1
+	lobby.locked = true
+	lobby_message = "STARTING MATCH…"
+	_publish_lobby()
+	multiplayer.multiplayer_peer.refuse_new_connections = true
+	if _web_room != null:
+		var peers: Array = []
+		for player in lobby.members:
+			if int(player.peer) != 1:
+				peers.append(int(player.peer))
+		_web_room.lock_room(peers, _start_generation)
+	else:
+		_on_room_locked("", _start_generation)
+
+
+func _on_room_locked(error: String, generation: int) -> void:
+	if not is_host():
+		return
+	if not _starting or generation != _start_generation:
+		return
+	_starting = false
+	if error != "":
+		lobby.locked = false
+		multiplayer.multiplayer_peer.refuse_new_connections = false
+		lobby_message = error
+		_publish_lobby()
+		return
+	GameState.apply_online_players(lobby.members)
+	GameState.start_new_match()
+
+
+func return_to_lobby(message: String = "READY UP FOR THE NEXT MATCH") -> void:
+	if not is_host():
+		return
+	_starting = false
+	_start_generation += 1
+	lobby.locked = false
+	lobby.editing_rules = false
+	lobby.invalidate_ready()
+	lobby_message = message
+	multiplayer.multiplayer_peer.refuse_new_connections = false
+	if _web_room != null:
+		_web_room.reopen()
+	_publish_lobby()
+	GameState.change_state(GameState.State.ONLINE_LOBBY)
+
+
+func _apply_rules(bundle: Dictionary) -> void:
+	GameState.target_score = int(bundle.get("target", 5))
+	MatchConfig.target_score = GameState.target_score
+	var cfg: Dictionary = bundle.get("cfg", {})
+	# The match variants come from the host verbatim — do NOT persist them into the client's own
+	# saved config (direct field writes, no set_* mutators).
+	if not cfg.is_empty():
+		MatchConfig.katana_enabled = bool(cfg.get("katana_enabled", true))
+		MatchConfig.katana_recharge = bool(cfg.get("katana_recharge", true))
+		MatchConfig.katana_charges = int(cfg.get("katana_charges", 3))
+		MatchConfig.shurikens_enabled = bool(cfg.get("shurikens_enabled", true))
+		MatchConfig.start_shurikens = int(cfg.get("start_shurikens", 3))
+		MatchConfig.infinite_shurikens = bool(cfg.get("infinite_shurikens", false))
+		MatchConfig.max_hp = int(cfg.get("max_hp", 5))
+		MatchConfig.blade_wave_enabled = bool(cfg.get("blade_wave_enabled", false))

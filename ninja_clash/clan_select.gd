@@ -36,11 +36,6 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	visibility_changed.connect(_on_visibility_changed)
-	# Online lobby sync (ADR-0003): host edits the P1 side, the guest edits P2 — each side's
-	# pick streams to the other machine; the host validates clan conflicts.
-	Net.lobby_peer_pick.connect(_on_remote_pick)
-	Net.lobby_host_state.connect(_on_host_pick)
-	Net.lobby_pick_rejected.connect(_on_pick_rejected)
 	_refresh()
 
 func _on_visibility_changed() -> void:
@@ -52,8 +47,6 @@ func _on_visibility_changed() -> void:
 		p2_confirmed = false
 		_mouse_slot = 1
 		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
-		if Net.is_online():
-			_send_local_pick()   # both sides announce their pick on entry, so each sees the other
 		_refresh()
 		_input_lockout_until = Time.get_ticks_msec()/1000.0+0.2
 
@@ -89,7 +82,7 @@ func _build() -> void:
 	UI.button(self, "MATCH SETUP", Rect2(650, 416, 118, 24), _setup, 14)
 
 func _solo() -> bool:
-	return not Net.is_online() and GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]
+	return GameState.game_mode in [GameState.Mode.HUMAN_VS_AI, GameState.Mode.FFA]
 
 func _mouse_ready() -> bool:
 	return visible and Time.get_ticks_msec() / 1000.0 >= _input_lockout_until
@@ -97,17 +90,16 @@ func _mouse_ready() -> bool:
 func _mouse_pick(index: int) -> void:
 	if not _mouse_ready():
 		return
-	var slot := (1 if Net.is_host() else 2) if Net.is_online() else _mouse_slot
+	var slot := _mouse_slot
 	if slot == 1 and not p1_confirmed:
 		p1_cursor = index
 	elif slot == 2 and not p2_confirmed:
 		p2_cursor = index
 	Audio.play("click")
-	_send_local_pick()
 	_refresh()
 
 func _mouse_skin(slot: int) -> void:
-	if not _mouse_ready() or (Net.is_online() and slot != (1 if Net.is_host() else 2)):
+	if not _mouse_ready():
 		return
 	if slot == 1 and not p1_confirmed:
 		GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
@@ -116,11 +108,10 @@ func _mouse_skin(slot: int) -> void:
 		GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
 		_mouse_slot = slot
 	Audio.play("click")
-	_send_local_pick()
 	_refresh()
 
 func _mouse_lock(slot: int) -> void:
-	if not _mouse_ready() or (Net.is_online() and slot != (1 if Net.is_host() else 2)):
+	if not _mouse_ready():
 		return
 	_mouse_slot = slot
 	var mine := p1_cursor if slot == 1 else p2_cursor
@@ -143,29 +134,21 @@ func _mouse_lock(slot: int) -> void:
 	if slot == 1:
 		p1_confirmed = not locked
 		GameState.p1_clan = p1_cursor
-		if p1_confirmed and not Net.is_online():
+		if p1_confirmed:
 			_mouse_slot = 2
 	else:
 		p2_confirmed = not locked
 		GameState.p2_clan = p2_cursor
 	Audio.play("confirm")
-	_send_local_pick()
 	_refresh()
-	if p1_confirmed and p2_confirmed and not Net.is_client():
+	if p1_confirmed and p2_confirmed:
 		GameState.change_state(GameState.State.MAP_SELECT)
 
 func _back() -> void:
 	Audio.play("click")
-	if Net.is_online():
-		Net.leave("")
-		GameState.change_state(GameState.State.ONLINE_MENU)
-	else:
-		GameState.change_state(GameState.State.MODE_SELECT)
+	GameState.change_state(GameState.State.MODE_SELECT)
 
 func _setup() -> void:
-	if Net.is_client():
-		status_label.text = "THE HOST SETS THE FIGHT RULES"
-		return
 	GameState.p1_clan = p1_cursor
 	GameState.p2_clan = p2_cursor
 	Audio.play("confirm")
@@ -181,9 +164,6 @@ func _process(_delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("menu_setup"):
 		_setup()
-		return
-	if Net.is_online():
-		_process_online()
 		return
 	# Solo-pick modes: only P1 chooses, the bots are assigned automatically on confirm.
 	# FFA — the three bots split the remaining clans; P1 vs AI — the bot takes a random
@@ -271,118 +251,14 @@ func _process(_delta: float) -> void:
 	if p1_confirmed and p2_confirmed:
 		GameState.change_state(GameState.State.MAP_SELECT)
 
-# === Online lobby (ADR-0003) ================================================
-
-# Any LOCAL device — online there is one human per machine, so both keyboard schemes and any
-# pad drive that machine's side of the lobby.
-func _act(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
-
-# Online frame: edit MY side with local input, mirror the remote side from Net signals.
-# The host validates conflicts and is the only one who advances to map select.
-func _process_online() -> void:
-	var host: bool = Net.is_host()
-	var my_confirmed: bool = p1_confirmed if host else p2_confirmed
-	var changed: bool = false
-	if not my_confirmed:
-		if _act("skin"):
-			if host:
-				GameState.p1_skin = (GameState.p1_skin + 1) % GameState.skin_count()
-			else:
-				GameState.p2_skin = (GameState.p2_skin + 1) % GameState.skin_count()
-			Audio.play("click")
-			changed = true
-		if _act("left") or _act("right"):
-			var step: int = 1 if _act("right") else 3
-			if host:
-				p1_cursor = (p1_cursor + step) % 4
-			else:
-				p2_cursor = (p2_cursor + step) % 4
-			Audio.play("click")
-			changed = true
-		elif _act("jump") or _act("confirm"):
-			var my_cursor: int = p1_cursor if host else p2_cursor
-			var other_confirmed: bool = p2_confirmed if host else p1_confirmed
-			var other_cursor: int = p2_cursor if host else p1_cursor
-			if other_confirmed and other_cursor == my_cursor:
-				status_label.text = "%s is already taken — choose another" % GameState.CLANS[my_cursor].name
-				status_label.add_theme_color_override("font_color", Color("c03030"))
-				Audio.play("hit")
-			else:
-				if host:
-					p1_confirmed = true
-					GameState.p1_clan = p1_cursor
-				else:
-					p2_confirmed = true
-					GameState.p2_clan = p2_cursor   # preview; the host's bundle is authoritative
-				Audio.play("confirm")
-				changed = true
-	elif _act("aim_down"):
-		if host:
-			p1_confirmed = false
-		else:
-			p2_confirmed = false
-		Audio.play("click")
-		changed = true
-	if changed:
-		_send_local_pick()
-		_refresh()
-	# Only the host starts the match flow; the guest follows via the state relay.
-	if host and p1_confirmed and p2_confirmed:
-		GameState.change_state(GameState.State.MAP_SELECT)
-
-# Push MY side's current pick to the other machine.
-func _send_local_pick() -> void:
-	if Net.is_host():
-		Net.send_host_pick(p1_cursor, GameState.p1_skin, p1_confirmed)
-	elif Net.is_client():
-		Net.send_client_pick(p2_cursor, GameState.p2_skin, p2_confirmed)
-
-# Host ← guest: the P2 side changed. Validate a confirm against the host's own lock.
-func _on_remote_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if not visible or not Net.is_host():
-		return
-	p2_cursor = clampi(cursor, 0, 3)
-	GameState.p2_skin = skin % GameState.skin_count()
-	if confirmed and p1_confirmed and p2_cursor == p1_cursor:
-		p2_confirmed = false
-		Net.send_pick_rejected("P1 already picked %s — choose another" % GameState.CLANS[p1_cursor].name)
-	else:
-		p2_confirmed = confirmed
-		if confirmed:
-			GameState.p2_clan = p2_cursor
-	_refresh()
-
-# Guest ← host: the P1 side changed.
-func _on_host_pick(cursor: int, skin: int, confirmed: bool) -> void:
-	if not visible or not Net.is_client():
-		return
-	p1_cursor = clampi(cursor, 0, 3)
-	GameState.p1_skin = skin % GameState.skin_count()
-	p1_confirmed = confirmed
-	_refresh()
-
-# Guest ← host: my confirm was refused (clan taken on the host's authoritative view).
-func _on_pick_rejected(reason: String) -> void:
-	if not visible or not Net.is_client():
-		return
-	p2_confirmed = false
-	Audio.play("hit")
-	_send_local_pick()
-	_refresh()
-	# After _refresh so the standard status text can't paint over the rejection.
-	status_label.text = reason
-	status_label.add_theme_color_override("font_color", Color("c03030"))
-
 func _refresh() -> void:
-	if not Net.is_online():
-		if p1_confirmed and not p2_confirmed:
-			_mouse_slot = 2
-		elif p2_confirmed and not p1_confirmed:
-			_mouse_slot = 1
+	if p1_confirmed and not p2_confirmed:
+		_mouse_slot = 2
+	elif p2_confirmed and not p1_confirmed:
+		_mouse_slot = 1
 	# Solo-pick modes hide the whole P2 side — the bot's clan is assigned on confirm.
 	var solo: bool = (GameState.game_mode == GameState.Mode.FFA) \
-		or (GameState.game_mode == GameState.Mode.HUMAN_VS_AI and not Net.is_online())
+		or (GameState.game_mode == GameState.Mode.HUMAN_VS_AI)
 	for i in 4:
 		var attended: bool = (i == p1_cursor) or (not solo and i == p2_cursor)
 		UI.select(_card_buttons[i], attended, GameState.CLANS[i].color)
@@ -392,7 +268,7 @@ func _refresh() -> void:
 
 		var p1_here: bool = i == p1_cursor
 		var p2_here: bool = not solo and i == p2_cursor
-		var active_slot: int = (1 if Net.is_host() else 2) if Net.is_online() else _mouse_slot
+		var active_slot: int = _mouse_slot
 		var skin_to_show: int = 0
 		if p1_here and (not p2_here or p1_confirmed or (not p2_confirmed and active_slot == 1)):
 			skin_to_show = GameState.p1_skin
@@ -416,7 +292,7 @@ func _refresh() -> void:
 
 	for slot in [1, 2]:
 		var locked: bool = p1_confirmed if slot == 1 else p2_confirmed
-		var local: bool = not Net.is_online() or slot == (1 if Net.is_host() else 2)
+		var local: bool = true
 		_player_buttons[slot - 1].visible = slot == 1 or not solo
 		_skin_buttons[slot - 1].visible = slot == 1 or not solo
 		_player_buttons[slot - 1].disabled = not local
@@ -442,18 +318,6 @@ func _refresh() -> void:
 		UI.select(_player_buttons[index], local and (solo or _mouse_slot == slot), clan.color)
 	if solo:
 		status_label.text = ""
-		return
-	if Net.is_online():
-		var my_locked: bool = p1_confirmed if Net.is_host() else p2_confirmed
-		if p1_confirmed and p2_confirmed:
-			status_label.text = "starting..."
-			status_label.add_theme_color_override("font_color", Color("d4a830"))
-		elif my_locked:
-			status_label.text = "locked in — waiting for your opponent…"
-			status_label.add_theme_color_override("font_color", Color("a8a498"))
-		else:
-			status_label.text = "ONLINE — you are %s" % ("P1 (host)" if Net.is_host() else "P2 (guest)")
-			status_label.add_theme_color_override("font_color", Color("a8a498"))
 		return
 	if p1_confirmed and p2_confirmed:
 		status_label.text = "starting..."

@@ -158,7 +158,7 @@ func _do_reset() -> void:
 
 func _do_done() -> void:
 	Audio.play("confirm")
-	GameState.change_state(GameState.State.CLAN_SELECT)
+	_return_to_players()
 
 
 func _nav(suffix: String) -> bool:
@@ -172,7 +172,7 @@ func _process(_delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("menu_cancel") or Input.is_action_just_pressed("menu_setup"):
 		Audio.play("click")
-		GameState.change_state(GameState.State.CLAN_SELECT)
+		_return_to_players()
 		return
 	var n: int = rows.size()
 	if _nav("aim_up"):
@@ -264,3 +264,9 @@ func _mouse_activate(index: int) -> void:
 	if active.is_null() or bool(active.call()):
 		_activate()
 	_refresh()
+
+func _return_to_players() -> void:
+	if Net.is_online():
+		Net.finish_rules()
+	else:
+		GameState.change_state(GameState.State.CLAN_SELECT)

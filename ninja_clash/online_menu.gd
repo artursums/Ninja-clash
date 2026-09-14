@@ -1,4 +1,4 @@
-# ONLINE menu — host or join a 1v1 LAN/internet match (ADR-0003). Entered from the title
+# ONLINE menu — host or join a 2–4-player LAN/internet match (ADR-0003). Entered from the title
 # screen's ONLINE button; leads into the shared online lobby (clan select) once connected.
 #
 #   HOST GAME — opens a server on port 24565 and shows this machine's LAN address(es)
@@ -46,6 +46,7 @@ var ip_edit: LineEdit
 var ip_caption: Label
 var status_label: Label
 var invite_edit: LineEdit
+var name_dialog: Control
 
 
 func _ready() -> void:
@@ -53,6 +54,19 @@ func _ready() -> void:
 	anchor_bottom = 1.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
+	name_dialog = Control.new()
+	name_dialog.set_script(load("res://player_name_dialog.gd"))
+	add_child(name_dialog)
+	name_dialog.hide()
+	name_dialog.accepted.connect(func(value: String):
+		Net.player_name = value
+		name_dialog.hide()
+		_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.25
+		_refresh())
+	name_dialog.cancelled.connect(func():
+		name_dialog.hide()
+		Net.leave()
+		GameState.change_state(GameState.State.TITLE))
 	visibility_changed.connect(_on_visibility_changed)
 	Net.session_ended.connect(_on_session_ended)
 	Net.room_created.connect(_on_room_created)
@@ -78,6 +92,8 @@ func _on_visibility_changed() -> void:
 	status_label.add_theme_color_override("font_color", COL_ERR)
 	Net.last_status = ""
 	_refresh()
+	if Net.player_name == "":
+		name_dialog.show()
 
 
 func _on_session_ended(reason: String) -> void:
@@ -104,9 +120,9 @@ func _build() -> void:
 	add_child(head)
 
 	var sub := Label.new()
-	sub.text = "1v1 over LAN / internet — host is P1, guest is P2"
+	sub.text = "2–4 players over LAN / internet"
 	if OS.has_feature("web"):
-		sub.text = "Create a room, share the invite, play a friend"
+		sub.text = "Create a room, invite up to three friends"
 	sub.position = Vector2(0, 66)
 	sub.size = Vector2(800, 20)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -204,7 +220,7 @@ func _arrow_edge(key: int, was: bool) -> Dictionary:
 
 
 func _process(_delta: float) -> void:
-	if not visible:
+	if not visible or name_dialog.visible:
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
@@ -252,10 +268,14 @@ func _process(_delta: float) -> void:
 			ROW_JOIN: _start_join()
 			ROW_BACK:
 				Audio.play("click")
+				Net.leave()
 				GameState.change_state(GameState.State.TITLE)
 
 
 func _start_host() -> void:
+	if Net.player_name == "":
+		name_dialog.show()
+		return
 	Audio.play("confirm")
 	var err: String = Net.host_game()
 	if err != "":
@@ -277,6 +297,9 @@ func _start_host() -> void:
 
 
 func _start_join() -> void:
+	if Net.player_name == "":
+		name_dialog.show()
+		return
 	var ip: String = ip_edit.text.strip_edges()
 	if ip == "":
 		status_label.text = "TYPE THE HOST'S ADDRESS FIRST"
@@ -328,7 +351,7 @@ func _refresh() -> void:
 	ip_edit.editable = idle
 	ip_edit.modulate.a = 1.0 if idle else 0.35
 	# The IP field types only while JOIN is the highlighted row.
-	if idle and _cursor == ROW_JOIN:
+	if idle and _cursor == ROW_JOIN and (name_dialog == null or not name_dialog.visible):
 		if not ip_edit.has_focus():
 			ip_edit.grab_focus()
 			ip_edit.caret_column = ip_edit.text.length()
@@ -336,6 +359,8 @@ func _refresh() -> void:
 		ip_edit.release_focus()
 
 func _mouse_activate(row: int) -> void:
+	if name_dialog.visible:
+		return
 	if _mode != Mode.IDLE:
 		if row == ROW_HOST and OS.has_feature("web") and Net.invitation_code != "":
 			_copy_invitation()
@@ -350,7 +375,9 @@ func _mouse_activate(row: int) -> void:
 	match row:
 		ROW_HOST: _start_host()
 		ROW_JOIN: _start_join()
-		ROW_BACK: GameState.change_state(GameState.State.TITLE)
+		ROW_BACK:
+			Net.leave()
+			GameState.change_state(GameState.State.TITLE)
 
 
 func _on_room_created(code: String) -> void:

@@ -22,7 +22,6 @@ slide_speed = 400.0
 slide_duration_s = 0.2
 slide_cooldown_s = 0.417
 slide_air_refresh_s = 0.5
-double_tap_window_s = 0.25
 wall_jump_vstrength = 540.0
 wall_jump_hkick = 200.0
 wall_jump_lock_s = 0.1

@@ -126,7 +126,10 @@ func _restart() -> void:
 		return   # only the host may restart an online match (row shown dimmed)
 	Audio.play("confirm")
 	_close()
-	GameState.start_new_match()   # round 1, same mode/clans/map; emits MATCH_INTRO
+	if Net.is_host():
+		Net.return_to_lobby()
+	else:
+		GameState.start_new_match()
 
 
 func _quit_to_menu() -> void:

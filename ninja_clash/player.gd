@@ -42,7 +42,6 @@ var SLIDE_DURATION_S := 0.20
 var SLIDE_MAX_UP_SPEED := 282.8427124746191   # = SLIDE_SPEED·sin45°; recomputed in _apply_tuning()
 var SLIDE_COOLDOWN_S := 0.417
 var SLIDE_AIR_REFRESH_S := 0.5
-var DOUBLE_TAP_WINDOW_S := 0.25
 var WALL_JUMP_VSTRENGTH := 540.0
 var WALL_JUMP_HKICK := 200.0
 var WALL_JUMP_LOCK_S := 0.10
@@ -147,10 +146,6 @@ var slide_dir: Vector2 = Vector2.ZERO   # normalized dash direction (8-way), set
 var slide_charged: bool = true          # L2/R2 dash charge — spent on dash, restored on floor/wall contact
 var slide_cooldown_until: float = 0.0   # earliest time the charge may refill (base cooldown + any air refresh)
 var air_dash_penalty: bool = false      # set when a dash is taken airborne — adds the touch-down delay once
-var last_left_tap_t: float = -999.0     # keyboard double-tap-to-dash timing (any human slot, 4-way)
-var last_right_tap_t: float = -999.0
-var last_up_tap_t: float = -999.0
-var last_down_tap_t: float = -999.0
 var wall_jump_lock_until: float = -999.0
 var stomp_cooldown_until: float = -999.0     # stomper can't head-stomp again until this real-time
 var stomp_bounce_lock_until: float = -999.0  # holds the sideways stomp bounce against movement input
@@ -244,7 +239,6 @@ func _apply_tuning() -> void:
 		SLIDE_DURATION_S = tuning.slide_duration_s
 		SLIDE_COOLDOWN_S = tuning.slide_cooldown_s
 		SLIDE_AIR_REFRESH_S = tuning.slide_air_refresh_s
-		DOUBLE_TAP_WINDOW_S = tuning.double_tap_window_s
 		WALL_JUMP_VSTRENGTH = tuning.wall_jump_vstrength
 		WALL_JUMP_HKICK = tuning.wall_jump_hkick
 		WALL_JUMP_LOCK_S = tuning.wall_jump_lock_s
@@ -495,22 +489,7 @@ func _physics_process(delta: float) -> void:
 			# kick-off puff beside the trailing foot
 			_spawn_dust(Vector2(global_position.x, global_position.y + DUST_FEET_OFFSET), "jump", -float(facing))
 
-	# Dash-dodge request — ONE move on L2, R2 AND Circle (slide + dodge are now unified),
-	# plus a keyboard double-tap of any move/aim direction (W/A/S/D or numpad 8/4/5/6) for
-	# every HUMAN slot. The dash fires toward the held aim, so the second tap's held key
-	# already points it the right way. (A pad stick crossing the deadzone twice inside the
-	# window also counts — accepted: the dash still costs the charge + cooldown.)
 	var dash_requested: bool = not is_defending and (_pressed(input_slide) or _pressed(input_dodge))
-	if not is_bot:
-		last_left_tap_t = _tap_check(input_left, last_left_tap_t, t)
-		last_right_tap_t = _tap_check(input_right, last_right_tap_t, t)
-		last_up_tap_t = _tap_check(input_aim_up, last_up_tap_t, t)
-		last_down_tap_t = _tap_check(input_aim_down, last_down_tap_t, t)
-		if last_left_tap_t == TAP_FIRED or last_right_tap_t == TAP_FIRED \
-				or last_up_tap_t == TAP_FIRED or last_down_tap_t == TAP_FIRED:
-			dash_requested = true
-			last_left_tap_t = -999.0; last_right_tap_t = -999.0
-			last_up_tap_t = -999.0;   last_down_tap_t = -999.0
 
 	# Dash-dodge — fires toward the held aim (8-way) with brief i-frames that catch an
 	# incoming shuriken. Spends the charge; in the air you get exactly one until you touch
@@ -569,19 +548,8 @@ func _puppet_tick(delta: float) -> void:
 	_update_aim_reticle()
 	_update_visual()
 
-# Double-tap detection for one direction action. Returns the updated "last tap" timestamp:
-# TAP_FIRED when this press completed a double-tap (caller dashes and resets all four),
-# the press time on a first tap, or the old value when the action wasn't pressed this tick.
-const TAP_FIRED := -1.0
-func _tap_check(action: String, last_t: float, t: float) -> float:
-	if not _pressed(action):
-		return last_t
-	if t - last_t <= DOUBLE_TAP_WINDOW_S:
-		return TAP_FIRED
-	return t
-
 # The dash IS the dodge: a directional burst (8-way) with brief invincibility frames that
-# catch an incoming shuriken. L2 / R2 / Circle all trigger this one move.
+# catch an incoming shuriken. Dedicated dodge buttons and R2 trigger this move.
 func _start_slide(dir: Vector2, t: float) -> void:
 	is_sliding = true
 	slide_dir = dir
@@ -1315,8 +1283,6 @@ func respawn(at_pos: Vector2) -> void:
 	slide_charged = true
 	slide_cooldown_until = 0.0
 	air_dash_penalty = false
-	last_left_tap_t = -999.0
-	last_right_tap_t = -999.0
 	if _bot_brain != null:
 		_bot_brain.reset()
 	_bot_held.clear()

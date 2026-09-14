@@ -64,7 +64,9 @@ func _refresh() -> void:
 	var slot := clampi(GameState.match_winner_slot, 1, 4)
 	var clan: Dictionary = GameState.get_clan(slot)
 	Portraits.apply(portrait, GameState.clan_index(slot), GameState.SKIN_STYLES[GameState.skin_index(slot)])
-	winner_label.text = clan.name
+	winner_label.text = GameState.player_name(slot) if Net.is_online() else clan.name
+	winner_label.add_theme_font_size_override("font_size", 28 if Net.is_online() else 48)
+	winner_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	winner_label.add_theme_color_override("font_color", clan.color)
 	tally_label.text = "P%d   %d WINS" % [slot, Combat.scores.get(slot, 0)]
 	var count := GameState.num_players()
@@ -77,6 +79,10 @@ func _refresh() -> void:
 		header.position = Vector2(x, 260)
 		header.size = Vector2(width, 28)
 		header.text = "P%d  %s · %d" % [index+1, GameState.get_clan(index+1).name, Combat.scores.get(index+1,0)]
+		if Net.is_online():
+			header.text = "%s · %d" % [GameState.player_name(index+1), Combat.scores.get(index+1, 0)]
+		header.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		header.tooltip_text = header.text
 		header.add_theme_font_size_override("font_size", 13 if count == 4 else 16)
 		header.add_theme_color_override("font_color", GameState.get_clan(index+1).color)
 		for row in STATS.size():
@@ -88,6 +94,8 @@ func _refresh() -> void:
 	for i in actions.size():
 		actions[i].disabled = Net.is_client() and i != 3
 		actions[i].text = "LEAVE MATCH" if Net.is_client() and i == 3 else OPTIONS[i]
+		if Net.is_host() and i < 3:
+			actions[i].text = "BACK TO LOBBY" if i == 0 else OPTIONS[i]
 		UI.select(actions[i], i == _cursor and not actions[i].disabled)
 
 func _hover(index: int) -> void:
@@ -105,6 +113,9 @@ func _activate(index: int) -> void:
 			GameState.change_state(GameState.State.ONLINE_MENU)
 		return
 	Audio.play("confirm")
+	if Net.is_host() and index < 3:
+		Net.return_to_lobby()
+		return
 	match index:
 		0: GameState.start_new_match()
 		1: GameState.change_state(GameState.State.MAP_SELECT)

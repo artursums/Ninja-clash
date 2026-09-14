@@ -1,5 +1,8 @@
 # ADR-0004: Browser invitations with WebRTC and short-lived HTTP signaling
 
+> The two-player scope below is extended by [ADR-0005](ADR-0005-online-party-lobby.md):
+> 2–4 online humans, session names, and an explicit Ready/Start lobby (protocol 3).
+
 Status: implemented locally; production Redis/TURN configuration and deployment pending.
 Date: 2026-09-12. Extends ADR-0003 for the Web platform.
 

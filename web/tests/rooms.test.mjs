@@ -5,7 +5,7 @@ import { MemoryStore, RedisStore } from '../server/store.mjs';
 import { iceConfiguration } from '../server/ice.mjs';
 import { handlerFor } from '../api/rooms.js';
 
-const host = 'a'.repeat(64), guest = 'b'.repeat(64), third = 'c'.repeat(64);
+const host = 'a'.repeat(64), guest = 'b'.repeat(64), third = 'c'.repeat(64), fourth = 'd'.repeat(64), fifth = 'e'.repeat(64);
 function setup() {
   let time = 100000;
   const now = () => time;
@@ -14,18 +14,21 @@ function setup() {
   const rooms = new Rooms(store, async () => { iceCalls++; return { iceServers: [] }; }, now);
   return { rooms, store, tick: ms => { time += ms; }, iceCalls: () => iceCalls };
 }
-const create = rooms => rooms.handle({ action: 'create', token: host, protocol: 2 });
-const join = (rooms, room, token = guest) => rooms.handle({ action: 'join', token, room, protocol: 2 });
-const exchange = (rooms, room, token, messages = [], cursor = 0, ready = false) => rooms.handle({ action: 'exchange', room, token, cursor, messages, ready });
+const create = rooms => rooms.handle({ action: 'create', token: host, protocol: 3 });
+const join = (rooms, room, token = guest) => rooms.handle({ action: 'join', token, room, protocol: 3 });
+const exchange = async (rooms, room, token, messages = [], cursor = 0, ready = false, peer = 2) => {
+  const result = await rooms.handle({ action: 'exchange', room, token, links: [{ peer, cursor, messages, ready }] });
+  return result.links[0] ?? result;
+};
 
-test('a room admits exactly one guest across concurrent requests', async () => {
+test('a room admits exactly three guests across concurrent requests', async () => {
   const { rooms, store } = setup();
   const { room } = await create(rooms);
   assert.match(room, /^[A-F0-9]{12}$/);
-  const results = await Promise.allSettled([join(rooms, room), join(rooms, room, third)]);
-  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  const results = await Promise.allSettled([guest, third, fourth, fifth].map(token => join(rooms, room, token)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 3);
   assert.equal(results.find(r => r.status === 'rejected').reason.status, 409);
-  const stored = await store.get(`ninja:v2:room:${room}`);
+  const stored = await store.get(`ninja:v3:room:${room}`);
   assert.ok(!stored.includes(host) && !stored.includes(guest) && !stored.includes(third));
 });
 
@@ -34,11 +37,13 @@ test('joining is idempotent, outsiders cannot read or close, full rooms do not i
   const { room } = await create(rooms);
   await join(rooms, room);
   await join(rooms, room);
+  await join(rooms, room, third);
+  await join(rooms, room, fourth);
   const calls = iceCalls();
-  await assert.rejects(join(rooms, room, third), { status: 409 });
+  await assert.rejects(join(rooms, room, fifth), { status: 409 });
   assert.equal(iceCalls(), calls);
-  await assert.rejects(exchange(rooms, room, third), { status: 403 });
-  await assert.rejects(rooms.handle({ action: 'leave', room, token: third }), { status: 403 });
+  await assert.rejects(exchange(rooms, room, fifth), { status: 403 });
+  await assert.rejects(rooms.handle({ action: 'leave', room, token: fifth }), { status: 403 });
 });
 
 test('signaling survives lost responses, duplicate batches, concurrent polls, and acknowledged message removal', async () => {
@@ -69,8 +74,8 @@ test('closed, expired, abandoned, and incompatible rooms fail clearly', async ()
   await assert.rejects(join(rooms, room), { status: 410 });
   await exchange(rooms, room, host);
   await join(rooms, room);
-  await rooms.handle({ action: 'leave', room, token: guest });
-  await assert.rejects(exchange(rooms, room, host), { status: 410 });
+  await rooms.handle({ action: 'leave', room, token: host });
+  await assert.rejects(exchange(rooms, room, guest), { status: 410 });
   const next = await create(rooms);
   tick(601000);
   await assert.rejects(join(rooms, next.room), { status: 404 });
@@ -78,7 +83,7 @@ test('closed, expired, abandoned, and incompatible rooms fail clearly', async ()
 
 test('invalid signaling, tokens, and rate exhaustion are rejected', async () => {
   const { rooms } = setup();
-  await assert.rejects(rooms.handle({ action: 'create', token: 'guess', protocol: 2 }), { status: 400 });
+  await assert.rejects(rooms.handle({ action: 'create', token: 'guess', protocol: 3 }), { status: 400 });
   const { room } = await create(rooms);
   await join(rooms, room);
   await assert.rejects(exchange(rooms, room, guest, [{ seq: 1, type: 'offer', sdp: 'bad' }]), { status: 400 });
@@ -136,7 +141,7 @@ async function request(handler, body, options = {}) {
 test('HTTP boundary rejects cross-origin requests and never exposes service secrets', async () => {
   const { rooms } = setup();
   const handler = handlerFor(() => rooms);
-  const body = { action: 'create', token: host, protocol: 2 };
+  const body = { action: 'create', token: host, protocol: 3 };
   assert.equal((await request(handler, body, { headers: { origin: 'https://attacker.example' } })).code, 403);
   assert.equal((await request(handler, body, { request: { method: 'GET' } })).code, 405);
   assert.equal((await request(handler, '{broken')).code, 400);
@@ -147,4 +152,65 @@ test('HTTP boundary rejects cross-origin requests and never exposes service secr
   const failed = await request(handlerFor(() => { throw new Error('secret-credential'); }), body);
   assert.equal(failed.code, 503);
   assert.ok(!JSON.stringify(failed).includes('secret-credential'));
+});
+
+test('each guest has an isolated mailbox and cannot signal as another guest', async () => {
+  const { rooms } = setup();
+  const { room } = await create(rooms);
+  const a = await join(rooms, room);
+  const b = await join(rooms, room, third);
+  assert.notEqual(a.peer, b.peer);
+  await exchange(rooms, room, host, [{ seq: 1, type: 'offer', sdp: 'private-a' }], 0, false, a.peer);
+  assert.equal((await exchange(rooms, room, third, [], 0, false, b.peer)).messages.length, 0);
+  await assert.rejects(exchange(rooms, room, third, [], 0, false, a.peer), { status: 403 });
+  assert.equal((await exchange(rooms, room, guest, [], 0, false, a.peer)).messages[0].sdp, 'private-a');
+});
+
+test('a guest leaving frees only their seat and replacement receives a fresh peer ID', async () => {
+  const { rooms } = setup();
+  const { room } = await create(rooms);
+  const a = await join(rooms, room);
+  const b = await join(rooms, room, third);
+  await rooms.handle({ action: 'leave', room, token: guest });
+  const c = await join(rooms, room, fourth);
+  assert.ok(c.peer > b.peer && c.peer !== a.peer);
+  assert.equal((await exchange(rooms, room, third, [], 0, false, b.peer)).messages.length, 0);
+  await assert.rejects(exchange(rooms, room, guest), { status: 403 });
+});
+
+test('start locks admission atomically, retries are safe, and only the host may reopen', async () => {
+  const { rooms } = setup();
+  const { room } = await create(rooms);
+  await join(rooms, room);
+  await exchange(rooms, room, guest, [], 0, true);
+  await exchange(rooms, room, host, [], 0, true);
+  const lock = token => rooms.handle({ action: 'lock', token, room, peers: [2] });
+  await assert.rejects(lock(guest), { status: 403 });
+  const results = await Promise.allSettled([lock(host), join(rooms, room, third)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  if (results[0].status === 'fulfilled') {
+    await lock(host);
+    await assert.rejects(join(rooms, room, fourth), /ALREADY STARTED/);
+  } else {
+    await assert.rejects(lock(host), /STILL CONNECTING/);
+  }
+  await assert.rejects(rooms.handle({ action: 'reopen', token: guest, room }), { status: 403 });
+  await rooms.handle({ action: 'reopen', token: host, room });
+  await join(rooms, room, fourth);
+});
+
+test('failed negotiation reservations expire while an active host keeps the room alive', async () => {
+  const { rooms, tick } = setup();
+  const { room } = await create(rooms);
+  await join(rooms, room);
+  tick(46000);
+  await exchange(rooms, room, host);
+  const replacement = await join(rooms, room, third);
+  assert.equal(replacement.peer, 3);
+  for (let i = 0; i < 70; i++) {
+    tick(10000);
+    await exchange(rooms, room, host);
+  }
+  await join(rooms, room, fourth);
+  await assert.rejects(exchange(rooms, room, guest), { status: 403 });
 });

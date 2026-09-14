@@ -20,7 +20,11 @@ func _process(delta: float) -> void:
 		"prologueChapter": main.prologue_screen.chapter,
 		"peer": Net._peer_id, "room": Net.invitation_code, "fighters": fighters,
 		"shurikens": get_tree().get_nodes_in_group("shurikens").size(), "puppets": Net._puppet_shurikens.size(),
-		"remoteHeld": Net._remote_held_mask, "status": main.online_menu_screen.status_label.text,
+		"remoteHeld": Net._remote_inputs,
+		"players": Net.lobby.members, "playerName": Net.player_name, "localPlayer": Net.local_member(),
+		"canStart": Net.lobby.can_start(), "lobbyMessage": Net.lobby_message, "rulesRevision": Net.lobby.rules_revision,
+		"nameDialog": main.online_menu_screen.name_dialog.visible,
+		"rules": {"hp": MatchConfig.max_hp, "katana": MatchConfig.katana_enabled, "target": GameState.target_score}, "status": main.online_menu_screen.status_label.text,
 		"map": GameState.selected_map_index, "scores": Combat.scores,
 		"tutorial": main.tutorial_overlay.visible, "signalingDone": Net._web_room != null and Net._web_room._signaling_done}
 	JavaScriptBridge.eval("window.__ninjaState = " + JSON.stringify(data), true)

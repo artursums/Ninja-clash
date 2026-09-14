@@ -6,6 +6,7 @@ var _map_banner_clear_at := 0.0
 var score_labels: Array[Label] = []
 var _score_cards: Array[Control] = []
 var _goals: Array[Label] = []
+var _names: Array[Label] = []
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -44,6 +45,9 @@ func _build_score_bar() -> void:
 	for slot in 4:
 		var card := UI.panel(self, Rect2(0, 12, 88, 36), UI.EDGE)
 		_score_cards.append(card)
+		var name_label := UI.label(card, "", Rect2(8, 30, 156, 22), 16)
+		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		_names.append(name_label)
 		UI.label(card, "P%d" % (slot+1), Rect2(8, 9, 22, 18), 13, UI.MUTED)
 		score_labels.append(UI.label(card, "0", Rect2(32, 5, 28, 26), 23))
 		_goals.append(UI.label(card, "", Rect2(59, 11, 27, 18), 12, UI.MUTED))
@@ -53,8 +57,15 @@ func _refresh_score() -> void:
 	var count := GameState.num_players()
 	for index in _score_cards.size():
 		_score_cards[index].visible = index < count
+		_names[index].text = GameState.player_name(index+1) if Net.is_online() else ""
+		_names[index].size.x = 156
+		_score_cards[index].size.y = 56 if Net.is_online() else 36
+		_score_cards[index].size.x = 172 if Net.is_online() else 88
+		if Net.is_online():
+			_score_cards[index].position.x = 24 + index * (580.0 / maxi(1, count - 1))
 		var inset := 24.0+floori(index/2.0)*96.0
-		_score_cards[index].position.x = inset if index%2 == 0 else 800.0-inset-88.0
+		if not Net.is_online():
+			_score_cards[index].position.x = inset if index%2 == 0 else 800.0-inset-88.0
 		var clan: Dictionary = GameState.get_clan(index+1)
 		_score_cards[index].add_theme_stylebox_override("panel", UI.style(false, clan.color))
 		score_labels[index].text = str(Combat.scores.get(index+1,0))

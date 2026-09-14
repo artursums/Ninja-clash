@@ -33,10 +33,12 @@ func _process(delta: float) -> void:
 	var role: String = "host" if Net.is_host() else "client"
 
 	match s:
-		S.CLAN_SELECT:
+		S.ONLINE_LOBBY:
 			_once("confirm_clan", 1.2, func() -> void:
 				print("[AUTOTEST] %s: confirming clan" % role)
 				_tap(KEY_ENTER))
+			if Net.is_host() and Net.lobby.can_start():
+				_once("start", 1.8, Net.start_lobby_match)
 		S.MAP_SELECT:
 			if Net.is_host():
 				_once("confirm_map", 1.2, func() -> void:
@@ -51,7 +53,7 @@ func _process(delta: float) -> void:
 			_drive_round(role)
 
 	# Host endgame: once the guest quits, the session drops — a clean host exit is the PASS.
-	if Net.is_host() == false and Net.is_client() == false and _round_entered_t > 0.0:
+	if _round_entered_t > 0.0 and (not Net.is_online() or (Net.is_host() and Net.lobby.members.size() == 1)):
 		print("[AUTOTEST] %s: session over after ROUND — quitting" % role)
 		get_tree().quit(0)
 

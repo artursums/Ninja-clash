@@ -3,7 +3,7 @@ extends Control
 const UI = preload("res://menu_ui.gd")
 const Ambience = preload("res://title_ambience.gd")
 const BUTTON_SLUGS := ["start", "online", "options", "credits", "quit"]
-const BUTTON_NAMES := {"start": "LOCAL PLAY", "online": "ONLINE DUEL", "options": "OPTIONS", "credits": "CREDITS", "quit": "QUIT"}
+const BUTTON_NAMES := {"start": "LOCAL PLAY", "online": "ONLINE PLAY", "options": "OPTIONS", "credits": "CREDITS", "quit": "QUIT"}
 const OPT_ROWS := ["MASTER", "MUSIC", "SFX", "FULLSCREEN", "TUTORIAL", "BACK"]
 const OVERLAY_NONE := 0
 const OVERLAY_OPTIONS := 1

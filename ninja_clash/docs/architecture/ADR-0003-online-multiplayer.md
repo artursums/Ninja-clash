@@ -1,5 +1,8 @@
 # ADR-0003: Online Multiplayer — Host-Authoritative ENet 1v1
 
+> The two-player scope below is extended by [ADR-0005](ADR-0005-online-party-lobby.md):
+> 2–4 online humans, session names, and an explicit Ready/Start lobby (protocol 3).
+
 **Status:** Accepted (2026-07-08)
 **Deciders:** technical direction session (user-approved scope: "Online multiplayer (LAN/internet)")
 **Relates to:** ADR-0001 (input/state separation), ADR-0002 (prototype as production base)

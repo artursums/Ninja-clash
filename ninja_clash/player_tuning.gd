@@ -27,7 +27,6 @@ extends Resource
 @export var slide_duration_s: float = 0.20
 @export var slide_cooldown_s: float = 0.417
 @export var slide_air_refresh_s: float = 0.5
-@export var double_tap_window_s: float = 0.25
 
 # --- Wall jump ---
 @export var wall_jump_vstrength: float = 540.0

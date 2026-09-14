@@ -137,7 +137,7 @@ func _on_state_changed(new_state: int) -> void:
 	var menu_states := [
 		GameState.State.TITLE, GameState.State.MODE_SELECT,
 		GameState.State.CLAN_SELECT, GameState.State.MAP_SELECT,
-		GameState.State.MATCH_END, GameState.State.ONLINE_MENU,
+		GameState.State.MATCH_END, GameState.State.ONLINE_MENU, GameState.State.ONLINE_LOBBY,
 	]
 	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
 	if new_state == GameState.State.PROLOGUE:

@@ -66,6 +66,7 @@ var clan_select_screen: Control
 var match_setup_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
+var online_lobby_screen: Control
 var online_menu_screen: Control   # ONLINE host/join screen (ADR-0003)
 var prologue_screen: Control
 var hud: Control
@@ -108,10 +109,11 @@ func _ready() -> void:
 func _handle_dev_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--host":
+			Net.player_name = "Host"
 			var err: String = Net.host_game()
 			print("[DEV] host_game: ", "ok" if err == "" else err)
-			GameState.change_state(GameState.State.ONLINE_MENU)
 		elif arg.begins_with("--join="):
+			Net.player_name = "Guest"
 			var err: String = Net.join_game(arg.substr(7))
 			print("[DEV] join_game: ", "ok" if err == "" else err)
 			GameState.change_state(GameState.State.ONLINE_MENU)
@@ -122,8 +124,8 @@ func _handle_dev_args() -> void:
 
 func _setup_input_map() -> void:
 	# P1 — MAIN keyboard scheme (the solo/testing player): WASD move/aim, Space jump,
-	#      L throw, K katana, J guard, Left Shift dash. Dash is ALSO double-tap W/A/S/D
-	#      (handled in player.gd). Enter = menu lock-in/confirm, P = skin cycle.
+	#      L throw, K katana, J guard, Left Shift dash.
+	#      Enter = menu lock-in/confirm, P = skin cycle.
 	_add_key("p1_left",     KEY_A)
 	_add_key("p1_right",    KEY_D)
 	_add_key("p1_aim_up",   KEY_W)         # aims throw upward
@@ -135,7 +137,7 @@ func _setup_input_map() -> void:
 	_add_key("p1_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
 	# P2 — NUMPAD scheme (wide-keyboard couch second player; needs Num Lock ON):
 	#      4/6 move, 8/5 aim up/down, 0 jump, 1 throw, 2 katana, 3 guard, + dash,
-	#      numpad-Enter = menu confirm, 7 = skin cycle. Dash also double-tap 4/8/5/6.
+	#      numpad-Enter = menu confirm, 7 = skin cycle.
 	# Future LAN note: on a remote match each machine hosts ONE local player, so the WASD
 	# scheme should then bind to whichever slot is local — the numpad scheme is couch-only.
 	_add_key("p2_left",     KEY_KP_4)
@@ -169,6 +171,8 @@ func _setup_input_map() -> void:
 	# screen (TowerFall-style). device -1 = all connected gamepads.
 	_add_key("menu_cancel", KEY_ESCAPE)
 	_add_pad_button("menu_cancel", JOY_BUTTON_B, -1)   # Circle ◯ — back / cancel
+	_add_key("online_start", KEY_F)
+	_add_pad_button("online_start", JOY_BUTTON_START, -1)
 	_add_key("menu_random", KEY_X)
 	_add_pad_button("menu_random", JOY_BUTTON_Y, -1)   # Triangle △ — random map
 	# Pause — Esc on the keyboard, Start on any pad. Opens the pause overlay during a round.
@@ -388,6 +392,10 @@ func _build_overlays() -> void:
 	mode_select_screen.set_script(ModeSelScript)
 	canvas.add_child(mode_select_screen)
 
+	online_lobby_screen = Control.new()
+	online_lobby_screen.set_script(load("res://online_lobby.gd"))
+	canvas.add_child(online_lobby_screen)
+
 	var ClanSelScript: Script = load("res://clan_select.gd")
 	clan_select_screen = Control.new()
 	clan_select_screen.set_script(ClanSelScript)
@@ -487,10 +495,17 @@ func _on_state_changed(s: int) -> void:
 	map_select_screen.visible = (s == S.MAP_SELECT)
 	match_end_screen.visible = (s == S.MATCH_END)
 	online_menu_screen.visible = (s == S.ONLINE_MENU)
+	online_lobby_screen.visible = (s == S.ONLINE_LOBBY)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
 	win_display.visible = false   # only _enter_round_end re-shows it (for the round's winner)
 
+	if s not in [S.MATCH_INTRO, S.ROUND, S.ROUND_END]:
+		_in_countdown = false
+		countdown_sprite.hide()
+		round_display.hide()
+		tutorial_overlay.hide()
+		banner_label.text = ""
 	if s == S.MATCH_INTRO:
 		_enter_match_intro()
 	elif s == S.ROUND:

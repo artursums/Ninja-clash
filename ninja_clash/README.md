@@ -2,7 +2,7 @@
 
 A 2D single-screen arena fighter for 1–4 players, built in **Godot 4.6 / GDScript**.
 Throw shurikens, dash-dodge to catch them out of the air, retrieve spent blades, and be
-the last ninja standing. TowerFall-inspired, built for couch play — with LAN/online 1v1.
+the last ninja standing. TowerFall-inspired, built for couch play — with 2–4-player LAN/online play.
 
 **▶ Play in the browser: https://ninja-clash-ffay.vercel.app**
 
@@ -30,15 +30,15 @@ the last ninja standing. TowerFall-inspired, built for couch play — with LAN/o
 
 | | |
 |---|---|
-| **Players** | 1–4 local (keyboard ×2 + up to 4 gamepads), or 1v1 online |
+| **Players** | 1–4 local (keyboard ×2 + up to 4 gamepads), or 2–4 humans online |
 | **Arenas** | 4 — Sakura Temple, Neo Tokyo, Verdant Cistern, Sky Temple |
 | **Clans** | 4 — Shadow, Storm, Frost, Fire |
 | **Skins** | 15 original appearance styles with expanded movement animations, in all 4 clan colours |
-| **Modes** | P1 vs P2 · P1 vs CPU · P1 vs 3 CPUs (free-for-all) · Online 1v1 |
+| **Modes** | P1 vs P2 · P1 vs CPU · P1 vs 3 CPUs (free-for-all) · Online 2–4 players |
 | **AI** | 3 tiers — Genin, Chunin, Jonin |
 | **Rulesets** | Fight Setup screen — 9 configurable variants, persisted between sessions |
 | **Audio** | 3 Suno-generated music tracks on a dedicated bus; procedural SFX with drop-in override |
-| **Tests** | 46 GUT unit tests across 10 suites |
+| **Tests** | 63 GUT unit tests across 14 suites |
 | **Targets** | macOS · Windows · Linux · Web (WASM, live) |
 
 ---
@@ -81,7 +81,7 @@ stored in `project.godot`, so gamepad assignment can be re-derived on every hot-
 | Throw shuriken | **L** — hold to aim, release to fire |
 | Katana | **K** |
 | Guard | **J** — hold to block incoming hits from the front |
-| Dash-dodge | **Left Shift**, or **double-tap W / A / S / D** |
+| Dash-dodge | **Left Shift** |
 | Menu confirm | **Enter** · Cycle skin **P** |
 
 ### Keyboard — Player 2 (numpad, Num Lock on)
@@ -93,7 +93,7 @@ stored in `project.godot`, so gamepad assignment can be re-derived on every hot-
 | Throw shuriken | **1** |
 | Katana | **2** |
 | Guard | **3** |
-| Dash-dodge | **+**, or **double-tap 4 / 8 / 5 / 6** |
+| Dash-dodge | **+** |
 | Menu confirm | **numpad Enter** · Cycle skin **7** |
 
 ### Gamepad — up to 4 pads
@@ -179,21 +179,26 @@ persist to `user://match_config.cfg`.
 
 ## Online play
 
-LAN and internet **1v1** over ENet (default port **24565**), **host-authoritative**:
+LAN and internet **2–4 players** over ENet (default port **24565**), **host-authoritative**:
 
 - client → host: input as intent bitmasks, every physics tick (unreliable)
 - host → client: a world snapshot at **30 Hz**, plus reliable events for state changes,
   scores, lobby picks and FX cues
 
 The host runs exactly the same simulation as a local match. Because `PlayerInputRouter`
-already separates device reads from the simulation, the host simply feeds fighter slot 2
-from the network instead of from a keyboard — the simulation cannot tell the difference.
+already separates device reads from the simulation, the host feeds fighter slots 2–4
+from independent network inputs instead of from keyboards — the simulation cannot tell the difference.
 There is no client-side prediction: the client renders host-authoritative positions, so
 input latency scales with ping. Wire formats live in `net_codec.gd` and are unit-tested.
 
 Desktop online uses ENet and the host's IP address. The browser build uses **WebRTC**:
-**Online Duel → Create Room → Copy Invite Link**, then the guest opens the link and chooses
-**Join Room**. A Vercel Function exchanges the handshake through Redis; gameplay travels
+**Online Play → enter your name → Create Room → Copy Invite**. Up to three guests
+open the same link, enter a name and choose **Join Room**. Each player picks a clan/skin
+and presses **Ready**; the host explicitly starts with the connected 2–4 players.
+Names remain in memory through rematches and connection failures, until leaving multiplayer.
+Arena or rule changes clear readiness. The host can start with two or three players while
+other seats remain empty. A guest departure returns the remaining players to the lobby;
+the same invitation can admit a replacement. See [ADR-0005](docs/architecture/ADR-0005-online-party-lobby.md). A Vercel Function exchanges the handshake through Redis; gameplay travels
 directly between browsers or through TURN when direct connectivity is blocked.
 The host tab must remain active. Desktop IP sessions and browser rooms are separate transports.
 
@@ -239,7 +244,7 @@ from the pixel-art kit in `sprites/menu/`.
 
 ## Tests
 
-46 unit tests across 10 suites, run with [GUT](https://github.com/bitwes/Gut) 9.6:
+63 unit tests across 14 suites, run with [GUT](https://github.com/bitwes/Gut) 9.6:
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
@@ -278,7 +283,7 @@ ninja_clash/
 
 Stated plainly, because they are real:
 
-- **Online is 1v1 only** and has no client-side prediction — fine on LAN, input lag scales
+- **Online supports 2–4 humans**, with no client-side prediction — fine on LAN, input lag scales
   with ping over the internet.
 - **Sound effects are procedural beeps.** Music is real; the SFX layer is synthesised at
   startup and awaits a proper sound pass (the drop-in override path exists).

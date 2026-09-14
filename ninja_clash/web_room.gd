@@ -1,33 +1,32 @@
 extends Node
-## HTTPS signaling only; WebRTCMultiplayerPeer carries the actual match traffic.
+## HTTPS room admission and per-guest signaling; gameplay travels through WebRTC.
 
-const PROTOCOL := 2
+const PROTOCOL := 3
 const CONNECT_TIMEOUT := 45.0
-const POLL_INTERVAL := 0.5
+const POLL_INTERVAL := 0.75
 
 signal prepared(peer: WebRTCMultiplayerPeer)
 signal room_created(code: String)
 signal status_changed(message: String)
 signal failed(message: String)
+signal lock_completed(error: String, generation: int)
 
 var room_code := ""
-var connection: WebRTCPeerConnection
+var local_peer := 1
+var links: Dictionary = {}
 var _peer: WebRTCMultiplayerPeer
 var _http: HTTPRequest
+var _configuration: Dictionary = {}
 var _endpoint := ""
 var _token := ""
 var _host := false
 var _active := false
-var _connected := false
-var _peer_ready := false
-var _joined := false
-var _remote_description := false
-var _pending_ice: Array = []
-var _outgoing: Array = []
-var _sequence := 0
-var _cursor := 0
+var _locked := false
 var _action := ""
+var _request_body: Dictionary = {}
+var _commands: Array = []
 var _next_poll := 0.0
+var _retry_after := 0.0
 var _deadline := 0.0
 var _last_response := 0.0
 var _signaling_done := false
@@ -62,18 +61,48 @@ func start(as_host: bool, code: String) -> void:
 	_active = true
 	_last_response = _now()
 	_deadline = _now() + CONNECT_TIMEOUT
-	_request("create" if as_host else "join")
+	_request({"action": "create" if as_host else "join"})
 
 
-func mark_connected() -> void:
-	_connected = true
+func mark_connected(id: int) -> void:
+	var key := id if _host else local_peer
+	if links.has(key):
+		links[key].connected = true
+
+
+func lock_room(peers: Array, generation: int) -> void:
+	_commands.append({"action": "lock", "peers": peers, "generation": generation, "deadline": _now() + 20.0})
+
+
+func reopen() -> void:
+	_locked = false
+	_signaling_done = false
+	_commands.append({"action": "reopen"})
+
+
+func remove_guest(id: int) -> void:
+	if not _host:
+		return
+	_drop_link(id)
+	_commands.append({"action": "remove", "peer": id})
+
+
+func _drop_link(id: int) -> void:
+	if not links.has(id):
+		return
+	var connection: WebRTCPeerConnection = links[id].connection
+	links.erase(id)
+	var remote := id if _host else 1
+	if _peer != null and _peer.has_peer(remote):
+		_peer.remove_peer(remote)
+	connection.close()
 
 
 func stop() -> void:
 	_active = false
 	if _http != null:
 		_http.cancel_request()
-	if room_code != "" and _token != "":
+	if room_code != "" and _token != "" and _peer != null:
 		var request := HTTPRequest.new()
 		request.timeout = 3.0
 		get_tree().root.add_child(request)
@@ -82,38 +111,54 @@ func stop() -> void:
 			JSON.stringify({"action": "leave", "room": room_code, "token": _token}))
 		if err != OK:
 			request.queue_free()
-	if connection != null:
-		connection.close()
+	for id in links.keys():
+		_drop_link(id)
 
 
 func _process(_delta: float) -> void:
 	if not _active:
 		return
-	if connection != null and connection.get_connection_state() == WebRTCPeerConnection.STATE_FAILED:
-		_fail("COULD NOT CONNECT — CREATE A NEW ROOM")
-		return
-	if not _connected and _now() > _deadline:
-		_fail("ROOM EXPIRED" if _host and not _joined else "CONNECTION TIMED OUT — TRY A NEW ROOM")
-		return
-	if _signaling_done:
-		return
-	if _now() - _last_response > 25.0:
+	for id in links.keys():
+		var link: Dictionary = links[id]
+		var connection: WebRTCPeerConnection = link.connection
+		if connection.get_connection_state() == WebRTCPeerConnection.STATE_FAILED or (not link.connected and _now() > link.deadline):
+			if _host:
+				remove_guest(id)
+				status_changed.emit("A PLAYER COULD NOT CONNECT — THE SEAT IS OPEN")
+			else:
+				_fail("CONNECTION TIMED OUT — TRY AGAIN")
+				return
+	if _peer == null and _now() > _deadline:
 		_fail("ROOM SERVICE NOT RESPONDING")
 		return
-	if _action == "" and connection != null and _now() >= _next_poll:
-		if _connected and _peer_ready and _outgoing.is_empty() and connection.get_gathering_state() == WebRTCPeerConnection.GATHERING_STATE_COMPLETE:
-			_signaling_done = true
-			return
-		_request("exchange")
+	_signaling_done = not links.is_empty()
+	for link in links.values():
+		_signaling_done = _signaling_done and _settled(link)
+	if _host:
+		_signaling_done = _signaling_done and _locked
+	if _action != "" or _now() < _retry_after:
+		return
+	if not _commands.is_empty():
+		_request(_commands.pop_front())
+	elif _peer != null and _now() >= _next_poll and (_host or not _signaling_done):
+		var batches: Array = []
+		for id in links:
+			var link: Dictionary = links[id]
+			batches.append({"peer": id, "cursor": link.cursor, "messages": link.outgoing.slice(0, 8), "ready": link.connected})
+		_request({"action": "exchange", "links": batches})
 
 
-func _request(action: String) -> void:
-	_action = action
-	var body := {"action": action, "token": _token, "room": room_code, "protocol": PROTOCOL}
-	if action == "exchange":
-		body.merge({"cursor": _cursor, "messages": _outgoing.slice(0, 16), "ready": _connected})
+func _settled(link: Dictionary) -> bool:
+	return link.connected and link.peer_ready and link.ready_acked and link.outgoing.is_empty() and link.connection.get_gathering_state() == WebRTCPeerConnection.GATHERING_STATE_COMPLETE
+
+
+func _request(body: Dictionary) -> void:
+	_action = body.action
+	_request_body = body.duplicate(true)
+	body.merge({"token": _token, "room": room_code, "protocol": PROTOCOL})
 	var err := _http.request(_endpoint, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
+		_action = ""
 		_fail("COULD NOT CONTACT ROOM SERVICE")
 
 
@@ -122,10 +167,18 @@ func _on_response(result: int, code: int, _headers: PackedStringArray, bytes: Pa
 		return
 	var action := _action
 	_action = ""
-	_next_poll = _now() + POLL_INTERVAL
-	if result != HTTPRequest.RESULT_SUCCESS or code >= 500:
-		if action == "exchange":
-			_next_poll = _now() + 1.5
+	_next_poll = _now() + (10.0 if _host and _signaling_done else POLL_INTERVAL)
+	if result != HTTPRequest.RESULT_SUCCESS or code >= 500 or code == 429:
+		if action == "lock" and _now() > float(_request_body.deadline):
+			_commands.push_front({"action": "reopen"})
+			lock_completed.emit("ROOM SERVICE UNAVAILABLE — TRY START AGAIN", int(_request_body.generation))
+			return
+		if action in ["exchange", "lock", "reopen", "remove"]:
+			if action != "exchange":
+				_commands.push_front(_request_body)
+			_next_poll = _now() + 2.0
+			_retry_after = _next_poll
+			status_changed.emit("ROOM SERVICE UNAVAILABLE — RETRYING…")
 			return
 		_fail("ONLINE SERVICE UNAVAILABLE — TRY AGAIN LATER")
 		return
@@ -135,103 +188,130 @@ func _on_response(result: int, code: int, _headers: PackedStringArray, bytes: Pa
 		return
 	var data: Dictionary = decoded
 	if code != 200:
-		_fail(String(data.get("error", "COULD NOT CONNECT")))
+		var error := String(data.get("error", "COULD NOT CONNECT"))
+		if action == "lock":
+			lock_completed.emit(error, int(_request_body.generation))
+		else:
+			_fail(error)
 		return
 	_last_response = _now()
+	if action == "lock":
+		_locked = true
+		lock_completed.emit("", int(_request_body.generation))
+		return
+	if action == "reopen" or action == "remove":
+		return
 	if action == "create" or action == "join":
 		room_code = parse_room(String(data.get("room", "")))
 		if room_code == "" or not data.get("rtc") is Dictionary:
 			_fail("INVALID ROOM SERVICE RESPONSE")
 			return
-		if not _prepare(data.rtc):
+		_configuration = data.rtc
+		local_peer = int(data.get("peer", 0))
+		_peer = WebRTCMultiplayerPeer.new()
+		var err := _peer.create_server() if _host else _peer.create_client(local_peer)
+		if err != OK:
+			_fail("COULD NOT START MULTIPLAYER")
 			return
+		prepared.emit(_peer)
 		if _host:
-			_deadline = _now() + float(data.get("expiresIn", 600))
 			room_created.emit(room_code)
 		else:
+			_add_link(local_peer)
 			status_changed.emit("CONNECTING TO HOST…")
 		return
-	var ack := int(data.get("ack", 0))
-	_outgoing = _outgoing.filter(func(message): return int(message.seq) > ack)
-	_peer_ready = bool(data.get("peerReady", false))
-	if _host and not _joined and bool(data.get("joined", false)):
-		_joined = true
-		_deadline = _now() + CONNECT_TIMEOUT
-		status_changed.emit("OPPONENT FOUND — CONNECTING…")
-		if connection.create_offer() != OK:
-			_fail("COULD NOT START CONNECTION")
-			return
-	for message in data.get("messages", []):
-		if int(message.seq) <= _cursor:
+	var present: Array = data.get("peers", []).map(func(value): return int(value))
+	if _host:
+		for id in links.keys():
+			if not present.has(id):
+				_drop_link(id)
+		for value in present:
+			var id := int(value)
+			if not links.has(id):
+				_add_link(id)
+	for batch in data.get("links", []):
+		var id := int(batch.peer)
+		if not links.has(id):
 			continue
-		if not _receive(message):
-			return
-		_cursor = int(message.seq)
+		var link: Dictionary = links[id]
+		var ack := int(batch.get("ack", 0))
+		link.outgoing = link.outgoing.filter(func(message): return int(message.seq) > ack)
+		link.peer_ready = bool(batch.get("peerReady", false))
+		for sent in _request_body.get("links", []):
+			if int(sent.peer) == id and bool(sent.ready):
+				link.ready_acked = true
+		for message in batch.get("messages", []):
+			if int(message.seq) <= link.cursor:
+				continue
+			if not _receive(id, message):
+				return
+			link.cursor = int(message.seq)
 
 
-func _prepare(configuration: Dictionary) -> bool:
-	connection = WebRTCPeerConnection.new()
-	if connection.initialize(configuration) != OK:
+func _add_link(id: int) -> void:
+	var connection := WebRTCPeerConnection.new()
+	if connection.initialize(_configuration) != OK:
 		_fail("THIS BROWSER COULD NOT START WEBRTC")
-		return false
-	connection.session_description_created.connect(_on_description)
-	connection.ice_candidate_created.connect(_on_ice)
-	_peer = WebRTCMultiplayerPeer.new()
-	var err := _peer.create_server() if _host else _peer.create_client(2)
-	if err == OK:
-		err = _peer.add_peer(connection, 2 if _host else 1, 100)
-	if err != OK:
-		_fail("COULD NOT START MULTIPLAYER")
-		return false
-	prepared.emit(_peer)
-	return true
-
-
-func _on_description(type: String, sdp: String) -> void:
-	if not _active:
 		return
-	if connection.set_local_description(type, sdp) != OK:
+	links[id] = {"connection": connection, "connected": false, "peer_ready": false, "ready_acked": false,
+		"remote_description": false, "pending_ice": [], "outgoing": [], "sequence": 0, "cursor": 0,
+		"deadline": _now() + CONNECT_TIMEOUT}
+	connection.session_description_created.connect(_on_description.bind(id))
+	connection.ice_candidate_created.connect(_on_ice.bind(id))
+	if _peer.add_peer(connection, id if _host else 1, 100) != OK:
+		_fail("COULD NOT START MULTIPLAYER")
+		return
+	if _host and connection.create_offer() != OK:
+		remove_guest(id)
+
+
+func _on_description(type: String, sdp: String, id: int) -> void:
+	if not _active or not links.has(id):
+		return
+	if links[id].connection.set_local_description(type, sdp) != OK:
 		_fail("COULD NOT NEGOTIATE CONNECTION")
 		return
-	_enqueue({"type": type, "sdp": sdp})
+	_enqueue(id, {"type": type, "sdp": sdp})
 
 
-func _on_ice(media: String, index: int, candidate: String) -> void:
-	if _active:
-		_enqueue({"type": "ice", "media": media, "index": index, "candidate": candidate})
+func _on_ice(media: String, index: int, candidate: String, id: int) -> void:
+	if _active and links.has(id):
+		_enqueue(id, {"type": "ice", "media": media, "index": index, "candidate": candidate})
 
 
-func _enqueue(message: Dictionary) -> void:
-	_sequence += 1
-	message.seq = _sequence
-	_outgoing.append(message)
+func _enqueue(id: int, message: Dictionary) -> void:
+	var link: Dictionary = links[id]
+	link.sequence += 1
+	message.seq = link.sequence
+	link.outgoing.append(message)
 	_next_poll = 0.0
 
 
-func _receive(message: Dictionary) -> bool:
+func _receive(id: int, message: Dictionary) -> bool:
+	var link: Dictionary = links[id]
 	var type := String(message.get("type", ""))
 	if type == "offer" or type == "answer":
-		if _remote_description or type != ("answer" if _host else "offer"):
+		if link.remote_description or type != ("answer" if _host else "offer"):
 			_fail("INVALID CONNECTION HANDSHAKE")
 			return false
-		if connection.set_remote_description(type, String(message.sdp)) != OK:
+		if link.connection.set_remote_description(type, String(message.sdp)) != OK:
 			_fail("COULD NOT NEGOTIATE CONNECTION")
 			return false
-		_remote_description = true
-		for candidate in _pending_ice:
-			if not _add_ice(candidate):
+		link.remote_description = true
+		for candidate in link.pending_ice:
+			if not _add_ice(link, candidate):
 				return false
-		_pending_ice.clear()
+		link.pending_ice.clear()
 	elif type == "ice":
-		if not _remote_description:
-			_pending_ice.append(message)
+		if not link.remote_description:
+			link.pending_ice.append(message)
 		else:
-			return _add_ice(message)
+			return _add_ice(link, message)
 	return true
 
 
-func _add_ice(message: Dictionary) -> bool:
-	if connection.add_ice_candidate(String(message.media), int(message.index), String(message.candidate)) != OK:
+func _add_ice(link: Dictionary, message: Dictionary) -> bool:
+	if link.connection.add_ice_candidate(String(message.media), int(message.index), String(message.candidate)) != OK:
 		_fail("COULD NOT NEGOTIATE NETWORK ROUTE")
 		return false
 	return true

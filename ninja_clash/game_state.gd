@@ -16,6 +16,7 @@ enum State {
 	MATCH_SETUP,   # Fight Setup / Variants screen (opened from clan select); appended so enum values don't shift
 	ONLINE_MENU,   # Online host/join screen (ADR-0003); appended so enum values don't shift
 	PROLOGUE,
+	ONLINE_LOBBY,
 }
 
 # Who controls each fighter this match. FFA = P1 (human) vs three bots, free-for-all.
@@ -48,6 +49,7 @@ const RICH_SKINS: Array = ["pig", "endobot", "neko", "stalker", "ironclad", "bak
 
 var current_state: int = State.PROLOGUE
 var game_mode: int = Mode.HUMAN_VS_HUMAN
+var online_players: Array = []
 var ai_difficulty: int = 1   # 1=GENIN, 2=CHUNIN, 3=JONIN
 var p1_clan: int = 3   # default Fire
 var p2_clan: int = 1   # default Storm
@@ -133,10 +135,12 @@ func skin_swing_path(color: String, style_idx: int) -> String:
 
 # 2 for the duel modes, 4 for the free-for-all.
 func num_players() -> int:
-	return 4 if game_mode == Mode.FFA else 2
+	return online_players.size() if not online_players.is_empty() else (4 if game_mode == Mode.FFA else 2)
 
 # True for fighters the computer controls this match.
 func slot_is_bot(slot: int) -> bool:
+	if not online_players.is_empty():
+		return false
 	match game_mode:
 		Mode.HUMAN_VS_AI: return slot == 2
 		Mode.FFA:         return slot != 1   # P1 is human, the other three are bots
@@ -169,3 +173,15 @@ func advance_round_or_end_match() -> void:
 			return
 	current_round += 1
 	change_state(State.MATCH_INTRO)
+
+func player_name(slot: int) -> String:
+	for player in online_players:
+		if int(player.slot) == slot:
+			return String(player.name)
+	return "P%d" % slot
+
+func apply_online_players(value: Array) -> void:
+	online_players = value.duplicate(true)
+	for player in online_players:
+		set("p%d_clan" % int(player.slot), int(player.clan))
+		set("p%d_skin" % int(player.slot), int(player.skin))
