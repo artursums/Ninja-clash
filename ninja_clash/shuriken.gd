@@ -5,6 +5,14 @@
 
 extends Area2D
 
+const Perks := preload("res://perk_rules.gd")
+var perk_kind: int = Perks.Kind.NONE
+var perk_left := 0.0
+var bounce_count := 0
+var seeker_target := 0
+var _seeker_heading := Vector2.RIGHT
+var _seeker_speed := 648.0
+
 const Arena := preload("res://arena_rules.gd")
 
 const GRAVITY := 600.0
@@ -75,6 +83,7 @@ func _ready() -> void:
 		monitorable = false
 		return
 	add_to_group("shurikens")
+	_init_perk()
 	if Net.is_host():
 		net_id = Net.next_id()
 	var col: CollisionShape2D = CollisionShape2D.new()
@@ -141,11 +150,28 @@ func _physics_process(delta: float) -> void:
 	# All time-based physics use scaled dt so the trajectory plays out in slow motion
 	# while keeping the same arc shape (apex, range) as the original speed.
 	var dt: float = delta * FLIGHT_TIME_SCALE
-	velocity_v.y += GRAVITY * dt
-	velocity_v.y = min(velocity_v.y, max_fall)
-	_apply_aim_assist(dt)
+	if perk_kind != Perks.Kind.NONE:
+		perk_left = maxf(0,perk_left-delta)
+		if perk_left == 0:
+			if perk_kind == Perks.Kind.SWAP:
+				consumed = true
+				queue_free()
+				return
+			if perk_kind == Perks.Kind.RICOCHET:
+				ricocheted = true
+			perk_kind = Perks.Kind.NONE
 	_previous_position = global_position
-	position += velocity_v * dt
+	if perk_kind == Perks.Kind.SEEKER:
+		_steer_seeker(delta)
+	elif perk_kind != Perks.Kind.SWAP:
+		velocity_v.y = minf(velocity_v.y+GRAVITY*dt,max_fall)
+		if perk_kind != Perks.Kind.RICOCHET:
+			_apply_aim_assist(dt)
+	if perk_kind != Perks.Kind.NONE:
+		_move_perk(velocity_v*dt)
+	else:
+		position += velocity_v * dt
+	queue_redraw()
 	# Screen wrap. Clearing the path history on a wrap stops the comet trail from streaking
 	# across the whole screen between the old and new sides.
 	var wrapped := Arena.wrap_position(position)
@@ -163,8 +189,9 @@ func _puppet_tick(delta: float) -> void:
 	if stuck:
 		return
 	var dt: float = delta * FLIGHT_TIME_SCALE
-	velocity_v.y += GRAVITY * dt
-	velocity_v.y = min(velocity_v.y, max_fall)
+	if perk_kind not in [Perks.Kind.SEEKER,Perks.Kind.SWAP]:
+		velocity_v.y += GRAVITY * dt
+		velocity_v.y = min(velocity_v.y, max_fall)
 	_previous_position = global_position
 	position += velocity_v * dt
 	var wrapped := Arena.wrap_position(position)
@@ -178,6 +205,11 @@ func _puppet_tick(delta: float) -> void:
 
 # Apply one host snapshot row (NetCodec.S layout) onto this puppet blade.
 func apply_net(arr: Array) -> void:
+	if arr.size() >= NetCodec.S.SIZE:
+		perk_kind = int(arr[NetCodec.S.PERK])
+		perk_left = float(arr[NetCodec.S.PERK_LEFT])
+		bounce_count = int(arr[NetCodec.S.BOUNCES])
+	queue_redraw()
 	position = Vector2(arr[NetCodec.S.X], arr[NetCodec.S.Y])
 	velocity_v = Vector2(arr[NetCodec.S.VX], arr[NetCodec.S.VY])
 	ricocheted = bool(arr[NetCodec.S.RICOCHET])
@@ -276,6 +308,8 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if not GameState.is_round_active():
 		return
+	if perk_kind != Perks.Kind.NONE:
+		return # Special projectiles resolve swept contacts in travel order.
 	if body is CharacterBody2D and body.has_method("hit_by_shuriken"):
 		var should_free: bool = body.hit_by_shuriken(self)
 		if should_free:
@@ -309,6 +343,8 @@ func deflect(by_slot: int, by_facing: int) -> void:
 	if stuck:
 		return
 	thrower_slot = by_slot
+	if perk_kind == Perks.Kind.SEEKER:
+		perk_kind = Perks.Kind.NONE # A parry breaks the original target lock.
 	_previous_position = global_position
 	velocity_v = Vector2(by_facing * 260.0, -170.0)   # away in swing dir + upward arc
 	throw_time = Time.get_ticks_msec() / 1000.0        # fresh immunity window for new owner
@@ -345,6 +381,8 @@ func _do_shuriken_clash(other, t: float) -> void:
 	# Both blades are now spent ricochets — harmless, catch-only (no more kills off a clash).
 	ricocheted = true
 	other.ricocheted = true
+	perk_kind = Perks.Kind.NONE
+	other.perk_kind = Perks.Kind.NONE
 	_clash_cooldown_until = t + 0.25
 	other._clash_cooldown_until = t + 0.25
 	_spawn_clash_spark(midpoint)
@@ -379,3 +417,114 @@ func _check_pickup() -> void:
 			p.stash_changed.emit(p.slot, p.stash)
 			queue_free()
 			return
+
+
+func _init_perk() -> void:
+	if perk_kind == Perks.Kind.NONE:
+		return
+	perk_left = Perks.SEEK_SECONDS if perk_kind == Perks.Kind.SEEKER else Perks.RICOCHET_SECONDS if perk_kind == Perks.Kind.RICOCHET else 6.0
+	if perk_kind != Perks.Kind.SWAP:
+		for entry in Perks.terrain(get_tree()):
+			if entry.rect.grow(7).has_point(global_position):
+				for p in get_tree().get_nodes_in_group("players"):
+					if p.slot == thrower_slot:
+						global_position = p.global_position
+				break
+	_previous_position = global_position
+	if perk_kind == Perks.Kind.SEEKER:
+		_seeker_speed = velocity_v.length()
+		_seeker_heading = velocity_v.normalized()
+		var nearest := INF
+		for p in get_tree().get_nodes_in_group("players"):
+			if p.alive and p.slot != thrower_slot and p.global_position.distance_squared_to(global_position) < nearest:
+				nearest = p.global_position.distance_squared_to(global_position)
+				seeker_target = p.slot
+
+func can_hit_owner() -> bool:
+	return perk_kind == Perks.Kind.RICOCHET and bounce_count > 0
+
+func _steer_seeker(delta: float) -> void:
+	var target: Node2D = null
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.slot == seeker_target and p.alive:
+			target = p
+	var director := get_tree().get_first_node_in_group("perk_director")
+	if target == null or director == null:
+		perk_kind = Perks.Kind.NONE
+		return
+	var nav = director.seeker_navigation()
+	var waypoint: Vector2 = nav.waypoint(global_position,target.global_position)
+	var desired := waypoint-global_position
+	if desired.length() < 1:
+		perk_kind = Perks.Kind.NONE
+		return
+	var angle := wrapf(desired.angle()-_seeker_heading.angle(),-PI,PI)
+	_seeker_heading = _seeker_heading.rotated(clampf(angle,-5.0*delta,5.0*delta))
+	var speed := _seeker_speed * clampf(1-absf(angle)/PI,0.25,1)
+	# Turn before advancing into a corner; this never allows passage through masonry.
+	if not nav.clear(global_position,global_position+_seeker_heading*maxf(18,speed*FLIGHT_TIME_SCALE*delta)):
+		speed = 0
+	velocity_v = _seeker_heading * speed
+
+func _move_perk(motion: Vector2) -> void:
+	var solids: Array = [] if perk_kind == Perks.Kind.SWAP else Perks.terrain(get_tree())
+	for contact in 4:
+		var fraction := 1.0
+		var normal := Vector2.ZERO
+		var body: Node = null
+		for entry in solids:
+			var hit := Perks.sweep(global_position,motion,entry.rect.grow(7))
+			if not hit.is_empty() and hit.fraction <= fraction:
+				fraction = hit.fraction
+				normal = hit.normal
+				body = entry.body
+		for p in get_tree().get_nodes_in_group("players"):
+			if not p.alive or (p.slot == thrower_slot and not can_hit_owner()):
+				continue
+			var bounds := Rect2(p.global_position-Vector2(17,23),Vector2(34,46))
+			var hit := Perks.sweep(global_position,motion,bounds)
+			if bounds.has_point(global_position):
+				hit = {"fraction":0.0,"normal":Vector2.ZERO}
+			if not hit.is_empty() and hit.fraction <= fraction:
+				fraction = hit.fraction
+				body = p
+		global_position += motion*fraction
+		if body == null:
+			return
+		if body is CharacterBody2D:
+			if body.hit_by_shuriken(self):
+				consumed = true
+				queue_free()
+			else:
+				global_position += velocity_v.normalized()*2
+			return
+		if perk_kind == Perks.Kind.RICOCHET and bounce_count < Perks.MAX_BOUNCES:
+			bounce_count += 1
+			velocity_v = velocity_v.bounce(normal)
+			global_position += normal*0.2
+			motion = motion.bounce(normal)*(1-fraction)
+			Audio.play("click")
+		else:
+			stuck = true
+			_stuck_surface = weakref(body)
+			perk_kind = Perks.Kind.NONE
+			velocity_v = Vector2.ZERO
+			_hide_trail()
+			if _sprite != null and _sprite.hframes > 1:
+				_sprite.frame = IMPACT_FRAME
+			return
+
+func _draw() -> void:
+	if perk_kind == Perks.Kind.NONE or stuck:
+		return
+	var color: Color = Perks.COLORS[perk_kind]
+	draw_arc(Vector2.ZERO,10,0,TAU,12,color,1.5)
+	if perk_kind == Perks.Kind.SWAP:
+		draw_arc(Vector2.ZERO,14,-PI/2,PI/2,10,Color(color,0.6),1)
+	elif perk_kind == Perks.Kind.RICOCHET:
+		for i in maxi(0,Perks.MAX_BOUNCES-bounce_count):
+			draw_rect(Rect2(-5+i*4,-15,2,3),color)
+		if can_hit_owner():
+			draw_polyline(PackedVector2Array([Vector2(-7,9),Vector2(-3,12),Vector2(1,9),Vector2(5,12),Vector2(9,9)]),Color("ffefab"),2)
+	else:
+		Perks.draw_icon(self,perk_kind,Vector2(0,-17),7)

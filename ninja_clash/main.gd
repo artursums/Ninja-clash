@@ -51,6 +51,7 @@ const PLAYER_TEXS: Array = [
 	preload("res://sprites/player-win/p4_native.png"),
 ]
 
+var perk_director: Node2D
 var arena_root: Node2D
 var sky_bg_solid: ColorRect
 var sky_rect: TextureRect
@@ -89,6 +90,8 @@ func _ready() -> void:
 	print("[MAIN] _ready()")
 	_setup_input_map()
 	_build_arena()
+	perk_director = preload("res://perk_director.gd").new()
+	arena_root.add_child(perk_director)
 	_build_overlays()
 	Net.register_main(self)   # online layer needs the arena root + player list for snapshots/FX
 	GameState.state_changed.connect(_on_state_changed)
@@ -623,6 +626,7 @@ func _enter_match_intro() -> void:
 		_start_countdown()
 
 func _enter_round() -> void:
+	perk_director.begin_round()
 	_in_countdown = false
 	banner_label.text = ""
 	# Online client: ROUND arrives from the host, possibly while the local countdown visuals are
@@ -969,6 +973,7 @@ func _make_icon_grid(parent: Node2D, count: int, tex_path: String, frame: int, h
 
 func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform", walkable_y: float = -1.0, overhang: float = PLATFORM_VISUAL_OVERHANG) -> StaticBody2D:
 	var body: StaticBody2D = StaticBody2D.new()
+	body.add_to_group("arena_solids")
 	body.position = center
 	var col: CollisionShape2D = CollisionShape2D.new()
 	var rect: RectangleShape2D = RectangleShape2D.new()
@@ -1041,6 +1046,8 @@ func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: C
 	return body
 
 func _clear_shurikens() -> void:
+	if perk_director != null:
+		perk_director.reset()
 	for child in arena_root.get_children():
 		if child is Area2D:
 			child.queue_free()

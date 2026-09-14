@@ -1,5 +1,6 @@
 extends RefCounted
 
+const Perks := preload("res://perk_rules.gd")
 const Logic := preload("res://bot_logic.gd")
 const Navigation := preload("res://bot_navigation.gd")
 enum Tactic { OBSERVE, REPOSITION, PRESSURE, RETREAT, SCAVENGE, RECOVER }
@@ -167,6 +168,26 @@ func _plan(actor: Node, enemy: Node, standing: int, now: float) -> void:
 		tactic = Tactic.SCAVENGE
 		_set_goal(actor, standing, blade.global_position)
 		return
+	if actor.perk_kind == Perks.Kind.NONE and distance > 90:
+		var director := actor.get_tree().get_first_node_in_group("perk_director")
+		var best := INF
+		var perk_goal := Vector2.ZERO
+		if director != null:
+			for pickup in director.pickups:
+				if pickup.warning > 0 or pickup.left < 1:
+					continue
+				var ledge: int = navigation.nearest_ledge(pickup.pos)
+				var path: Array = navigation.route(standing,ledge,failed_links.keys())
+				if ledge != standing and path.is_empty():
+					continue
+				var cost: float = actor.global_position.distance_to(pickup.pos)+path.size()*35
+				if cost < best and cost < 420:
+					best = cost
+					perk_goal = pickup.pos
+		if perk_goal != Vector2.ZERO:
+			tactic = Tactic.SCAVENGE
+			_set_goal(actor,standing,perk_goal)
+			return
 	if now < recovery_until:
 		tactic = Tactic.RECOVER
 	elif same_floor and distance < _tuning.near_range[_level] and (actor.stash > 0 and (actor.hp <= 2 or actor.katana_charges == 0) or now < next_strike):
@@ -334,11 +355,12 @@ func _abandon_traversal(now: float) -> void:
 func _attack(actor: Node, enemy: Node, now: float) -> bool:
 	var offset: Vector2 = remembered_position - actor.global_position
 	var clear: bool = navigation.clear_line(actor.global_position, remembered_position, 5)
-	if not clear:
+	var special_throw: bool = actor.perk_kind in [Perks.Kind.SEEKER,Perks.Kind.SWAP]
+	if not clear and not special_throw:
 		aim_release = 0
 		strike_ready = 0
 		return false
-	if absf(offset.x) <= 38 and absf(offset.y) < 24 and actor.katana_charges > 0:
+	if clear and absf(offset.x) <= 38 and absf(offset.y) < 24 and actor.katana_charges > 0:
 		actor.facing = 1 if offset.x >= 0 else -1
 		if strike_ready == 0:
 			strike_ready = now + _tuning.melee_windup[_level] * rng.randf_range(0.85, 1.25)
@@ -371,7 +393,7 @@ func _attack(actor: Node, enemy: Node, now: float) -> bool:
 	if now >= aim_release:
 		# The direction stays locked during the tell; a sudden player dodge can defeat it.
 		var origin: Vector2 = actor.global_position + aim.normalized() * 22
-		if navigation.clear_line(actor.global_position, origin + aim.normalized() * 44, 5):
+		if special_throw or navigation.clear_line(actor.global_position, origin + aim.normalized() * 44, 5):
 			actor._bot_throw_dir = aim
 			actor._bot_pressed[actor.input_throw] = true
 			last_attack = now
@@ -393,7 +415,7 @@ func _defend(actor: Node, enemy: Node, now: float) -> bool:
 	var projectiles: Array = actor.get_tree().get_nodes_in_group("shurikens") + actor.get_tree().get_nodes_in_group("blade_waves")
 	for blade in projectiles:
 		var wave: bool = blade.is_in_group("blade_waves")
-		if blade.thrower_slot == actor.slot:
+		if blade.thrower_slot == actor.slot and not (blade.has_method("can_hit_owner") and blade.can_hit_owner()):
 			continue
 		if wave and blade._dead or not wave and (blade.stuck or blade.consumed or blade.ricocheted):
 			continue
@@ -401,7 +423,7 @@ func _defend(actor: Node, enemy: Node, now: float) -> bool:
 		if offset.length() > _tuning.dodge_range[_level]:
 			continue
 		var time: float = Logic.impact_time(offset, blade.velocity_v * (1.0 if wave else blade.FLIGHT_TIME_SCALE) - actor.velocity)
-		if time > 0.85 or not navigation.clear_line(blade.global_position, actor.global_position, 2):
+		if time > 0.85 or (blade.get("perk_kind") != Perks.Kind.SWAP and not navigation.clear_line(blade.global_position, actor.global_position, 2)):
 			continue
 		var id: int = blade.get_instance_id()
 		present[id] = true

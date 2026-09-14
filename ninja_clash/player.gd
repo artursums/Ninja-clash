@@ -8,6 +8,12 @@
 
 extends CharacterBody2D
 
+const Perks := preload("res://perk_rules.gd")
+var perk_kind: int = Perks.Kind.NONE
+var perk_charges := 0
+var reverse_left := 0.0
+var teleport_revision := 0
+
 const FighterArt := preload("res://fighter_art.gd")
 const Parry := preload("res://katana_parry.gd")
 
@@ -264,6 +270,7 @@ func _apply_tuning() -> void:
 
 func _ready() -> void:
 	add_to_group("players")
+	add_child(preload("res://perk_badge.gd").new())
 	_apply_tuning()   # data-driven balance: load player_tuning.tres (or use the injected resource)
 	_spawn_collision_layer = collision_layer   # remember our solid layer so respawn restores it
 	var prefix = "p%d" % slot   # every slot reads ITS OWN action set (pads 3/4 bind to p3_/p4_)
@@ -332,6 +339,8 @@ func _physics_process(delta: float) -> void:
 		return
 	var t: float = Time.get_ticks_msec() / 1000.0
 
+	reverse_left = maxf(0, reverse_left - delta)
+
 	# Clash hitstop — ONLY the two clashing fighters freeze for a beat (main sets frozen_until
 	# on a clash). We hold the pose and skip physics/input entirely; bystanders keep playing,
 	# so a clash between two players never freezes the rest of a 4-player match. The retained
@@ -383,6 +392,8 @@ func _physics_process(delta: float) -> void:
 		move -= 1.0
 	if _held(input_right):
 		move += 1.0
+
+	move = movement_axis(move)
 
 	# Physics queries
 	var on_floor_now := is_on_floor()
@@ -498,7 +509,10 @@ func _physics_process(delta: float) -> void:
 		slide_charged = false
 		slide_cooldown_until = t + SLIDE_COOLDOWN_S
 		air_dash_penalty = not (on_floor_now or on_wall_now)   # only airborne dashes pay the touch-down delay
-		_start_slide(_aim_direction(), t)
+		var dash_direction := _aim_direction()
+		if _held(input_left) or _held(input_right):
+			dash_direction.x = movement_axis(dash_direction.x)
+		_start_slide(dash_direction, t)
 
 	# Katana. Standard rules: a press swings instantly (zero latency). When the blade-wave variant
 	# is ON the katana becomes HOLD-TO-CHARGE: holding winds up a wave (no swing yet), a quick tap
@@ -1027,6 +1041,7 @@ func _throw_shuriken(aim: Vector2) -> void:
 	var s = Area2D.new()
 	s.set_script(ShurikenScript)
 	s.thrower_slot = slot
+	s.perk_kind = consume_perk()
 	var v: float = Combat.shuriken_throw_velocity
 	var spawn_offset: Vector2
 	var vel: Vector2
@@ -1077,7 +1092,7 @@ func _throw_shuriken(aim: Vector2) -> void:
 	throw_anim_until = Time.get_ticks_msec() / 1000.0 + 0.22
 
 func _try_katana_parry(shuriken, t: float) -> bool:
-	if not alive or not is_swinging or shuriken.stuck or shuriken.consumed or shuriken.puppet or shuriken.thrower_slot == slot:
+	if not alive or not is_swinging or shuriken.stuck or shuriken.consumed or shuriken.puppet or (shuriken.thrower_slot == slot and not shuriken.can_hit_owner()):
 		return false
 	if not Parry.active(t - swing_start_t):
 		return false
@@ -1119,9 +1134,9 @@ func hit_by_shuriken(shuriken) -> bool:
 			shuriken.velocity_v = -shuriken.velocity_v
 			shuriken.stuck = false
 			return false
-	# Your OWN shuriken never harms you. If you fall onto it from above, it gives a brief
-	# upward pogo — momentary, then you keep falling (a touch of extra air-time, not a hit).
-	if shuriken.thrower_slot == slot:
+	# Ordinary blades cannot hurt their owner; a terrain-bounced perk blade can.
+	# Falling onto an ordinary blade still gives the existing upward pogo.
+	if shuriken.thrower_slot == slot and not shuriken.can_hit_owner():
 		if velocity.y > 0.0 and not shuriken.stuck and shuriken.global_position.y >= global_position.y:
 			velocity.y = -SHURIKEN_POGO_BOUNCE
 			Audio.play("dodge")
@@ -1134,9 +1149,16 @@ func hit_by_shuriken(shuriken) -> bool:
 		shuriken.deflect(slot, facing)
 		_on_block(shuriken.velocity_v)
 		return false   # not caught into stash, not destroyed
-	# A clean hit lands — the blade is spent and VANISHES. This is the ONLY way a shuriken
-	# leaves the round; every other interaction (deflect, clash, miss) keeps it retrievable.
-	take_damage(1, shuriken.velocity_v, shuriken.thrower_slot)
+	# A clean hit consumes the blade. Phase swaps replace damage with a safe teleport.
+	if shuriken.perk_kind == Perks.Kind.SWAP:
+		for other in get_tree().get_nodes_in_group("players"):
+			if other.slot == shuriken.thrower_slot and other.alive:
+				swap_with(other)
+				break
+		return true
+	var damaged := take_damage(1, shuriken.velocity_v, shuriken.thrower_slot)
+	if damaged and alive and shuriken.perk_kind == Perks.Kind.MISDIRECTION and reverse_left <= 0:
+		reverse_left = Perks.REVERSE_SECONDS
 	return true   # caller frees the shuriken
 
 # True when a guard is up AND the hit comes from the front (the side we face). The hit's
@@ -1235,6 +1257,7 @@ func _check_headstomp() -> void:
 				break   # one stomp per frame
 
 func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void:
+	clear_perks()
 	alive = false
 	# A corpse is no obstacle — drop off the collision layer so the living run straight
 	# through it (it still rests on the ground via its own mask). Restored on respawn.
@@ -1253,6 +1276,7 @@ func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void
 	Combat.on_kill(slot, killer_slot)
 
 func respawn(at_pos: Vector2) -> void:
+	clear_perks()
 	alive = true
 	collision_layer = _spawn_collision_layer   # solid again — back to being a real fighter
 	_corpse_settled = false
@@ -1470,6 +1494,8 @@ func _update_visual() -> void:
 # (not _physics_process) so the counts reflect the latest values even when another node
 # (a shuriken catch/pickup, the opponent's stomp/katana) changed them this physics step.
 func _process(_delta: float) -> void:
+	if Net.is_client() and GameState.is_round_active():
+		reverse_left = maxf(0, reverse_left - _delta)
 	if GameState.is_round_active():
 		_motion_clock += _delta
 	_update_hp_indicator()
@@ -1512,3 +1538,61 @@ func _update_guard_indicator() -> void:
 	guard_bar_fill.size.x = GUARD_BAR_W * frac
 	var on_cooldown: bool = Time.get_ticks_msec() / 1000.0 < guard_cooldown_until
 	guard_bar_fill.color = Color(0.9, 0.35, 0.3, 0.95) if on_cooldown else Color(0.4, 0.8, 1.0, 0.95)
+
+
+func movement_axis(value: float) -> float:
+	return -value if reverse_left > 0 else value
+
+func grant_perk(kind: int) -> bool:
+	if not alive or perk_kind != Perks.Kind.NONE or kind < 1 or kind >= Perks.CHARGES.size():
+		return false
+	perk_kind = kind
+	perk_charges = Perks.CHARGES[kind]
+	return true
+
+func consume_perk() -> int:
+	var kind := perk_kind
+	if perk_charges > 0:
+		perk_charges -= 1
+	if perk_charges == 0:
+		perk_kind = Perks.Kind.NONE
+	return kind
+
+func clear_perks() -> void:
+	perk_kind = Perks.Kind.NONE
+	perk_charges = 0
+	reverse_left = 0
+
+func swap_with(other: CharacterBody2D) -> bool:
+	if other == self or not alive or not other.alive:
+		return false
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(20,32)
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = shape
+	query.exclude = [get_rid(),other.get_rid()]
+	var bounds := Rect2(Vector2.ZERO,preload("res://arena_rules.gd").SIZE)
+	for at: Vector2 in [global_position,other.global_position]:
+		if not bounds.encloses(Rect2(at-Vector2(10,16),Vector2(20,32))):
+			return false
+		query.transform = Transform2D(0,at)
+		if not get_world_2d().direct_space_state.intersect_shape(query).is_empty():
+			return false
+	var previous := global_position
+	global_position = other.global_position
+	other.global_position = previous
+	for p in [self,other]:
+		p.velocity = Vector2.ZERO
+		p.is_sliding = false
+		p.is_wall_grabbing = false
+		p.is_iframe = false
+		p.wall_jump_lock_until = 0
+		p.clash_recoil_until = 0
+		p.hit_recoil_until = 0
+		p.shield_bump_until = 0
+		p.jumps_remaining = 0
+		p.teleport_revision += 1
+		if p._bot_brain != null:
+			p._bot_brain.reset()
+	Audio.play("dodge")
+	return true

@@ -25,9 +25,9 @@ func configure(terrain: Array) -> void:
 		for x in grid.region.size.x:
 			var id := Vector2i(x,y)
 			var pos := grid.get_point_position(id)
-			grid.set_point_solid(id, not free(pos))
+			grid.set_point_solid(id, not point_free(pos))
 
-func free(point: Vector2) -> bool:
+func point_free(point: Vector2) -> bool:
 	if not Rect2(Vector2(8,8),Arena.SIZE-Vector2(16,16)).has_point(point):
 		return false
 	for rect in solids:

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-const PROTOCOL = 3;
+const PROTOCOL = 4;
 const ROOM_TTL = 600;
 const HOST_LEASE_MS = 30000;
 const NEGOTIATION_MS = 45000;

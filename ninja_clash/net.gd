@@ -23,7 +23,7 @@ var _join_deadline: float = 0.0
 var _web_room: Node = null
 var invitation_code := ""
 const Roster := preload("res://online_roster.gd")
-const PROTOCOL := 3
+const PROTOCOL := 4
 var lobby := Roster.new()
 var player_name := ""
 var lobby_message := ""
@@ -385,7 +385,7 @@ func _build_snapshot() -> Dictionary:
 	for platform in _main.current_map_nodes:
 		if platform.is_in_group("crumble_platforms"):
 			platforms.append([platform.phase, platform.remaining])
-	return {"p": players, "s": shuris, "w": waves, "c": platforms, "map": _main._current_loaded_map}
+	return {"p": players, "s": shuris, "w": waves, "c": platforms, "perks": _main.perk_director.snapshot(), "map": _main._current_loaded_map}
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -394,6 +394,7 @@ func _snapshot(snap: Dictionary) -> void:
 		return
 	if int(snap.get("map", -1)) != _main._current_loaded_map:
 		return
+	_main.perk_director.apply_snapshot(snap.get("perks", []))
 	var platforms: Array = snap.get("c", [])
 	var index := 0
 	for platform in _main.current_map_nodes:

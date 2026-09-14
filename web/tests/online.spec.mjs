@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const base = process.env.NINJA_TEST_TURN ? 'http://127.0.0.1:8788' : 'http://127.0.0.1:8787';
+const base = process.env.NINJA_TEST_URL || (process.env.NINJA_TEST_TURN ? 'http://127.0.0.1:8788' : 'http://127.0.0.1:8787');
 async function click(page, x, y) {
   const box = await page.locator('canvas').boundingBox();
   const scale = Math.min(box.width / 800, box.height / 450);
@@ -138,6 +138,14 @@ async function playMatch(browser, testInfo, count, forceRelay) {
       await screen(player.page, 'ROUND');
       expect((await state(player.page)).fighters.length).toBe(count);
     }
+    await expect.poll(async () => (await state(host.page)).perks?.length, { timeout: 15000 }).toBeGreaterThan(0);
+    const capsules = (await state(host.page)).perks.map(row => row.slice(0, 4));
+    if (count === 2) expect(capsules.every(row => row[1] !== 3)).toBe(true);
+    for (const guest of players.slice(1)) {
+      await expect.poll(async () => (await state(guest.page)).perks.map(row => row.slice(0, 4))).toEqual(capsules);
+    }
+    await expect.poll(async () => (await state(host.page)).perks.some(row => row[4] === 0)).toBe(true);
+    await players.at(-1).page.screenshot({ path: testInfo.outputPath(`${count}-player-perks.png`) });
     for (let index = 1; index < players.length; index++) {
       const guest = players[index];
       const peer = (await state(guest.page)).localPlayer.peer;

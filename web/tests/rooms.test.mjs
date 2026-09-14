@@ -14,8 +14,8 @@ function setup() {
   const rooms = new Rooms(store, async () => { iceCalls++; return { iceServers: [] }; }, now);
   return { rooms, store, tick: ms => { time += ms; }, iceCalls: () => iceCalls };
 }
-const create = rooms => rooms.handle({ action: 'create', token: host, protocol: 3 });
-const join = (rooms, room, token = guest) => rooms.handle({ action: 'join', token, room, protocol: 3 });
+const create = rooms => rooms.handle({ action: 'create', token: host, protocol: 4 });
+const join = (rooms, room, token = guest) => rooms.handle({ action: 'join', token, room, protocol: 4 });
 const exchange = async (rooms, room, token, messages = [], cursor = 0, ready = false, peer = 2) => {
   const result = await rooms.handle({ action: 'exchange', room, token, links: [{ peer, cursor, messages, ready }] });
   return result.links[0] ?? result;
@@ -83,7 +83,7 @@ test('closed, expired, abandoned, and incompatible rooms fail clearly', async ()
 
 test('invalid signaling, tokens, and rate exhaustion are rejected', async () => {
   const { rooms } = setup();
-  await assert.rejects(rooms.handle({ action: 'create', token: 'guess', protocol: 3 }), { status: 400 });
+  await assert.rejects(rooms.handle({ action: 'create', token: 'guess', protocol: 4 }), { status: 400 });
   const { room } = await create(rooms);
   await join(rooms, room);
   await assert.rejects(exchange(rooms, room, guest, [{ seq: 1, type: 'offer', sdp: 'bad' }]), { status: 400 });
@@ -141,7 +141,7 @@ async function request(handler, body, options = {}) {
 test('HTTP boundary rejects cross-origin requests and never exposes service secrets', async () => {
   const { rooms } = setup();
   const handler = handlerFor(() => rooms);
-  const body = { action: 'create', token: host, protocol: 3 };
+  const body = { action: 'create', token: host, protocol: 4 };
   assert.equal((await request(handler, body, { headers: { origin: 'https://attacker.example' } })).code, 403);
   assert.equal((await request(handler, body, { request: { method: 'GET' } })).code, 405);
   assert.equal((await request(handler, '{broken')).code, 400);

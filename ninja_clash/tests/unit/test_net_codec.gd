@@ -93,7 +93,7 @@ func test_player_snapshot_death_transition_sets_topple() -> void:
 func test_shuriken_snapshot_layout() -> void:
 	# The S enum indices are the wire layout — pin them so a reorder can't silently
 	# desync encode_shuriken (host) from apply_net (client puppet).
-	var arr: Array = [7, 10.0, 20.0, 300.0, -20.0, false, 1, true]
+	var arr: Array = [7, 10.0, 20.0, 300.0, -20.0, false, 1, true, 4, 2.5, 2]
 	assert_eq(arr.size(), NC.S.SIZE)
 	assert_eq(int(arr[NC.S.ID]), 7)
 	assert_eq(Vector2(arr[NC.S.X], arr[NC.S.Y]), Vector2(10, 20))

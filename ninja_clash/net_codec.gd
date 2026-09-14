@@ -18,7 +18,7 @@ const ACTIONS := ["left", "right", "aim_up", "aim_down", "jump", "throw", "katan
 ## Player snapshot array layout (indices).
 enum P {
 	SLOT, X, Y, VX, VY, FACING, ALIVE, HP, STASH, KATANA,
-	GUARD, FLAGS, SWING_PHASE, CHARGE_PHASE, AIM_X, AIM_Y, HURT_LEFT, SIZE
+	GUARD, FLAGS, SWING_PHASE, CHARGE_PHASE, AIM_X, AIM_Y, HURT_LEFT, PERK, PERK_CHARGES, REVERSE_LEFT, TELEPORT, SIZE
 }
 
 ## Player snapshot flag bits.
@@ -32,7 +32,7 @@ const F_CHARGE_READY := 64
 const F_GUARD_CD := 128
 
 ## Shuriken snapshot array layout.
-enum S { ID, X, Y, VX, VY, STUCK, THROWER, RICOCHET, SIZE }
+enum S { ID, X, Y, VX, VY, STUCK, THROWER, RICOCHET, PERK, PERK_LEFT, BOUNCES, SIZE }
 
 ## Blade-wave snapshot array layout.
 enum W { ID, X, Y, VX, VY, THROWER, SIZE }
@@ -85,6 +85,10 @@ static func encode_player(p: Node, now: float) -> Array:
 	arr[P.AIM_X] = aim.x
 	arr[P.AIM_Y] = aim.y
 	arr[P.HURT_LEFT] = maxf(0.0, p.hurt_iframe_until - now)
+	arr[P.PERK] = p.perk_kind
+	arr[P.PERK_CHARGES] = p.perk_charges
+	arr[P.REVERSE_LEFT] = p.reverse_left
+	arr[P.TELEPORT] = p.teleport_revision
 	return arr
 
 
@@ -97,6 +101,12 @@ static func apply_player(p: Node, arr: Array, now: float) -> void:
 	var was_alive: bool = p.alive
 	p.net_target_pos = Vector2(arr[P.X], arr[P.Y])
 	p.net_has_target = true
+	p.perk_kind = int(arr[P.PERK])
+	p.perk_charges = int(arr[P.PERK_CHARGES])
+	p.reverse_left = float(arr[P.REVERSE_LEFT])
+	if p.teleport_revision != int(arr[P.TELEPORT]):
+		p.position = p.net_target_pos
+		p.teleport_revision = int(arr[P.TELEPORT])
 	p.velocity = Vector2(arr[P.VX], arr[P.VY])
 	p.facing = int(arr[P.FACING])
 	p.alive = bool(arr[P.ALIVE])
@@ -136,7 +146,7 @@ static func apply_player(p: Node, arr: Array, now: float) -> void:
 ## Snapshot one shuriken (host side).
 static func encode_shuriken(s: Node) -> Array:
 	return [s.net_id, s.position.x, s.position.y, s.velocity_v.x, s.velocity_v.y,
-			s.stuck, s.thrower_slot, s.ricocheted]
+			s.stuck, s.thrower_slot, s.ricocheted, s.perk_kind, s.perk_left, s.bounce_count]
 
 
 ## Snapshot one blade wave (host side).
