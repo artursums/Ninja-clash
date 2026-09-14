@@ -1,22 +1,20 @@
-# Main orchestrator: match flow, arena loading, fighters, and UI layers.
+## Composes the game scene and coordinates match setup, round flow and screen transitions.
 
 extends Node2D
 
 const FighterArt := preload("res://fighter_art.gd")
 
+const ArenaFactory := preload("res://arena_factory.gd")
 const Arena := preload("res://arena_rules.gd")
 const MAP_W := int(Arena.WIDTH)
 const MAP_H := int(Arena.HEIGHT)
 const PLAYER_W := 20.0
 const PLAYER_H := 32.0
-# Maps supply a panorama texture; missing art falls back to a gradient.
-const PLATFORM_SRC_Y_WALKABLE := 395.0   # measured: top of opaque stone in platform.png (1536×1024)
-const PLATFORM_VISUAL_OVERHANG := 1.4    # sprite visual width = collision width × this
 
-const STAGE_DURATIONS: Array = [2.0, 0.8, 0.8, 0.8, 0.7]   # stage 0 = "ROUND N" banner (held 2.0 s); rest = dramatic 3/2/1/FIGHT count
+const STAGE_DURATIONS: Array = [2.0, 0.8, 0.8, 0.8, 0.7]
 const STAGE_TEXTS: Array = ["", "3", "2", "1", "FIGHT!"]
 const STAGE_SOUNDS: Array = ["", "countdown", "countdown", "countdown", "round_start"]
-# Premium stone sprites for stages 1-4 (3 / 2 / 1 / FIGHT). Stage 0 ("ROUND N") stays as text.
+
 const STAGE_TEXTURES: Array = [
 	null,
 	preload("res://sprites/countdown/countdown_3_premium_native.png"),
@@ -24,7 +22,7 @@ const STAGE_TEXTURES: Array = [
 	preload("res://sprites/countdown/countdown_1_premium_native.png"),
 	preload("res://sprites/countdown/fight_premium_native.png"),
 ]
-# "ROUND N" indicator (stage 0): a ROUND wordmark + per-digit sprites, composed for any N.
+
 const ROUND_WORD_TEX := preload("res://sprites/round-counter/round_word_native.png")
 const DIGIT_TEXS: Array = [
 	preload("res://sprites/round-counter/digit_0_native.png"),
@@ -38,13 +36,12 @@ const DIGIT_TEXS: Array = [
 	preload("res://sprites/round-counter/digit_8_native.png"),
 	preload("res://sprites/round-counter/digit_9_native.png"),
 ]
-const ROUND_GAP_WORD := 24.0    # px between "ROUND" and the number
-const ROUND_GAP_DIGIT := 4.0    # px between digits
+const ROUND_GAP_WORD := 24.0
+const ROUND_GAP_DIGIT := 4.0
 
-# Round-winner indicator (shown at ROUND_END): "P<N>" (color-tinted) + "WINS".
 const WINS_TEX := preload("res://sprites/player-win/wins_native.png")
 const PLAYER_TEXS: Array = [
-	null,   # index 0 unused — slots are 1-4
+	null,
 	preload("res://sprites/player-win/p1_native.png"),
 	preload("res://sprites/player-win/p2_native.png"),
 	preload("res://sprites/player-win/p3_native.png"),
@@ -69,27 +66,27 @@ var match_setup_screen: Control
 var map_select_screen: Control
 var match_end_screen: Control
 var online_lobby_screen: Control
-var online_menu_screen: Control   # ONLINE host/join screen (ADR-0003)
-var prologue_screen: Control
+var online_menu_screen: Control
+var welcome_screen: Control
 var hud: Control
 var mode_select_screen: Control
 var banner_label: Label
-var countdown_sprite: Sprite2D   # 3 / 2 / 1 / FIGHT premium stone sprites during the countdown
-var round_display: Node2D        # composed "ROUND N" (wordmark + digit sprites) at countdown stage 0
-var win_display: Node2D          # composed "P<N> WINS" shown at ROUND_END for the round's winner
-var tutorial_overlay: Control   # HOW TO PLAY (tutorial_overlay.gd) — shown before the round-1 countdown
+var countdown_sprite: Sprite2D
+var round_display: Node2D
+var win_display: Node2D
+var tutorial_overlay: Control
 
 var _in_countdown: bool = false
 var _countdown_stage: int = 0
 var _countdown_stage_until: float = 0.0
 var _round_end_until: float = 0.0
-var _round_winner_slot: int = 0   # survivor of the round (last ninja standing), 0 = draw
+var _round_winner_slot: int = 0
 var _current_loaded_map: int = -1
-var _clash_freeze_until: float = 0.0   # real-time end of the active clash hitstop (0 = none)
+var _clash_freeze_until: float = 0.0
 
 func _ready() -> void:
 	print("[MAIN] _ready()")
-	_setup_input_map()
+	add_child(preload("res://input_bindings.gd").new())
 	_build_arena()
 	perk_director = preload("res://perk_director.gd").new()
 	arena_root.add_child(perk_director)
@@ -97,11 +94,11 @@ func _ready() -> void:
 	add_child(round_clock)
 	round_clock.expired.connect(_on_round_timeout)
 	_build_overlays()
-	Net.register_main(self)   # online layer needs the arena root + player list for snapshots/FX
+	Net.register_main(self)
 	GameState.state_changed.connect(_on_state_changed)
 	Combat.kill_logged.connect(_on_kill_logged)
 	Combat.clash_occurred.connect(_on_clash)
-	GameState.change_state(GameState.State.PROLOGUE)
+	GameState.change_state(GameState.State.WELCOME)
 	_handle_dev_args()
 	if OS.is_debug_build() and OS.has_feature("web"):
 		var probe := Node.new()
@@ -109,10 +106,6 @@ func _ready() -> void:
 		add_child(probe)
 	print("[MAIN] _ready() complete")
 
-# Dev/CI launch shortcuts (after `--` on the command line):
-#   --host             host an online session immediately
-#   --join=<ip>        join a host immediately
-#   --online-autotest  attach the scripted online smoke-driver (see dev_online_autotest.gd)
 func _handle_dev_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--host":
@@ -129,174 +122,6 @@ func _handle_dev_args() -> void:
 			driver.set_script(load("res://dev_online_autotest.gd"))
 			add_child(driver)
 
-func _setup_input_map() -> void:
-	preload("res://menu_ui.gd").setup_gamepad_actions()
-	# P1 — MAIN keyboard scheme (the solo/testing player): WASD move/aim, Space jump,
-	#      L throw, K katana, J guard, Left Shift dash.
-	#      Enter = menu lock-in/confirm, P = skin cycle.
-	_add_key("p1_left",     KEY_A)
-	_add_key("p1_right",    KEY_D)
-	_add_key("p1_aim_up",   KEY_W)         # aims throw upward
-	_add_key("p1_aim_down", KEY_S)         # aims throw downward + menu "back"
-	_add_key("p1_jump",     KEY_SPACE)
-	_add_key("p1_throw",    KEY_L)
-	_add_key("p1_katana",   KEY_K)
-	_add_key("p1_dodge",    KEY_SHIFT, KEY_LOCATION_LEFT)
-	_add_key("p1_defend",   KEY_J)         # hold to guard — katana up, blocks front hits
-	# P2 — NUMPAD scheme (wide-keyboard couch second player; needs Num Lock ON):
-	#      4/6 move, 8/5 aim up/down, 0 jump, 1 throw, 2 katana, 3 guard, + dash,
-	#      numpad-Enter = menu confirm, 7 = skin cycle.
-	# Future LAN note: on a remote match each machine hosts ONE local player, so the WASD
-	# scheme should then bind to whichever slot is local — the numpad scheme is couch-only.
-	_add_key("p2_left",     KEY_KP_4)
-	_add_key("p2_right",    KEY_KP_6)
-	_add_key("p2_aim_up",   KEY_KP_8)
-	_add_key("p2_aim_down", KEY_KP_5)
-	_add_key("p2_jump",     KEY_KP_0)
-	_add_key("p2_throw",    KEY_KP_1)
-	_add_key("p2_katana",   KEY_KP_2)
-	_add_key("p2_defend",   KEY_KP_3)
-	_add_key("p2_dodge",    KEY_KP_ADD)
-	# Skin keyboard binds go BEFORE _rebind_gamepads: _add_key wipes an action's existing events,
-	# so binding them here first lets the pad's Square (added in _rebind) coexist instead of being erased.
-	_add_key("p1_skin",     KEY_P)         # cycle skin in clan select (keyboard P1)
-	_add_key("p2_skin",     KEY_KP_7)      # cycle skin in clan select (numpad P2)
-	# Arrow keys double as a second P1 movement set — so every menu (and P1 gameplay)
-	# also answers to the arrows. Appended, not _add_key, so WASD stays bound.
-	_append_key("p1_left",     KEY_LEFT)
-	_append_key("p1_right",    KEY_RIGHT)
-	_append_key("p1_aim_up",   KEY_UP)
-	_append_key("p1_aim_down", KEY_DOWN)
-	# Gamepad — TowerFall-on-PlayStation layout (positional buttons, so Xbox pads work the
-	# same: Cross=A, Circle=B, Square=X, Triangle=Y), appended to the keyboard binds. The
-	# actual device ids are assigned dynamically (1st connected pad → P1, 2nd → P2, up to
-	# 4 pads → P4) and re-bound on hot-plug, because Godot's joypad ids depend on connection
-	# order and are reused across reconnects — hardcoding device 0/1 left a second DualSense
-	# unmapped if it didn't land on id 1.
-	_rebind_gamepads()
-	Input.joy_connection_changed.connect(_on_joy_connection_changed)
-	# Global menu input — works from ANY keyboard or controller on every non-gameplay
-	# screen (TowerFall-style). device -1 = all connected gamepads.
-	_add_key("menu_cancel", KEY_ESCAPE)
-	_add_pad_button("menu_cancel", JOY_BUTTON_B, -1)   # Circle ◯ — back / cancel
-	_add_key("online_start", KEY_F)
-	_add_pad_button("online_start", JOY_BUTTON_START, -1)
-	_add_key("menu_random", KEY_X)
-	_add_pad_button("menu_random", JOY_BUTTON_Y, -1)   # Triangle △ — random map
-	# Pause — Esc on the keyboard, Start on any pad. Opens the pause overlay during a round.
-	_add_key("menu_pause", KEY_ESCAPE)
-	_add_pad_button("menu_pause", JOY_BUTTON_START, -1)
-	# Fight Setup — Tab on the keyboard, Select/Share (Back) on any pad. Opens the variants screen
-	# from clan select. device -1 = all connected gamepads.
-	_add_key("menu_setup", KEY_TAB)
-	_add_pad_button("menu_setup", JOY_BUTTON_BACK, -1)
-	# Menu lock-in/confirm — P1 = main Enter, P2 = numpad Enter. Menu-only actions
-	# (gameplay jump is untouched); every menu accepts jump OR confirm.
-	_add_key("p1_confirm", KEY_ENTER)
-	_add_key("p2_confirm", KEY_KP_ENTER)
-
-# Bind one gamepad (device index) to a player's actions, mirroring TowerFall's
-# PlayStation scheme. Godot uses position-based face-button names, so on a
-# DualSense: JOY_BUTTON_A=Cross ✕, B=Circle ◯, X=Square ▢, Y=Triangle △.
-func _add_pad(player: int, device: int) -> void:
-	var prefix: String = "p%d" % player
-	# Move / aim — D-pad and the left analog stick.
-	_add_pad_button(prefix + "_left",     JOY_BUTTON_DPAD_LEFT,  device)
-	_add_pad_axis(  prefix + "_left",     JOY_AXIS_LEFT_X, -1.0, device)
-	_add_pad_button(prefix + "_right",    JOY_BUTTON_DPAD_RIGHT, device)
-	_add_pad_axis(  prefix + "_right",    JOY_AXIS_LEFT_X,  1.0, device)
-	_add_pad_button(prefix + "_aim_up",   JOY_BUTTON_DPAD_UP,    device)
-	_add_pad_axis(  prefix + "_aim_up",   JOY_AXIS_LEFT_Y, -1.0, device)
-	_add_pad_button(prefix + "_aim_down", JOY_BUTTON_DPAD_DOWN,  device)
-	_add_pad_axis(  prefix + "_aim_down", JOY_AXIS_LEFT_Y,  1.0, device)
-	# Actions — faithful to TowerFall on PlayStation.
-	_add_pad_button(prefix + "_jump",   JOY_BUTTON_A, device)              # Cross ✕  — jump / menu confirm
-	_add_pad_button(prefix + "_throw",  JOY_BUTTON_X, device)              # Square ▢ — throw shuriken (TowerFall "shoot")
-	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_B, device)              # Circle ◯ — dodge
-	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_LEFT_SHOULDER,  device) # L1       — dodge (TowerFall shoulder dodge)
-	_add_pad_button(prefix + "_dodge",  JOY_BUTTON_RIGHT_SHOULDER, device) # R1       — dodge
-	_add_pad_button(prefix + "_katana", JOY_BUTTON_Y, device)              # Triangle △ — katana melee (no TowerFall equivalent)
-	# L2 = defend (hold the katana up to guard); R2 = slide/dash. Direction comes from the stick.
-	_add_pad_axis(prefix + "_defend", JOY_AXIS_TRIGGER_LEFT,  1.0, device)  # L2 — guard
-	_add_pad_axis(prefix + "_slide",  JOY_AXIS_TRIGGER_RIGHT, 1.0, device)  # R2 — dash/dodge
-
-# Per-player gamepad actions rebound on every (re)assignment, so hot-plugging never leaves a
-# stale device binding behind. (Menu actions use device -1 and need no per-device rebinding.)
-const PAD_ACTIONS := ["left", "right", "aim_up", "aim_down", "jump", "throw", "dodge", "katana", "defend", "slide", "skin"]
-
-# Re-derive the gamepad bindings from the CURRENTLY connected pads: lowest device id → P1,
-# next → P2, and so on up to P4 (DualSense, Xbox and any SDL-mapped pad — Godot's button
-# constants are positional, so the same layout works on all of them). Any prior joypad events
-# are stripped first (keyboard binds are preserved), so this is safe to call repeatedly on
-# connect/disconnect. With one pad only P1 gets it (P2 keeps the numpad scheme); with none,
-# both keyboard schemes still drive P1/P2.
-func _rebind_gamepads() -> void:
-	var pads: Array = Input.get_connected_joypads()
-	pads.sort()   # ascending device id → deterministic 1st=P1, 2nd=P2, …
-	# Ensure every per-player action EXISTS (clan_select & player poll p1_*/p2_* each frame even with
-	# no pad attached — a missing action errors), and strip any stale joypad events (keyboard kept).
-	for player in [1, 2, 3, 4]:
-		for action in PAD_ACTIONS:
-			var name: String = "p%d_%s" % [player, action]
-			if not InputMap.has_action(name):
-				InputMap.add_action(name)
-			_clear_pad_events(name)
-	for i in mini(pads.size(), 4):
-		_add_pad(i + 1, pads[i])
-		_add_pad_button("p%d_skin" % (i + 1), JOY_BUTTON_X, pads[i])   # Square ▢ — cycle skin in clan select
-
-func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
-	_rebind_gamepads()
-
-# Erase only the joypad (button + axis) events from an action, leaving keyboard binds intact.
-func _clear_pad_events(action_name: String) -> void:
-	if not InputMap.has_action(action_name):
-		return
-	for ev in InputMap.action_get_events(action_name):
-		if ev is InputEventJoypadButton or ev is InputEventJoypadMotion:
-			InputMap.action_erase_event(action_name, ev)
-
-func _add_key(action_name: String, key: int, location: int = 0) -> void:
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name)
-	for prev in InputMap.action_get_events(action_name):
-		InputMap.action_erase_event(action_name, prev)
-	var ev: InputEventKey = InputEventKey.new()
-	ev.physical_keycode = key
-	ev.keycode = key
-	if location != 0:
-		ev.location = location
-	InputMap.action_add_event(action_name, ev)
-
-# Append an EXTRA key to an action without clearing its existing binds (contrast _add_key).
-func _append_key(action_name: String, key: int) -> void:
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name)
-	var ev: InputEventKey = InputEventKey.new()
-	ev.physical_keycode = key
-	ev.keycode = key
-	InputMap.action_add_event(action_name, ev)
-
-# Append a gamepad button to an existing action (does not clear keyboard binds).
-func _add_pad_button(action_name: String, button: int, device: int) -> void:
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name)
-	var ev: InputEventJoypadButton = InputEventJoypadButton.new()
-	ev.button_index = button
-	ev.device = device
-	InputMap.action_add_event(action_name, ev)
-
-# Append an analog-stick direction to an action. axis_value sign selects the
-# half-axis (-1.0 = up/left, 1.0 = down/right); the action's deadzone gates it.
-func _add_pad_axis(action_name: String, axis: int, axis_value: float, device: int) -> void:
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name)
-	var ev: InputEventJoypadMotion = InputEventJoypadMotion.new()
-	ev.axis = axis
-	ev.axis_value = axis_value
-	ev.device = device
-	InputMap.action_add_event(action_name, ev)
-
 func _build_arena() -> void:
 	arena_root = Node2D.new()
 	arena_root.name = "ArenaRoot"
@@ -307,7 +132,6 @@ func _build_arena() -> void:
 	camera.zoom = Arena.UI_SIZE / Arena.SIZE
 	arena_root.add_child(camera)
 
-	# Solid color behind the sky image (fills letterbox when bg keeps aspect ratio)
 	sky_bg_solid = ColorRect.new()
 	sky_bg_solid.position = Vector2.ZERO
 	sky_bg_solid.size = Vector2(MAP_W, MAP_H)
@@ -316,7 +140,6 @@ func _build_arena() -> void:
 	sky_bg_solid.z_index = -15
 	arena_root.add_child(sky_bg_solid)
 
-	# Full-world background; the fixed camera leaves HUD sizing independent.
 	sky_rect = TextureRect.new()
 	sky_rect.position = Vector2.ZERO
 	sky_rect.size = Arena.SIZE
@@ -327,30 +150,26 @@ func _build_arena() -> void:
 	sky_rect.z_index = -10
 	arena_root.add_child(sky_rect)
 
-	# Background decorations (behind walls)
 	var DecoScript: Script = load("res://decorations.gd")
 	bg_decorations = Node2D.new()
 	bg_decorations.set_script(DecoScript)
 	bg_decorations.z_index = -5
 	arena_root.add_child(bg_decorations)
 
-	# Foreground decorations (in front of bg, behind walls)
 	fg_decorations = Node2D.new()
 	fg_decorations.set_script(DecoScript)
 	fg_decorations.z_index = -2
 	arena_root.add_child(fg_decorations)
 
-	# Players — created to match the mode's fighter count (2 duel · 4 free-for-all).
 	spawn_points = Maps.get_map(GameState.selected_map_index).spawn_points.duplicate()
 	_ensure_player_count(GameState.num_players())
 
-# Every mode uses the arena's authored slot positions.
 func _player_spawn(slot: int) -> Vector2:
 	var pts: Array = spawn_points
 	var idx: int = slot - 1
 	if idx >= 0 and idx < pts.size():
 		return pts[idx]
-	# More fighters than defined spawn points — spread them out so no two ever share a spot.
+
 	push_warning("Spawn: slot %d has no dedicated spawn (only %d points); using spread fallback" % [slot, pts.size()])
 	return Vector2(120.0 + idx * 240.0, 424.0)
 
@@ -377,7 +196,6 @@ func _make_player(slot: int) -> CharacterBody2D:
 	arena_root.add_child(p)
 	return p
 
-# Create or free player nodes so the arena holds exactly `n` fighters.
 func _ensure_player_count(n: int) -> void:
 	while players.size() < n:
 		players.append(_make_player(players.size() + 1))
@@ -428,9 +246,12 @@ func _build_overlays() -> void:
 	online_menu_screen = Control.new()
 	online_menu_screen.set_script(OnlineScript)
 	canvas.add_child(online_menu_screen)
-	prologue_screen = Control.new()
-	prologue_screen.set_script(load("res://prologue.gd"))
-	canvas.add_child(prologue_screen)
+	welcome_screen = Control.new()
+	welcome_screen.set_script(load("res://welcome_screen.gd"))
+	welcome_screen.completed.connect(func() -> void:
+		if GameState.current_state == GameState.State.WELCOME:
+			GameState.change_state(GameState.State.ONLINE_MENU if Net.pending_invitation() != "" else GameState.State.TITLE))
+	canvas.add_child(welcome_screen)
 
 	var HudScript: Script = load("res://hud.gd")
 	hud = Control.new()
@@ -449,27 +270,21 @@ func _build_overlays() -> void:
 	banner_label.text = ""
 	canvas.add_child(banner_label)
 
-	# Countdown sprite (3 / 2 / 1 / FIGHT). Centered over the upper-middle of the arena, like the
-	# old text banner. Native res at scale 1.0; the pop animation scales it transiently.
 	countdown_sprite = Sprite2D.new()
 	countdown_sprite.position = Vector2(400, 175)
 	countdown_sprite.visible = false
 	canvas.add_child(countdown_sprite)
 
-	# "ROUND N" composite (wordmark + digits), centered at the same spot as the countdown numbers.
 	round_display = Node2D.new()
 	round_display.position = Vector2(400, 175)
 	round_display.visible = false
 	canvas.add_child(round_display)
 
-	# "P<N> WINS" composite, shown at the end of each round.
 	win_display = Node2D.new()
 	win_display.position = Vector2(400, 175)
 	win_display.visible = false
 	canvas.add_child(win_display)
 
-	# Pause overlay — on its own top CanvasLayer so it draws above the HUD/arena, and
-	# PROCESS_MODE_ALWAYS (set in pause_menu.gd) so it keeps running while the tree is paused.
 	var pause_layer: CanvasLayer = CanvasLayer.new()
 	pause_layer.layer = 20
 	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -478,9 +293,6 @@ func _build_overlays() -> void:
 	pause_menu.set_script(load("res://pause_menu.gd"))
 	pause_layer.add_child(pause_menu)
 
-	# HOW TO PLAY overlay — its own top layer (above HUD/banners) so nothing draws over it.
-	# Opened by _enter_match_intro on round 1 (when Settings.show_tutorial); the countdown
-	# starts only once it closes.
 	var tutorial_layer: CanvasLayer = CanvasLayer.new()
 	tutorial_layer.layer = 15
 	add_child(tutorial_layer)
@@ -490,12 +302,12 @@ func _build_overlays() -> void:
 	tutorial_overlay.closed.connect(_start_countdown)
 
 func _on_state_changed(s: int) -> void:
-	# Safety: never carry a clash freeze across a state change (e.g. ESC mid-clash).
+
 	if Engine.time_scale != 1.0:
 		Engine.time_scale = 1.0
 	_clash_freeze_until = 0.0
 	var S = GameState.State
-	prologue_screen.visible = (s == S.PROLOGUE)
+	welcome_screen.visible = (s == S.WELCOME)
 	title_screen.visible = (s == S.TITLE)
 	mode_select_screen.visible = (s == S.MODE_SELECT)
 	clan_select_screen.visible = (s == S.CLAN_SELECT)
@@ -506,7 +318,7 @@ func _on_state_changed(s: int) -> void:
 	online_lobby_screen.visible = (s == S.ONLINE_LOBBY)
 	arena_root.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END or s == S.MATCH_END)
 	hud.visible = (s == S.MATCH_INTRO or s == S.ROUND or s == S.ROUND_END)
-	win_display.visible = false   # only _enter_round_end re-shows it (for the round's winner)
+	win_display.visible = false
 
 	if s not in [S.MATCH_INTRO, S.ROUND, S.ROUND_END]:
 		_in_countdown = false
@@ -560,30 +372,17 @@ func _enter_match_intro() -> void:
 		p.add_child(kat)
 		p.katana_sprite = kat
 
-		# Above-head indicators: hearts (closest), stash, katana charges (highest).
-		# Free EVERY prior indicator row, renaming first so the deferred queue_free can't
-		# leave a name collision: add_child auto-renames a new "Indicators" to "Indicators2"
-		# while the old one lingers, so next round get_node_or_null("Indicators") misses it
-		# and it's never freed — an orphan row whose icons are never updated again, leaving
-		# frozen hearts hovering over a dead/respawned ninja. Rename + free all of them.
 		for child in p.get_children():
 			if String(child.name).begins_with("Indicators"):
 				child.name = "_old_indicators"
 				child.queue_free()
 		var ind_root: Node2D = Node2D.new()
 		ind_root.name = "Indicators"
-		# Above-head HUD info must read over the arena: platforms/walls sit at z 0, so lift the whole
-		# indicator group well above them (and the decorations) so hearts/stash/katana/guard never
-		# hide behind a platform that overlaps the head.
+
 		ind_root.z_index = 100
 		p.add_child(ind_root)
 		var cc: Color = clan.color
-		# Above-head indicators stack UPWARD from just over the head, closest first:
-		#   hearts → shuriken stash → katana charges → guard bar.
-		# Each element is placed directly above the previous one with a fixed gap, so a disabled row
-		# (shurikens/katana off) leaves NO empty space — everything above slides down to fill it.
-		# Row lengths follow the active match variants: hearts = max HP (wrap at 5 so a long health
-		# bar stays compact), shuriken row = catch cap (0 = off), katana marks = granted charges (0 = off).
+
 		const ROW_GAP := 8.5
 		var stash_row: int = MatchConfig.STASH_CAP if MatchConfig.shurikens_enabled else 0
 		var katana_row: int = MatchConfig.effective_katana_charges()
@@ -595,12 +394,12 @@ func _enter_match_intro() -> void:
 		p.stash_icons = sres["icons"]
 		if stash_row > 0:
 			y = sres["top_y"] - ROW_GAP
-		# Original vertical blade marks retain their familiar size and spacing.
+
 		var kres: Dictionary = _make_icon_grid(ind_root, katana_row, "res://sprites/katanas/katana_%s_6frame_native_144x16.png" % clan.sprite, 2, 6, 0.5, 6.0, ROW_GAP, 99, y, Color(0.85, 0.88, 0.95, 1.0))
 		p.katana_icons = kres["icons"]
 		if katana_row > 0:
 			y = kres["top_y"] - ROW_GAP
-		# Guard meter bar (track + depleting fill) sits at the top of the stack.
+
 		var gb_y: float = y - 1.5
 		var gb_bg: ColorRect = ColorRect.new()
 		gb_bg.color = Color(0.0, 0.0, 0.0, 0.55)
@@ -621,12 +420,9 @@ func _enter_match_intro() -> void:
 		p.bot_difficulty = GameState.ai_difficulty
 		if p.is_bot:
 			p._prepare_bot()
-	# De-overlap AT SPAWN TIME (not only at the round-start transition) so two fighters can never
-	# even appear stacked during the countdown — covers any rare upstream corruption immediately.
+
 	_separate_overlapping_spawns()
-	# HOW TO PLAY before the first countdown of a match (rounds 2+ go straight to the count).
-	# The countdown starts from the overlay's `closed` signal; players hold their spawn columns
-	# for as long as the overlay is up (see player.gd's MATCH_INTRO freeze).
+
 	if GameState.current_round == 1 and Settings.show_tutorial:
 		tutorial_overlay.open()
 	else:
@@ -637,15 +433,10 @@ func _enter_round() -> void:
 	perk_director.begin_round()
 	_in_countdown = false
 	banner_label.text = ""
-	# Online client: ROUND arrives from the host, possibly while the local countdown visuals are
-	# still up (clock drift / host tutorial) — clear them so nothing lingers over live play.
+
 	countdown_sprite.visible = false
 	round_display.visible = false
 
-# Safety net (runs the instant a round begins): if any two fighters are dangerously close, snap
-# EVERY fighter back to its canonical spawn point. Normally a no-op — fighters start on opposite
-# pads ~340 px apart — so this only fires if something upstream left two of them stacked, which
-# guarantees a round can never visibly begin with two ninjas on the same spot.
 func _separate_overlapping_spawns() -> void:
 	var too_close: bool = false
 	for i in players.size():
@@ -654,8 +445,7 @@ func _separate_overlapping_spawns() -> void:
 				too_close = true
 	if not too_close:
 		return
-	# Log the actual layout so a rare LIVE occurrence is captured with exact numbers, then snap
-	# every fighter to its canonical spawn. (Normally never fires — respawn already separates them.)
+
 	var report: String = ""
 	for p in players:
 		report += " slot%d=(%.0f,%.0f)" % [p.slot, p.position.x, p.position.y]
@@ -670,7 +460,7 @@ func _enter_round_end() -> void:
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
 	var winner_slot: int = _round_winner_slot
 	if winner_slot > 0:
-		_show_round_winner(winner_slot)   # "P<N> WINS" sprite composite
+		_show_round_winner(winner_slot)
 	else:
 		banner_label.text = "DRAW"
 
@@ -681,24 +471,22 @@ func _start_countdown() -> void:
 
 func _advance_countdown_stage() -> void:
 	if _countdown_stage == 0:
-		# "ROUND N" — premium ROUND wordmark + digit sprites (composed for the current round).
+
 		countdown_sprite.visible = false
 		_show_round_number(GameState.current_round)
 		round_display.visible = true
 		_pop_node(round_display, 1.25)
 	else:
-		# 3 / 2 / 1 / FIGHT — premium stone sprites.
+
 		round_display.visible = false
 		countdown_sprite.texture = STAGE_TEXTURES[_countdown_stage]
 		countdown_sprite.visible = true
-		_pop_node(countdown_sprite, 2.0 if _countdown_stage >= 4 else 1.5)   # FIGHT pops hardest
+		_pop_node(countdown_sprite, 2.0 if _countdown_stage >= 4 else 1.5)
 		var snd: String = STAGE_SOUNDS[_countdown_stage]
 		if snd != "":
 			Audio.play(snd)
 	_countdown_stage_until = Time.get_ticks_msec() / 1000.0 + STAGE_DURATIONS[_countdown_stage]
 
-# Build the "ROUND N" composite under round_display: the wordmark then each digit, laid out
-# left-to-right and centered on round_display's origin (so the pop scales around the centre).
 func _show_round_number(n: int) -> void:
 	for c in round_display.get_children():
 		c.free()
@@ -706,13 +494,12 @@ func _show_round_number(n: int) -> void:
 	var total: float = float(ROUND_WORD_TEX.get_width()) + ROUND_GAP_WORD
 	for ch in digits:
 		total += float(DIGIT_TEXS[int(ch)].get_width()) + ROUND_GAP_DIGIT
-	total -= ROUND_GAP_DIGIT   # no trailing gap
+	total -= ROUND_GAP_DIGIT
 	var x: float = -total * 0.5
 	x = _place_glyph(round_display, ROUND_WORD_TEX, x) + ROUND_GAP_WORD
 	for ch in digits:
 		x = _place_glyph(round_display, DIGIT_TEXS[int(ch)], x) + ROUND_GAP_DIGIT
 
-# Build "P<N> WINS" under win_display for the round's winner, centered on its origin.
 func _show_round_winner(slot: int) -> void:
 	for c in win_display.get_children():
 		c.free()
@@ -727,7 +514,6 @@ func _show_round_winner(slot: int) -> void:
 	win_display.visible = true
 	_pop_node(win_display, 1.4)
 
-# Add one glyph to `parent` (top-left at x, vertically centered on y=0); return its right edge.
 func _place_glyph(parent: Node2D, tex: Texture2D, x: float) -> float:
 	var s := Sprite2D.new()
 	s.texture = tex
@@ -736,8 +522,6 @@ func _place_glyph(parent: Node2D, tex: Texture2D, x: float) -> float:
 	parent.add_child(s)
 	return x + tex.get_width()
 
-# Punch-in for a Node2D (countdown sprite or the ROUND composite): scale `from` → 1.0 + fade.
-# modulate cascades to children, so the whole ROUND composite fades together.
 func _pop_node(node: Node2D, from: float) -> void:
 	node.scale = Vector2(from, from)
 	node.modulate.a = 0.0
@@ -749,7 +533,7 @@ func _pop_node(node: Node2D, from: float) -> void:
 func _on_kill_logged(_killer: int, _victim: int) -> void:
 	if GameState.current_state != GameState.State.ROUND:
 		return
-	# Last ninja standing: the round ends only when one (or none) remain alive.
+
 	var alive_count: int = 0
 	_round_winner_slot = 0
 	for p in players:
@@ -799,14 +583,10 @@ func _on_round_timeout(overtime: bool) -> void:
 	round_clock.start_overtime()
 	Audio.play("countdown")
 
-# Two katanas met. Action-movie beat: arc lightning between the blades, freeze the
-# whole scene for a moment (real-time hitstop), then let it resume with both fighters
-# recoiling a hair apart. Driven entirely off real time so the freeze is solid.
 func _on_clash(a: Node, b: Node, midpoint: Vector2) -> void:
-	# Lightning between the blades — 5-frame clash FX, plays through the freeze.
+
 	_spawn_fx("res://sprites/fx/clash_lightning_5frame_native_160x32.png", 5, midpoint, 12.0, 2.0)
-	# Push each fighter away from the other and HITSTOP only those two — never a global
-	# time-freeze — so the other players in a 4-player match keep playing while these two clash.
+
 	var dir_a: int = 1 if a.global_position.x >= b.global_position.x else -1
 	var until: float = Time.get_ticks_msec() / 1000.0 + Combat.clash_freeze_duration_s
 	if a.has_method("apply_clash_recoil"):
@@ -815,9 +595,8 @@ func _on_clash(a: Node, b: Node, midpoint: Vector2) -> void:
 	if b.has_method("apply_clash_recoil"):
 		b.apply_clash_recoil(-dir_a)
 		b.frozen_until = until
-	Audio.play("hit")   # placeholder clash clang
+	Audio.play("hit")
 
-# Spawn a one-shot strip animation (fx_anim.gd) at a world position, above the action.
 func _spawn_fx(tex_path: String, frame_count: int, pos: Vector2, fps: float, scale: float) -> void:
 	if not ResourceLoader.exists(tex_path):
 		return
@@ -834,7 +613,7 @@ func _spawn_fx(tex_path: String, frame_count: int, pos: Vector2, fps: float, sca
 
 func _process(_delta: float) -> void:
 	var t: float = Time.get_ticks_msec() / 1000.0
-	# End the clash hitstop on real time (Engine.time_scale==0 still ticks _process).
+
 	if _clash_freeze_until > 0.0 and t >= _clash_freeze_until:
 		_clash_freeze_until = 0.0
 		Engine.time_scale = 1.0
@@ -845,10 +624,9 @@ func _process(_delta: float) -> void:
 			banner_label.text = ""
 			countdown_sprite.visible = false
 			round_display.visible = false
-			# Online client: the countdown is a local visual only — the authoritative
-			# MATCH_INTRO → ROUND transition arrives from the host (Net state relay).
+
 			if not Net.is_client():
-				_separate_overlapping_spawns()   # safety net: never begin a round with fighters stacked
+				_separate_overlapping_spawns()
 				GameState.change_state(GameState.State.ROUND)
 		else:
 			_advance_countdown_stage()
@@ -860,22 +638,18 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var s = GameState.current_state
 		var S = GameState.State
-		# Esc during a live ROUND opens the pause overlay (pause_menu.gd owns it, not handled here).
-		# In the brief countdown / round-end transitions, Esc still bails to the title screen.
+
 		if event.keycode == KEY_ESCAPE:
-			# While the HOW TO PLAY overlay is up, Esc belongs to it (closes it → countdown).
+
 			if s == S.MATCH_INTRO and tutorial_overlay != null and tutorial_overlay.visible:
 				return
-			# Online: never bail to title from a transition — leaving the session is a
-			# deliberate act that lives in the pause menu (QUIT) instead.
+
 			if Net.is_online():
 				return
 			if s == S.MATCH_INTRO or s == S.ROUND_END:
 				print("[MAIN] ESC during transition -> TITLE")
 				GameState.change_state(S.TITLE)
 				get_viewport().set_input_as_handled()
-
-# === Map load + cleanup ===
 
 func _load_map(index: int) -> void:
 	_current_loaded_map = index
@@ -887,17 +661,14 @@ func _load_map(index: int) -> void:
 	var data: Dictionary = Maps.get_map(index)
 	spawn_points = data.spawn_points.duplicate()
 
-	# Sky: use this level's background image if present, else gradient fallback
-	var using_image: bool = _apply_sky_background(data.get("sky_top", data.bg_color), data.get("sky_bot", data.bg_color), data.get("background", ""))
+	var using_image: bool = ArenaFactory.apply_sky(sky_bg_solid, sky_rect, data.get("sky_top", data.bg_color), data.get("sky_bot", data.bg_color), data.get("background", ""))
 
 	sky_rect.modulate = data.get("background_tint", Color.WHITE)
 	sky_bg_solid.visible = not using_image
 
-	# Background decorations — skip when a real image is the backdrop (would clash)
 	bg_decorations.commands = [] if using_image else data.get("bg_decorations", [])
 	bg_decorations.queue_redraw()
 
-	# Foreground decorations
 	fg_decorations.commands = data.get("fg_decorations", [])
 	fg_decorations.queue_redraw()
 
@@ -910,7 +681,7 @@ func _load_map(index: int) -> void:
 	arena_root.add_child(terrain)
 	current_map_nodes.append(terrain)
 	for w in data.walls:
-		var body := _make_wall(w.center, w.size, data.wall_color, data.wall_edge_color, true)
+		var body := ArenaFactory.make_solid(arena_root, w.center, w.size, data.wall_color, data.wall_edge_color, true)
 		current_map_nodes.append(body)
 
 	for index_in_map in data.crumble_platforms.size():
@@ -922,10 +693,8 @@ func _load_map(index: int) -> void:
 		arena_root.add_child(platform)
 		current_map_nodes.append(platform)
 
-	# Non-colliding scenery sprites (e.g. neon gate pillars, ladder tower) drawn behind the
-	# platforms but in front of the sky image. Pure decoration — no collision, no gameplay.
 	for d in data.get("deco_sprites", []):
-		var deco := _make_deco(d)
+		var deco := ArenaFactory.make_decoration(arena_root, d)
 		if deco != null:
 			current_map_nodes.append(deco)
 
@@ -938,60 +707,6 @@ func _load_map(index: int) -> void:
 
 	print("[MAIN] Loaded map %d: %s" % [index, data.name])
 
-func _make_deco(d: Dictionary) -> Sprite2D:
-	var path: String = d.get("sprite", "")
-	if path == "" or not ResourceLoader.exists(path):
-		return null
-	var spr := Sprite2D.new()
-	spr.texture = load(path)
-	spr.centered = true
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	var region: Rect2 = d.get("sprite_region", Rect2())
-	var src_h: float = spr.texture.get_height()
-	if region.size.x > 0:
-		spr.region_enabled = true
-		spr.region_rect = region
-		src_h = region.size.y
-	# Scale uniformly so the on-screen height matches the requested value (preserves aspect).
-	var screen_h: float = d.get("height", src_h)
-	var s: float = screen_h / src_h
-	spr.scale = Vector2(s, s)
-	spr.position = d.get("center", Vector2.ZERO)
-	spr.z_index = int(d.get("z", -5))
-	spr.modulate = d.get("modulate", Color.WHITE)
-	arena_root.add_child(spr)
-	return spr
-
-func _apply_sky_background(top_color: Color, bottom_color: Color, bg_path: String) -> bool:
-	# Update letterbox fallback color to match map theme
-	if sky_bg_solid:
-		sky_bg_solid.color = top_color
-	# Prefer this level's background image if one is present on disk
-	if bg_path != "" and ResourceLoader.exists(bg_path):
-		var img: Resource = load(bg_path)
-		if img != null and img is Texture2D:
-			sky_rect.texture = img
-			return true
-	# Fallback: procedural gradient
-	var grad := Gradient.new()
-	grad.colors = PackedColorArray([top_color, bottom_color])
-	grad.offsets = PackedFloat32Array([0.0, 1.0])
-	var tex := GradientTexture2D.new()
-	tex.gradient = grad
-	tex.fill_from = Vector2(0, 0)
-	tex.fill_to = Vector2(0, 1)
-	tex.width = MAP_W
-	tex.height = MAP_H
-	sky_rect.texture = tex
-	return false
-
-# Build a horizontal row of small icons centered on x=0 at the given y (relative to player).
-# frame=-1 means single-frame texture; hframes>1 selects a frame from a sprite sheet.
-# Build `count` icons above the head, wrapping at `per_row` icons per row. The BOTTOM row sits at
-# `baseline_y`; extra rows stack UPWARD (more-negative y), each centered on its own width so a
-# partial last row stays centred. Returns {"icons": Array (index order), "top_y": float} where
-# top_y is the y of the highest row — the caller stacks the next element above it with no gap.
-# count <= 0 yields an empty row and leaves top_y at baseline_y (so disabled rows take no space).
 func _make_icon_grid(parent: Node2D, count: int, tex_path: String, frame: int, hframes: int,
 		icon_scale: float, h_spacing: float, v_spacing: float, per_row: int,
 		baseline_y: float, mod_color: Color) -> Dictionary:
@@ -1001,9 +716,9 @@ func _make_icon_grid(parent: Node2D, count: int, tex_path: String, frame: int, h
 	var tex: Texture2D = load(tex_path) if ResourceLoader.exists(tex_path) else null
 	var rows: int = int(ceil(float(count) / float(per_row)))
 	for i in count:
-		var row: int = i / per_row                                   # integer division → row index
+		var row: int = i / per_row
 		var col: int = i % per_row
-		var in_row: int = per_row if row < rows - 1 else count - per_row * (rows - 1)  # icons in this row
+		var in_row: int = per_row if row < rows - 1 else count - per_row * (rows - 1)
 		var icon: Sprite2D = Sprite2D.new()
 		icon.texture = tex
 		if hframes > 1:
@@ -1016,80 +731,6 @@ func _make_icon_grid(parent: Node2D, count: int, tex_path: String, frame: int, h
 		parent.add_child(icon)
 		icons.append(icon)
 	return {"icons": icons, "top_y": baseline_y - (rows - 1) * v_spacing}
-
-func _make_wall(center: Vector2, size: Vector2, fill_color: Color, edge_color: Color, transparent: bool = false, sprite_path: String = "", sprite_region: Rect2 = Rect2(), sprite_mode: String = "platform", walkable_y: float = -1.0, overhang: float = PLATFORM_VISUAL_OVERHANG) -> StaticBody2D:
-	var body: StaticBody2D = StaticBody2D.new()
-	body.add_to_group("arena_solids")
-	body.position = center
-	var col: CollisionShape2D = CollisionShape2D.new()
-	var rect: RectangleShape2D = RectangleShape2D.new()
-	rect.size = size
-	col.shape = rect
-	body.add_child(col)
-	# Continue collision across the seam while a body straddles the screen boundary.
-	for offset in Arena.seam_offsets(Rect2(center-size/2,size)):
-		var continuation := CollisionShape2D.new()
-		continuation.shape = rect
-		continuation.position = offset
-		body.add_child(continuation)
-	# Priority 1: sprite-based wall/platform
-	if sprite_path != "" and ResourceLoader.exists(sprite_path):
-		var sprite: Sprite2D = Sprite2D.new()
-		sprite.texture = load(sprite_path)
-		sprite.centered = true
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var src_w: float
-		var src_h: float
-		if sprite_region.size.x > 0:
-			sprite.region_enabled = true
-			sprite.region_rect = sprite_region
-			src_w = sprite_region.size.x
-			src_h = sprite_region.size.y
-		else:
-			src_w = float(sprite.texture.get_width())
-			src_h = float(sprite.texture.get_height())
-		if sprite_mode == "block":
-			# Atlas rectangles fill exactly the static collision bounds.
-			sprite.scale = size / Vector2(src_w, src_h)
-		elif sprite_mode == "fill":
-			# Full-screen vertical wall: scale uniformly so visual height = 450 (screen)
-			# Centered on body, which is assumed at world y=225 (screen center).
-			var s: float = 450.0 / src_h
-			sprite.scale = Vector2(s, s)
-			sprite.position = Vector2.ZERO
-		else:  # "platform" mode (default)
-			# overhang = visual width ÷ collision width. 1.0 = WYSIWYG (visual exactly matches the
-			# hitbox, no falling through visible edges); >1 draws the art wider than you can stand on.
-			var s: float = (size.x * overhang) / src_w
-			sprite.scale = Vector2(s, s)
-			# walkable_y = source-pixel row of the deck top (within region). -1 → use the
-			# platform.png default; component platforms each pass their own measured deck row.
-			var wy: float = PLATFORM_SRC_Y_WALKABLE if walkable_y < 0.0 else walkable_y
-			sprite.position = Vector2(0.0, -size.y / 2.0 + s * (src_h / 2.0 - wy))
-		body.add_child(sprite)
-	# Priority 2: legacy solid color rendering (unused when sprite or transparent)
-	elif not transparent:
-		var vis: ColorRect = ColorRect.new()
-		vis.size = size
-		vis.position = -size / 2.0
-		vis.color = fill_color
-		vis.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		body.add_child(vis)
-		var edge_top: ColorRect = ColorRect.new()
-		edge_top.size = Vector2(size.x, 2.0)
-		edge_top.position = Vector2(-size.x / 2.0, -size.y / 2.0)
-		edge_top.color = edge_color
-		edge_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		body.add_child(edge_top)
-		var edge_bot: ColorRect = ColorRect.new()
-		edge_bot.size = Vector2(size.x, 1.5)
-		edge_bot.position = Vector2(-size.x / 2.0, size.y / 2.0 - 1.5)
-		edge_bot.color = Color(fill_color).darkened(0.4)
-		edge_bot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		body.add_child(edge_bot)
-	# Priority 3: transparent collision-only (no visuals at all)
-	arena_root.add_child(body)
-	return body
 
 func _clear_shurikens() -> void:
 	if perk_director != null:

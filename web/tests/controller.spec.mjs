@@ -11,9 +11,9 @@ test('a controller starts the web game and selects visible menu buttons', async 
     window.__pads = [];
     Object.defineProperty(navigator, 'getGamepads', { value: () => window.__pads });
   });
-  await page.goto('http://127.0.0.1:8787');
+  await page.goto(process.env.NINJA_TEST_URL || 'http://127.0.0.1:8787');
   const state = () => page.evaluate(() => window.__ninjaState);
-  await expect.poll(async () => (await state())?.state).toBe('PROLOGUE');
+  await expect.poll(async () => (await state())?.state).toBe('WELCOME');
   // Hot-plug four standard controllers after the game has already loaded.
   await page.evaluate(() => {
     for (let index = 0; index < 4; index++) {
@@ -47,20 +47,7 @@ test('a controller starts the web game and selects visible menu buttons', async 
     }, { index, value });
     await page.waitForTimeout(180);
   }
-  await button(1); // Back cannot accidentally begin the game.
-  expect((await state()).prologueChapter).toBe(-1);
-  await button(0);
-  await expect.poll(async () => (await state()).prologueChapter).toBe(0);
-  await button(15);
-  await expect.poll(async () => (await state()).menuSelection.intro).toBe(1);
-  await page.screenshot({ path: testInfo.outputPath('controller-intro-skip.png') });
-  await button(14);
-  await expect.poll(async () => (await state()).menuSelection.intro).toBe(0);
-  await button(0);
-  await expect.poll(async () => (await state()).prologueChapter).toBe(1);
-  await axis(0, 0.9);
-  await axis(0, 0);
-  await button(0);
+  await button(0); // Confirm skips the welcome without activating a menu item.
   await expect.poll(async () => (await state()).state).toBe('TITLE');
   await page.waitForTimeout(1400);
   await axis(1, 0.15);

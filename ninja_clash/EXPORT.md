@@ -17,7 +17,7 @@ downloads are SHA-256 verified. The first build downloads about 1.3 GB of build 
 these tools are temporary and are not served to players. The output is
 `build/ninja-clash/public`; `api/rooms.js` exposes the existing room service.
 Configure Redis and TURN credentials in the import form or project settings.
-See [the complete setup guide](../web/SETUP.ru.md).
+See [the complete setup guide](../web/SETUP.md).
 
 Alternatively, from the repository root, build locally and publish using the CLI:
 ```

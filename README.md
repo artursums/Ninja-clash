@@ -1,120 +1,110 @@
-# Ninja Clash
+# Ninja Clash · Four Clans
 
-A 2D single-screen arena fighter for 1–4 players, built in **Godot 4.6 / GDScript**.
-Throw shurikens, dash-dodge to catch them out of the air, retrieve spent blades, and be the
-last ninja standing. TowerFall-inspired, built for the couch — with host-authoritative
-online 1v1.
+A single-screen arena fighter built with **Godot 4.6.2 and GDScript**. Fight with
+shurikens and a katana, catch incoming blades during a dodge, and compete for the
+last ninja standing. Play against the CPU, share a keyboard and controllers, or
+invite up to three friends through the browser.
 
-**Browser version:** [create your Vercel project and invite a friend](web/SETUP.ru.md).
+**[Play in your browser](https://ninja-clash-ffay.vercel.app/)** ·
+[Architecture](ninja_clash/docs/architecture/README.md) ·
+[Controls and mechanics](ninja_clash/README.md) · [Hosting guide](web/SETUP.md)
 
-![Ninja Clash gameplay](ninja_clash/screenshots/04_gameplay.png)
+![Arena gameplay](ninja_clash/screenshots/04_gameplay.png)
 
-| | |
+## What is implemented
+
+- Four arenas, four clans and fifteen character styles.
+- Local duels, solo matches against three CPU difficulty levels, and four-player free-for-all.
+- Browser rooms for 2–4 players: invitations, character selection, shared rules and ready checks.
+- Four collectible shuriken perks with independent ammunition, distinct icons and authored spawn locations.
+- A configurable round clock, health-based timeout resolution and bounded sudden death.
+- Keyboard and controller navigation, hot-plugged controllers, music and separate sound-effect controls.
+
+## Technical overview
+
+| Area | Implementation |
 |---|---|
-| **Engine** | Godot 4.6 · GDScript · Forward+ · GodotPhysics2D · 800×450 |
-| **Players** | 1–4 local (2 keyboard schemes + up to 4 gamepads) · 1v1 online |
-| **Content** | 4 arenas · 4 clans · 15 skins · 3 AI difficulty tiers · 9 match variants |
-| **Networking** | Host-authoritative, 30 Hz snapshots · desktop ENet · browser WebRTC rooms (service setup required) |
-| **Tests** | 46 GUT unit tests across 10 suites, all passing |
-| **Targets** | macOS · Windows · Linux · Web (WASM, live) |
+| Game | Godot 4.6.2, GDScript, 2D physics, 800 × 450 interface |
+| Input | Per-tick intent snapshots shared by local input, bots and remote players |
+| Multiplayer | Host-authoritative simulation, 30 Hz world snapshots, client interpolation |
+| Transports | WebRTC for browsers; ENet for native builds |
+| Room service | Node.js 22, Vercel Functions, Redis over REST, temporary TURN credentials |
+| Verification | GUT unit tests, native integration fixtures, Node tests and Playwright browser tests |
 
----
+The room service coordinates connections; combat runs on the host. Client movement
+is interpolated rather than predicted, so connection latency affects guest controls.
+This is a small-session game, without matchmaking, accounts or host migration.
 
-## Repository layout
+## A guided code review
 
-| Path | Contents |
+| Start here | What to look for |
 |---|---|
-| [`ninja_clash/`](ninja_clash/) | The game — Godot project, GDScript sources, sprites, audio, tests |
-| [`ninja_clash/docs/`](ninja_clash/docs/) | Design docs, architecture decision records, production history |
-| `build/ninja-clash/` | Exported web build (not tracked) |
+| [main.gd](ninja_clash/main.gd) | Scene composition, match setup and round transitions |
+| [player.gd](ninja_clash/player.gd) | Fighter simulation and combat state |
+| [fighter_presentation.gd](ninja_clash/fighter_presentation.gd) | Animation, inventory indicators, aiming reticle and effects |
+| [input_bindings.gd](ninja_clash/input_bindings.gd) / [player_input_router.gd](ninja_clash/player_input_router.gd) | Device assignment separated from simulation intent |
+| [bot_brain.gd](ninja_clash/bot_brain.gd) / [bot_navigation.gd](ninja_clash/bot_navigation.gd) | Combat decisions and platform traversal |
+| [net.gd](ninja_clash/net.gd) / [net_codec.gd](ninja_clash/net_codec.gd) | Session authority, replication and wire-format packing |
+| [rooms.mjs](web/server/rooms.mjs) | Room lifecycle, membership validation and signaling |
+| [tests](ninja_clash/tests) / [browser tests](web/tests) | Behavior checks across simulation, menus and real WebRTC sessions |
 
-**Start here:** [`ninja_clash/README.md`](ninja_clash/README.md) — controls, mechanics,
-architecture, how to run and test it.
+## Run locally
 
-## Running it
+Install **Godot 4.6.2**, import `ninja_clash/project.godot`, and press **F5**.
+The native game does not require Node.js, Redis or cloud accounts.
 
-1. Open **Godot 4.6** → **Project ▸ Import** → select `ninja_clash/project.godot`
-2. Press **F5** (main scene: `Main.tscn`)
+For a browser build, install Node.js 22 and the matching Godot export templates:
 
-Or headless: `/Applications/Godot.app/Contents/MacOS/Godot --path ninja_clash`
-
-Export presets and the web deploy pipeline: [`ninja_clash/EXPORT.md`](ninja_clash/EXPORT.md).
-
-Import this repository into Vercel with preset **Other** and Root Directory **./**.
-The root configuration builds Godot 4.6.2 and deploys the game together with the room API.
-Browser invitations require Redis and TURN environment variables. See the
-[step-by-step setup guide (Russian)](web/SETUP.ru.md).
-
-## Tests
-
-```bash
-/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
-    -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json
+```sh
+cd web
+npm ci
+npm run export -- --debug
+npm run dev
 ```
 
-The menu integration check covers selection, previews, mouse input, modal blocking,
-and pause/resume:
+Open `http://127.0.0.1:8787`. Local rooms use an in-memory store. Remote internet
+play needs the Redis and TURN configuration described in the [hosting guide](web/SETUP.md).
+The export tool locates Godot at its standard macOS application path; on other
+systems use `godot` in PATH or set the `GODOT` environment variable.
 
-```bash
-/Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
-    -s res://tests/integration/menu_flow.gd
+## Run checks
+
+From the repository root, with `godot` in PATH:
+
+```sh
+godot --headless --editor --path ninja_clash --import
+godot --headless --path ninja_clash -s res://addons/gut/gut_cmdln.gd
+godot --headless --path ninja_clash -s res://tests/integration/menu_flow.gd
+godot --headless --path ninja_clash -s res://tests/integration/round_clock_flow.gd
+npm --prefix web test
 ```
 
-## Documentation
+For browser checks, install Chrome and export a debug build first:
 
-| Document | What it covers |
-|---|---|
-| [Game overview](ninja_clash/docs/GAME.md) | The design vision, and where the build diverges from it |
-| [Design docs](ninja_clash/docs/gdd/) | Per-system GDDs and the systems index |
-| [Architecture decisions](ninja_clash/docs/architecture/) | ADR-0001 input/state separation · ADR-0002 prototype promotion · ADR-0003 online |
-| [Art bible](ninja_clash/docs/art-bible.md) | Visual direction and asset standards |
-| [Prototype report](ninja_clash/REPORT.md) | The PROCEED decision, with its caveats |
-| [Production history](ninja_clash/docs/production/) | Sprint plans, retrospective, milestone |
+```sh
+cd web
+npm run export -- --debug
+npm run test:browser
+```
 
----
+The browser suite drives the actual Godot canvas and WebRTC connections. TURN tests
+need a local `coturn` installation; Redis integration tests need `redis-server`.
+Those checks report a skip when their optional dependencies are absent. Export a
+release build with `npm run export` before publishing.
 
-## How this was built
+## Design and limitations
 
-This project was built with **Claude Code as a pair programmer**, and the git history
-reflects that — a number of commits carry an AI co-author trailer. I am stating this up
-front rather than leaving it to be discovered, because it is a fair question to ask of any
-recent codebase.
+[Architecture](ninja_clash/docs/architecture/README.md) describes the current component
+boundaries. [Design documents](ninja_clash/docs/gdd/) explain individual mechanics;
+older milestone reports are historical snapshots, not current feature specifications.
 
-What that means in practice, and what it does not:
-
-- **I owned the direction.** Game feel, the balance decisions, what got cut and what
-  shipped — those came from playing the thing repeatedly and deciding it wasn't right yet.
-  The 5 HP / katana departure from the original one-hit-kill design (documented in
-  [GAME.md](ninja_clash/docs/GAME.md)) is an example: a design change made by playing, not
-  by prompting.
-- **I owned the architecture.** The three ADRs in
-  [`ninja_clash/docs/architecture/`](ninja_clash/docs/architecture/) are the decisions I
-  consider the substance of this project. ADR-0001 — routing all simulation input through a
-  single per-tick snapshot instead of reading devices directly — is the one that mattered:
-  it was written before there was any online mode, and it is the reason adding
-  host-authoritative multiplayer later was a feed-swap rather than a rewrite.
-- **I owned knowing when a plan was wrong.** ADR-0002 records abandoning a from-scratch
-  rewrite two sprints in, after it became clear it was re-implementing already-validated
-  behaviour. Killing your own plan is a decision, and it is written down with the reasoning.
-- **The documentation is not decoration.** The sprint history, the retrospective and the
-  prototype report include the parts that did not go well — including, in
-  [REPORT.md](ninja_clash/REPORT.md), an explicit note that no formal multi-tester playtest
-  was ever run and that the PROCEED verdict is therefore developer confidence, not measured
-  data.
-
-Where I would push back on my own work: `player.gd` is 2,100 lines and should be several
-files; sound effects are still procedural beeps; test coverage deliberately targets the
-deterministic parts and leaves game feel to manual play. These are listed in the
-[known limitations](ninja_clash/README.md#known-limitations) section rather than left for
-someone to find.
-
----
+Combat and movement still share a fighter simulation, while rendering, bot decisions,
+input routing and network encoding have separate owners. Tests cover reproducible
+behavior; balance and the feel of remote play still need human playtesting across
+real networks and devices.
 
 ## License
 
-[MIT](LICENSE) — covers the code.
-
-The music tracks under `ninja_clash/audio/` were **generated with Suno AI** under a paid
-subscription that grants commercial use. They are deliberately left outside the MIT grant:
-MIT would let anyone redistribute and resell them, which is a broader permission than the
-subscription passes on. Use of the tracks is reserved.
+The [MIT license](LICENSE) covers the code. Bundled music is reserved and is not
+included in the MIT grant; its presence in this repository does not grant permission
+to redistribute or resell the tracks. Dependency licenses remain with their packages.

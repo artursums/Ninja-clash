@@ -1,23 +1,14 @@
-# Perk relic icons
+# Perk icons
 
-Generated with the built-in image_gen tool on 2026-09-14. Transparent source PNGs are preserved; Godot imports them at a maximum of 128 pixels for the small in-game sprites. No external files or API credentials are needed at runtime.
+Transparent source PNGs are preserved at their original resolution. Godot imports them
+at a maximum of 128 pixels for the small in-game sprites.
 
-The four silhouettes identify the extra throw without words: violet fox mask (reverse), golden eye (seeker), paired jade blades (phase swap), orange three-pronged blade (ricochet).
+| File | Effect | Visual identity |
+|---|---|---|
+| `reverse.png` | Reverse movement | Violet fox mask |
+| `seeker.png` | Seek the nearest target | Golden eye |
+| `swap.png` | Swap positions | Paired jade blades |
+| `ricochet.png` | Three terrain bounces | Orange three-pronged blade |
 
-## Generation prompts
-
-## reverse
-
-Use case: stylized-concept. Asset type: ONE production pixel-art pickup/inventory icon for Four Clans Shinobi Arena, a dark Japanese ninja platform fighting game. Strict pixel art on a 32 by 32 logical pixel grid, enlarged with nearest-neighbor into a square image, absolutely crisp square pixels, restrained 12-color palette, thick dark navy almost-black outline, cool steel edges and a warm cream top-left highlight. A compact physical ninja relic, beautiful polished handcrafted 16-bit game sprite. Centered symmetrical composition occupying 80 percent of canvas, entire item fully visible. Genuinely transparent RGBA background, no backdrop, no ground, no cast shadow, no UI box, no border, no words, no letters, no numbers, no watermark. Large readable silhouette and bold internal shapes readable at 20 pixels. Keep ornament extremely sparse. A small enchanted shinobi fox-mask amulet: ivory pointed fox ears, two broad violet eyes curving in opposite directions, violet silk knot at its base. Purple magical reversal theme. Recognizable mask silhouette, no arrows or writing. Dominant violet #e87bff with ivory and dark steel.
-
-## seeker
-
-Use case: stylized-concept. Asset type: ONE production pixel-art pickup/inventory icon for Four Clans Shinobi Arena, a dark Japanese ninja platform fighting game. Strict pixel art on a 32 by 32 logical pixel grid, enlarged with nearest-neighbor into a square image, absolutely crisp square pixels, restrained 12-color palette, thick dark navy almost-black outline, cool steel edges and a warm cream top-left highlight. A compact physical ninja relic, beautiful polished handcrafted 16-bit game sprite. Centered symmetrical composition occupying 80 percent of canvas, entire item fully visible. Genuinely transparent RGBA background, no backdrop, no ground, no cast shadow, no UI box, no border, no words, no letters, no numbers, no watermark. Large readable silhouette and bold internal shapes readable at 20 pixels. Keep ornament extremely sparse. A small four-point steel shuriken amulet enclosing one vivid golden catlike eye. The eye is the main shape, with dark vertical pupil and a cream glint. Subtle two gold prongs suggest sensing and pursuit. Dominant gold #f8d367 with cool gray steel. No rings or target crosshair.
-
-## swap
-
-Use case: stylized-concept. Asset type: ONE production pixel-art pickup/inventory icon for Four Clans Shinobi Arena, a dark Japanese ninja platform fighting game. Strict pixel art on a 32 by 32 logical pixel grid, enlarged with nearest-neighbor into a square image, absolutely crisp square pixels, restrained 12-color palette, thick dark navy almost-black outline, cool steel edges and a warm cream top-left highlight. A compact physical ninja relic, beautiful polished handcrafted 16-bit game sprite. Centered symmetrical composition occupying 80 percent of canvas, entire item fully visible. Genuinely transparent RGBA background, no backdrop, no ground, no cast shadow, no UI box, no border, no words, no letters, no numbers, no watermark. Large readable silhouette and bold internal shapes readable at 20 pixels. Keep ornament extremely sparse. A small pair of interlocking curved spectral ninja blades forming a broken circle, with two opposing pointed tips and a small hollow center. One blade pale mint and the other deeper turquoise, visibly two separate mirrored shapes. Phase-exchange theme, ethereal yet crisply pixelated. Dominant jade cyan #71eddd, dark steel outline.
-
-## ricochet
-
-Use case: stylized-concept. Asset type: ONE production pixel-art pickup/inventory icon for Four Clans Shinobi Arena, a dark Japanese ninja platform fighting game. Strict pixel art on a 32 by 32 logical pixel grid, enlarged with nearest-neighbor into a square image, absolutely crisp square pixels, restrained 12-color palette, thick dark navy almost-black outline, cool steel edges and a warm cream top-left highlight. A compact physical ninja relic, beautiful polished handcrafted 16-bit game sprite. Centered symmetrical composition occupying 80 percent of canvas, entire item fully visible. Genuinely transparent RGBA background, no backdrop, no ground, no cast shadow, no UI box, no border, no words, no letters, no numbers, no watermark. Large readable silhouette and bold internal shapes readable at 20 pixels. Keep ornament extremely sparse. A small three-pronged angular steel throwing blade with orange enamel. Three bold bent blade arms make a triangular rotational silhouette suggesting repeated rebounds, and a small dark triangular center hole. Ember-orange #ff9c54 with cream edge glints. Compact metal ninja relic, no motion trails or arrows.
+The same icon appears above a pickup and next to the fighter's ordinary ammunition.
+Color and silhouette identify the next special throw without text labels.

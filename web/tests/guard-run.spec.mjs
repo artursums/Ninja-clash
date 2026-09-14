@@ -7,7 +7,7 @@ test('guarding keeps the katana raised while the legs run in both directions', a
     if (/SCRIPT ERROR:|Failed to load script/.test(message.text())) errors.push(message.text());
   });
   await page.addInitScript(() => { window.__ninjaTest = true; });
-  await page.goto('http://127.0.0.1:8787');
+  await page.goto(process.env.NINJA_TEST_URL || 'http://127.0.0.1:8787');
   const state = () => page.evaluate(() => window.__ninjaState);
   const screen = expected => expect.poll(async () => (await state())?.state).toBe(expected);
   const fighter = async () => (await state()).fighters.find(p => p.slot === 1);
@@ -17,7 +17,7 @@ test('guarding keeps the katana raised while the legs run in both directions', a
     await page.mouse.click(box.x + (box.width - 800 * scale) / 2 + x * scale,
       box.y + (box.height - 450 * scale) / 2 + y * scale);
   }
-  await screen('PROLOGUE');
+  await screen('WELCOME');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   await page.keyboard.press('Escape');

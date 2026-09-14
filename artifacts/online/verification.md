@@ -1,69 +1,66 @@
-# Проверка браузерного мультиплеера — 12 сентября 2026
+# Browser multiplayer verification — September 12, 2026
 
-Реализованы комнаты по приглашению, браузерный WebRTC, выдача временных TURN-данных,
-сервер комнат для Vercel и сборка для публикации. Размещение и облачные сервисы пока
-не подключены: сохранённый вход в Vercel недействителен; владелец создаст аккаунты.
+This report records the initial browser-room implementation. At that milestone,
+invitation rooms, WebRTC, temporary TURN credentials and Vercel export support were
+implemented; cloud accounts and the first public deployment were still pending.
 
-## Результаты
+## Results at that milestone
 
-| Проверка | Результат |
+| Check | Result |
 |---|---|
-| GUT, игровые модульные тесты | 57 из 57 прошли |
-| Проверка меню | 261 проверка, 0 ошибок |
-| Node.js, комнаты/API/временные ключи | 10 из 10 прошли, включая настоящий Redis |
-| Chrome, два отдельных контекста | 3 сценария прошли: обычный WebRTC, принудительный TURN, ошибочные/закрытые приглашения |
-| Настольный ENet | Хост и гость завершились с кодом 0; передача управления сдвинула бойца гостя на 48 px; сюрикен хоста реплицировался |
-| Финальная release-сборка | Два браузера дошли до ROUND через TURN, проверено копирование ссылки и отсутствие отладочной телеметрии |
+| GUT unit tests | 57 passed |
+| Menu integration | 261 checks, no failures |
+| Node room/API/credential tests | 10 passed, including real Redis |
+| Chrome, separate contexts | Direct WebRTC, forced TURN, invalid/closed invitation scenarios passed |
+| Native ENet | Host and guest exited successfully; remote input moved the guest 48 pixels and replicated a host shuriken |
+| Release export | Two browsers reached ROUND through TURN; invitation copying and absence of debug telemetry checked |
 
-В браузерных сценариях проверены переходы лобби → карта → бой, удалённое управление,
-появление сюрикена у гостя и возврат гостя в меню после закрытия хоста. Для TURN обеим
-сторонам принудительно задано `iceTransportPolicy: relay`; тип реально выбранных
-кандидатов проверяется через `RTCPeerConnection.getStats()`.
+Browser scenarios covered lobby-to-round transitions, remote input, projectile
+replication and return to the menu after the host closed. Forced TURN tests configured
+`iceTransportPolicy: relay` on both sides and inspected the selected candidates with
+`RTCPeerConnection.getStats()`.
 
-[Результат release-проверки](release-check.json) · [Комната](room.png) ·
-[Бой в release через TURN](release-turn-round.png)
+[Release result](release-check.json) · [Room](room.png) · [Relayed match](release-turn-round.png)
 
-## Границы проверки
+## Scope and limitations
 
-Проверки выполнялись на одном Mac: Chrome, Godot 4.6.2, временный coturn на loopback,
-локальный сервер комнат. Redis-проверка использовала настоящий Redis с REST-адаптером.
-Обращение к Cloudflare при проверке формата выдачи ключей было заменено тестовым ответом;
-реальная услуга Cloudflare и опубликованная функция Vercel не проверялись.
+Checks ran on one Mac with Chrome, Godot 4.6.2, a temporary loopback coturn instance and
+a local room service. Redis tests used real Redis through a REST adapter. Cloudflare's
+credential response was mocked; the actual Cloudflare service and published Vercel
+Function were not covered by those initial checks.
 
-Перед утверждением о готовности удалённой игры нужны публикация, подключение настоящих
-Redis/TURN и матч между разными сетями. Качество управления на реальном пинге ещё
-не измерено. Предсказание движения и восстановление матча после отключения не реализованы.
-Godot при завершении некоторых headless-проверок сообщает об оставшихся ресурсах;
-подобное предупреждение наблюдалось и до добавления браузерных комнат.
+Remote usability still required deployment, real Redis/TURN credentials and a match
+across separate networks. Client prediction and match recovery were not implemented.
+Some headless fixtures reported resources still in use at shutdown; the warning
+predated browser-room support.
 
-## Проверка импорта из GitHub — 12 сентября 2026
+## GitHub import verification
 
-- Новый `web/tools/build-vercel.mjs` собрал release из чистой копии отслеживаемых файлов
-  на Mac и в Linux amd64 / Node 22 (Docker, 2 CPU, 4 ГБ памяти).
-- Linux-проверка включала скачивание официального Godot 4.6.2 и шаблонов,
-  проверку SHA-256, установку Web release-шаблона, импорт ресурсов и экспорт. Код выхода — 0.
-- Минимальный Debian-контейнер не содержал fontconfig и системных CA-сертификатов:
-  Godot сообщил о недоступных системных шрифтах и TLS во время импорта. Экспорт завершился;
-  ошибок GDScript не было. Контейнер не является точной копией образа Vercel.
-- Именно Linux-release проверен в Chrome: главный экран, Online, создание комнаты
-  (HTTP 200), cross-origin isolation, отсутствие ошибок скриптов и страницы.
-  [Снимок созданной комнаты](linux-release-room.png).
-- Серверные тесты: 10/10. Корневой API-обработчик импортируется и отвечает 405 на GET.
-- Реальная публикация Vercel, её окружение и внешние Redis/TURN остаются отдельной проверкой.
+The release build ran from tracked sources on macOS and Linux amd64 / Node 22 in Docker
+with two CPUs and 4 GB of memory. The Linux check downloaded Godot 4.6.2 and its templates,
+verified SHA-256 hashes, imported assets and exported successfully.
 
-## Исправления после первой публикации
+The minimal Debian image lacked fontconfig and system CA certificates. Godot reported
+unavailable system fonts and TLS during import, but export completed without GDScript
+errors. This image was not an exact reproduction of Vercel's build environment.
 
-На `https://ninja-clash-ffay.vercel.app/` обнаружены две проблемы:
-непривязанный к корню шаблон `levels` в `.vercelignore` исключал ресурсы арены,
-а Web Audio Sample в Godot 4.6.2 давал тишину при отдельных Music/SFX шинах.
-Последнее соответствует [Godot #119026](https://github.com/godotengine/godot/issues/119026).
-При работающем AudioContext и ненулевых данных MP3 выходной сигнал оставался нулевым.
+Chrome opened that Linux release, created a room with HTTP 200, confirmed cross-origin
+isolation and reported no script/page errors. [Room screenshot](linux-release-room.png).
+The root API returned 405 for GET; all ten server tests passed.
 
-Фильтр теперь исключает только `/levels/` в корне. Web использует Stream playback.
-Сборка отклоняет ошибки GDScript, даже если Godot завершился с кодом 0.
-Проверена release-сборка из копии исходников с применённым фильтром публикации:
-ошибок скриптов нет, после клика пик музыки около 0,77. Отдельный браузерный тест
-подтвердил тишину после выключения Music и слышимый сигнал SFX при навигации.
-Серверные и deployment-тесты: 12/12; браузерный audio-тест: 1/1.
+## Fixes after the first public deployment
 
-Пошаговая настройка: [web/SETUP.ru.md](../../web/SETUP.ru.md).
+The original `levels` exclusion in `.vercelignore` also excluded arena assets. It was
+changed to `/levels/` so only the root reference directory is excluded.
+
+Godot 4.6.2 Sample playback produced silent output through separate Music/SFX buses,
+consistent with [Godot issue #119026](https://github.com/godotengine/godot/issues/119026).
+Web playback now uses Stream mode. The build rejects GDScript errors even when Godot
+returns exit code zero.
+
+The filtered release export had no script errors and produced a music peak near 0.77
+after interaction. A browser test confirmed that muting Music silences the track while
+menu sound effects remain audible. Server/deployment tests passed 12/12 and the audio
+browser test passed 1/1.
+
+Current deployment instructions: [hosting guide](../../web/SETUP.md).

@@ -1,5 +1,5 @@
 # Autoload: Audio
-# Music playback plus the SFX layer. Music tracks (generated with Suno AI) ship under audio/start-menu/
+# Music playback plus the SFX layer. Music tracks ship under audio/start-menu/
 # and audio/gameplay/ on a dedicated Music bus; Settings drives the Music and SFX bus
 # levels independently. Sound EFFECTS are still procedural beeps synthesised at startup
 # via AudioStreamWAV — dropping a real <key>.ogg/.wav into audio/sfx/ overrides the beep
@@ -141,7 +141,7 @@ func _on_state_changed(new_state: int) -> void:
 		GameState.State.MATCH_END, GameState.State.ONLINE_MENU, GameState.State.ONLINE_LOBBY,
 	]
 	var fight_states := [GameState.State.ROUND, GameState.State.ROUND_END]
-	if new_state == GameState.State.PROLOGUE:
+	if new_state == GameState.State.WELCOME:
 		stop_music()
 	elif new_state in menu_states:
 		play_music(MENU_MUSIC_PATH)

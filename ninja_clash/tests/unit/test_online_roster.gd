@@ -5,8 +5,8 @@ func test_names_are_required_trimmed_and_bounded() -> void:
 	var roster = Roster.new()
 	assert_false(roster.add(1, "   "))
 	assert_false(roster.add(1, "\n\t\u200b"))
-	assert_true(roster.add(1, "  Mari Õun  "))
-	assert_eq(roster.member(1).name, "Mari Õun")
+	assert_true(roster.add(1, "  Player \u00c9  "))
+	assert_eq(roster.member(1).name, "Player \u00c9")
 	assert_eq(Roster.clean_name("abcdefghijklmnopq"), "abcdefghijklmnop")
 	assert_eq(Roster.clean_name("a\u202eb"), "ab")
 

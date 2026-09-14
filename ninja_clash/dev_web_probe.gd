@@ -20,8 +20,7 @@ func _process(delta: float) -> void:
 	var main: Node = get_parent()
 	var focus := get_viewport().gui_get_focus_owner()
 	var data := {"state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
-		"prologueChapter": main.prologue_screen.chapter,
-		"menuSelection": {"intro": main.prologue_screen._cursor, "title": main.title_screen.cursor,
+		"menuSelection": {"title": main.title_screen.cursor,
 			"online": main.online_menu_screen._cursor, "focus": focus.text if focus is Button else "field" if focus is LineEdit else ""},
 		"peer": Net._peer_id, "room": Net.invitation_code, "fighters": fighters,
 		"shurikens": get_tree().get_nodes_in_group("shurikens").size(), "puppets": Net._puppet_shurikens.size(),

@@ -46,7 +46,7 @@ func run() -> void:
 		wall.collision_layer = 0
 	var fixture: Array = []
 	for rect in [Rect2(780,0,100,495),Rect2(0,0,780,60),Rect2(0,60,60,435),Rect2(60,430,720,65)]:
-		var wall: Node = game._make_wall(rect.get_center(),rect.size,Color.WHITE,Color.WHITE,true)
+		var wall: Node = game.ArenaFactory.make_solid(game.arena_root, rect.get_center(),rect.size,Color.WHITE,Color.WHITE,true)
 		fixture.append(wall)
 	await physics_frame
 	await process_frame
@@ -99,7 +99,7 @@ func run() -> void:
 	s.free()
 	b.is_iframe = false
 	b.position = Vector2(600,300)
-	var barrier: Node = game._make_wall(Vector2(440,270),Vector2(20,180),Color.WHITE,Color.WHITE,true)
+	var barrier: Node = game.ArenaFactory.make_solid(game.arena_root, Vector2(440,270),Vector2(20,180),Color.WHITE,Color.WHITE,true)
 	await physics_frame
 	await process_frame
 	s = shot(Rules.Kind.SWAP,Vector2(220,300),Vector2(500,0))

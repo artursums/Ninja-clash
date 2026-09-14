@@ -86,6 +86,6 @@ The curated anchors are validated against live terrain for support and headroom.
 tests verify that each anchor is reachable from every authored player spawn using the
 existing traversal graph. They avoid crumbling surfaces and the screen-wrap openings.
 
-The [generated icon sources and prompts](../../sprites/perks/README.md) are stored in
+The [perk icon sources and specifications](../../sprites/perks/README.md) are stored in
 the project; Godot imports the transparent originals at 128 pixels and displays them
 at inventory/pickup size. The runtime has no image service dependency.

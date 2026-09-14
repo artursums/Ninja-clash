@@ -36,9 +36,9 @@ the last ninja standing. TowerFall-inspired, built for couch play — with 2–4
 | **Skins** | 15 original appearance styles with expanded movement animations, in all 4 clan colours |
 | **Modes** | P1 vs P2 · P1 vs CPU · P1 vs 3 CPUs (free-for-all) · Online 2–4 players |
 | **AI** | 3 tiers — Genin, Chunin, Jonin |
-| **Rulesets** | Fight Setup screen — 9 configurable variants, persisted between sessions |
-| **Audio** | 3 Suno-generated music tracks on a dedicated bus; procedural SFX with drop-in override |
-| **Tests** | 63 GUT unit tests across 14 suites |
+| **Rulesets** | Fight Setup screen — configurable combat and round-time rules, persisted between sessions |
+| **Audio** | Dedicated Music/SFX buses, arena music, synthesized effects and file overrides |
+| **Tests** | GUT unit tests, native integration fixtures and Playwright browser checks |
 | **Targets** | macOS · Windows · Linux · Web (WASM, live) |
 
 ---
@@ -155,6 +155,10 @@ stick somewhere and stay retrievable, so ammo thins out only when someone actual
 
 ## Match flow
 
+The game opens with a short animated welcome and proceeds automatically to the main
+menu. Keyboard, mouse or controller input can skip it; invitation links continue into
+the online join flow. Browser audio begins after user interaction.
+
 1. **Title** → Start / Online / Options / Credits / Quit
 2. **Mode select** — choose a mode; modes with CPU opponents then require a Genin / Chunin / Jonin choice
 3. **Clan select** — pick clan and skin (**Tab** opens Fight Setup here)
@@ -178,6 +182,7 @@ persist to `user://match_config.cfg`.
 | Max HP | 1–9 |
 | Rounds to win | 1–15 |
 | Blade wave (charged katana projectile) | on-off |
+| Round time | off or 30–300 seconds in 30-second steps; default 60 |
 
 ---
 
@@ -207,13 +212,15 @@ directly between browsers or through TURN when direct connectivity is blocked.
 The host tab must remain active. Desktop IP sessions and browser rooms are separate transports.
 
 The new browser mode requires deploying the room API and configuring Redis/TURN; exporting
-the static game alone is insufficient. Follow [the setup guide](../web/SETUP.ru.md).
+the static game alone is insufficient. Follow [the setup guide](../web/SETUP.md).
 
 Dev shortcuts: `-- --host`, `-- --join=<ip>`, `-- --online-autotest`.
 
 ---
 
 ## Architecture
+
+See the [current runtime architecture](docs/architecture/README.md) for component boundaries and a code map.
 
 Autoloads (`project.godot`):
 
@@ -248,7 +255,7 @@ from the pixel-art kit in `sprites/menu/`.
 
 ## Tests
 
-63 unit tests across 14 suites, run with [GUT](https://github.com/bitwes/Gut) 9.6:
+Unit tests run with the bundled [GUT](https://github.com/bitwes/Gut) 9.6 runner:
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path ninja_clash \
@@ -257,8 +264,8 @@ from the pixel-art kit in `sprites/menu/`.
 
 Coverage focuses on the pure, deterministic parts — network codec, match-config
 load/save/clamp, combat scoring, input intent, tuning integrity, settings persistence, map
-data and bot decision logic. GUT's `-s` mode does not load autoloads, so these test by
-direct instantiation and dependency injection rather than through the singletons.
+data and bot decision logic. Pure-rule tests instantiate their dependencies directly; integration fixtures exercise
+the actual scene and its autoloads.
 
 Boot smoke test: `Godot --headless --path ninja_clash --quit-after 90`.
 
@@ -268,8 +275,11 @@ Boot smoke test: `Godot --headless --path ninja_clash --quit-after 90`.
 
 ```
 ninja_clash/
-├── main.gd              # orchestrator: input map, arena building, round flow
-├── player.gd            # fighter: movement, combat, bot brain, online puppet
+├── main.gd              # scene composition and round flow
+├── player.gd            # fighter movement and combat state
+├── fighter_presentation.gd # animation, inventory indicators and effects
+├── input_bindings.gd    # keyboard layouts and controller assignment
+├── arena_factory.gd     # map-node construction
 ├── shuriken.gd          # projectile + retrieval
 ├── net.gd, net_codec.gd # online session + wire format
 ├── maps.gd              # 4 arenas as data
@@ -289,14 +299,21 @@ Stated plainly, because they are real:
 
 - **Online supports 2–4 humans**, with no client-side prediction — fine on LAN, input lag scales
   with ping over the internet.
-- **Sound effects are procedural beeps.** Music is real; the SFX layer is synthesised at
-  startup and awaits a proper sound pass (the drop-in override path exists).
-- **`player.gd` is 2,100 lines.** It is sectioned and documented, but movement, combat, bot
-  AI and network-puppet concerns belong in separate files. Splitting it is the next
-  refactor on the list.
-- **Test coverage is deliberately narrow** — the deterministic, non-visual parts. Movement
-  and combat feel are validated by hand, not by assertion.
-- **Menu screens read Godot Input directly** rather than going through the router. That is
-  UI navigation and does not affect simulation determinism, but it is an inconsistency.
+- **Guest movement is interpolated, not predicted.** Internet latency remains visible.
+- **Fighter movement and combat still share a simulation class.** Presentation, bot decisions,
+  navigation, input routing and network packing are separate components.
+- **Automated checks do not measure game feel.** Native and browser integration tests exercise
+  real movement, combat and menus, but balance needs human playtesting.
 - No formal multi-tester playtest has been run; tuning reflects extended solo and
   versus-bot iteration. See [`REPORT.md`](REPORT.md).
+
+## Perks and round timing
+
+Perks spawn at authored, reachable platform locations. Each pickup adds one independent
+special throw: three ordinary shurikens plus a perk means four throws. The special icon
+sits beside the ordinary stash and is consumed first, even when the ordinary stash is empty.
+See [shuriken perks](docs/gdd/shuriken-perks.md) for reverse, seeker, swap and ricochet behavior.
+
+Rounds default to 60 seconds. The sole highest-health survivor wins on timeout; tied
+leaders continue at one heart for 20 seconds of sudden death. A surviving tie is a draw.
+See [round clock](docs/gdd/round-clock.md) for configuration and authority rules.

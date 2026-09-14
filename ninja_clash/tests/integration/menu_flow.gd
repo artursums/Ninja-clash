@@ -36,14 +36,13 @@ func run() -> void:
 	state = root.get_node("GameState")
 	net = root.get_node("Net")
 	await process_frame
-	check(state.current_state == state.State.PROLOGUE and not game.title_screen.visible, "Boot waits at the prologue gate")
-	check(not root.get_node("Audio")._music_player.playing, "The gate does not start inaudible music")
-	click_control(game.prologue_screen._begin_button)
-	check(game.prologue_screen.chapter == 0 and root.get_node("Audio")._music_player.playing, "Begin starts the story and music together")
-	game.prologue_screen._finish()
-	await create_timer(0.45).timeout
+	check(state.current_state == state.State.WELCOME and not game.title_screen.visible, "Boot shows the welcome animation")
+	check(not root.get_node("Audio")._music_player.playing, "Welcome starts without forcing browser audio")
+	click_control(game.welcome_screen)
+	check(root.get_node("Audio")._music_player.playing, "Skipping welcome starts menu music on interaction")
+	await create_timer(0.4).timeout
 	var title: Control = game.title_screen
-	check(title._intro_active, "The story leads into the title assembly")
+	check(title._intro_active, "Welcome leads into the title assembly")
 	click_control(title._buttons[0])
 	check(not title._intro_active and state.current_state == state.State.TITLE, "Skipping the intro does not activate a menu item")
 	for piece in title._pieces:

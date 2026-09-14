@@ -15,7 +15,7 @@ enum State {
 	MATCH_END,
 	MATCH_SETUP,   # Fight Setup / Variants screen (opened from clan select); appended so enum values don't shift
 	ONLINE_MENU,   # Online host/join screen (ADR-0003); appended so enum values don't shift
-	PROLOGUE,
+	WELCOME,
 	ONLINE_LOBBY,
 }
 
@@ -47,7 +47,7 @@ const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "g
 # alongside the 5-pose sheet), stored under costumes/<style>/<color>_*.png.
 const RICH_SKINS: Array = ["pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
 
-var current_state: int = State.PROLOGUE
+var current_state: int = State.WELCOME
 var game_mode: int = Mode.HUMAN_VS_HUMAN
 var online_players: Array = []
 var ai_difficulty: int = 1   # 1=GENIN, 2=CHUNIN, 3=JONIN
