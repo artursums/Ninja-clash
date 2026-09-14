@@ -14,7 +14,7 @@ invite up to three friends through the browser.
 ## What is implemented
 
 - Four arenas, four clans and fifteen character styles.
-- Local duels, solo matches against three CPU difficulty levels, and four-player free-for-all.
+- Local multiplayer for 2–4 people, solo matches against three CPU difficulty levels, and free-for-all against three CPUs.
 - Browser rooms for 2–4 players: invitations, character selection, shared rules and ready checks.
 - Four collectible shuriken perks with independent ammunition, distinct icons and authored spawn locations.
 - A configurable round clock, health-based timeout resolution and bounded sudden death.
@@ -47,6 +47,8 @@ This is a small-session game, without matchmaking, accounts or host migration.
 | [net.gd](ninja_clash/net.gd) / [net_codec.gd](ninja_clash/net_codec.gd) | Session authority, replication and wire-format packing |
 | [rooms.mjs](web/server/rooms.mjs) | Room lifecycle, membership validation and signaling |
 | [tests](ninja_clash/tests) / [browser tests](web/tests) | Behavior checks across simulation, menus and real WebRTC sessions |
+
+Local multiplayer supports two keyboard layouts and controllers. With one keyboard player, connect a controller for each additional player; with both keyboard layouts in use, three players need one controller and four need two. Four controllers also work. Controllers fill the remaining player slots in connection order. The optional tutorial is off by default; standard rounds start with 3 shurikens, 3 katana charges and 5 HP.
 
 ## Run locally
 

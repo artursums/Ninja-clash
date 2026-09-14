@@ -27,6 +27,8 @@ flowchart TD
 - [`input_bindings.gd`](../../input_bindings.gd) owns device mappings and hot-plug signals.
   [`player_input_router.gd`](../../player_input_router.gd) captures simulation intent
   once per tick. Menu navigation has its own UI input path.
+- [`local_selection.gd`](../../local_selection.gd) tracks local readiness and exclusive clan reservations.
+  [`clan_select.gd`](../../clan_select.gd) presents the same selection flow for 1–4 humans.
 - [`player.gd`](../../player.gd) owns movement, health, ammunition and combat state.
   [`fighter_presentation.gd`](../../fighter_presentation.gd) receives its actor explicitly
   and handles visual updates. It does not decide hits, grant perks or award scores.

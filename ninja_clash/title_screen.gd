@@ -89,7 +89,6 @@ func _build() -> void:
 		_register_piece(btn, Vector2(36 + i * 8, 42 + i * 5), 0.025, 0.25 + i * 0.07)
 	_build_options()
 	_build_credits()
-	UI.label(_content, "D-pad / left stick: select   ·   A / Cross: confirm   ·   B / Circle: back", Rect2(58, 388, 700, 24), 14, UI.MUTED)
 
 func _register_piece(node: Control, offset: Vector2, angle: float, delay: float) -> void:
 	node.pivot_offset = node.size / 2.0

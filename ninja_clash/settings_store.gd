@@ -16,7 +16,7 @@ var master_volume: float = 1.0   ## 0..1 (linear) — overall "sound" level (Mas
 var music_volume: float = 1.0    ## 0..1 (linear) — Music bus
 var sfx_volume: float = 1.0      ## 0..1 (linear) — SFX bus (effects)
 var fullscreen: bool = false
-var show_tutorial: bool = true   ## HOW TO PLAY overlay before each match's first countdown
+var show_tutorial: bool = false  ## Optional controls overlay before the first countdown.
 var last_join_ip: String = ""    ## last address typed on the ONLINE join screen (convenience)
 
 

@@ -61,7 +61,7 @@ const TAB_ROWS: Array = [
 		["SHARE / VIEW", "FIGHT SETUP", "Open match variants from clan select"],
 		["OPTIONS / MENU", "PAUSE", "Pause the round"],
 		["", "", ""],
-		["2–4 PADS", "COUCH PLAY", "1st pad = P1, 2nd = P2 … hot-plug any time"],
+		["2–4 PADS", "COUCH PLAY", "Controllers fill slots after keyboard players"],
 	],
 ]
 
@@ -171,13 +171,11 @@ func _build() -> void:
 		_name_labels.append(_label(NAME_X, y, NAME_W, ROW_H, 13, COL_SEL))
 		_desc_labels.append(_label(DESC_X, y, DESC_W, ROW_H, 12, COL_DIM))
 
-	# Shared mechanics tips + the close / disable hints.
+	# Shared mechanics tips.
 	var tips := _label(PANEL_X, 398.0, PANEL_W, 16.0, 11, COL_DIM)
 	tips.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tips.text = FOOT_TIPS
-	var hint := _label(PANEL_X, 416.0, PANEL_W, 18.0, 13, COL_SEL)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.text = "✕ / SPACE / ENTER — START      ◄ ► — SWITCH TAB      turn off: OPTIONS ▸ TUTORIAL"
+	preload("res://menu_ui.gd").button(self, "START", Rect2(350, 414, 100, 24), _close, 14)
 
 
 func _label(x: float, y: float, w: float, h: float, font_size: int, col: Color) -> Label:

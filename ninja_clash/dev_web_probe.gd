@@ -15,6 +15,7 @@ func _process(delta: float) -> void:
 	var fighters: Array = []
 	for p in get_tree().get_nodes_in_group("players"):
 		fighters.append({"slot": p.slot, "x": p.position.x, "y": p.position.y, "hp": p.hp, "stash": p.stash,"perk": p.perk_kind,"charges": p.perk_charges,"reverse": p.reverse_left,
+			"isBot": p.is_bot, "katanaCharges": p.katana_charges,
 			"guard": p.is_defending, "grounded": p.is_on_floor(), "frame": p.visual.frame,
 			"bladeVisible": p.katana_sprite != null and p.katana_sprite.visible})
 	var main: Node = get_parent()
@@ -22,6 +23,8 @@ func _process(delta: float) -> void:
 	var data := {"state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
 		"menuSelection": {"title": main.title_screen.cursor,
 			"online": main.online_menu_screen._cursor, "focus": focus.text if focus is Button else "field" if focus is LineEdit else ""},
+		"localCount": GameState.local_player_count,
+		"clanSelection": {"clans": main.clan_select_screen.selection.clans, "ready": main.clan_select_screen.selection.ready},
 		"peer": Net._peer_id, "room": Net.invitation_code, "fighters": fighters,
 		"shurikens": get_tree().get_nodes_in_group("shurikens").size(), "puppets": Net._puppet_shurikens.size(),
 		"remoteHeld": Net._remote_inputs,

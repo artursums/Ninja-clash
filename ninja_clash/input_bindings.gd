@@ -30,6 +30,7 @@ func _ready() -> void:
 	_append_key("p1_aim_down", KEY_DOWN)
 	_rebind_gamepads()
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	GameState.state_changed.connect(_on_state_changed)
 	_add_key("menu_cancel", KEY_ESCAPE)
 	_add_pad_button("menu_cancel", JOY_BUTTON_B, -1)
 	_add_key("online_start", KEY_F)
@@ -74,9 +75,21 @@ func _rebind_gamepads() -> void:
 			if not InputMap.has_action(name):
 				InputMap.add_action(name)
 			_clear_pad_events(name)
-	for i in mini(pads.size(), 4):
-		_add_pad(i + 1, pads[i])
-		_add_pad_button("p%d_skin" % (i + 1), JOY_BUTTON_X, pads[i])
+	var humans := GameState.num_players() if GameState.game_mode == GameState.Mode.HUMAN_VS_HUMAN and GameState.online_players.is_empty() else 1
+	var slots := controller_slots(humans, pads.size())
+	for i in slots.size():
+		_add_pad(slots[i], pads[i])
+		_add_pad_button("p%d_skin" % slots[i], JOY_BUTTON_X, pads[i])
+
+static func controller_slots(humans: int, pad_count: int) -> Array[int]:
+	var slots: Array[int] = []
+	var keyboard_slots := clampi(humans - pad_count, 0, 2) if humans > 1 else 0
+	for i in mini(pad_count, 4 - keyboard_slots):
+		slots.append(keyboard_slots + i + 1)
+	return slots
+
+func _on_state_changed(_state: int) -> void:
+	_rebind_gamepads()
 
 func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
 	_rebind_gamepads()

@@ -48,6 +48,7 @@ const ELEMENTAL_BY_COLOR := {"magenta": "wraith", "cyan": "tempest", "green": "g
 const RICH_SKINS: Array = ["pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
 
 var current_state: int = State.WELCOME
+var local_player_count := 2
 var game_mode: int = Mode.HUMAN_VS_HUMAN
 var online_players: Array = []
 var ai_difficulty: int = 1   # 1=GENIN, 2=CHUNIN, 3=JONIN
@@ -133,9 +134,12 @@ func skin_walk_path(color: String, style_idx: int) -> String:
 func skin_swing_path(color: String, style_idx: int) -> String:
 	return _skin_anim_path(color, style_idx, "swing")
 
-# 2 for the duel modes, 4 for the free-for-all.
 func num_players() -> int:
-	return online_players.size() if not online_players.is_empty() else (4 if game_mode == Mode.FFA else 2)
+	if not online_players.is_empty():
+		return online_players.size()
+	if game_mode == Mode.HUMAN_VS_HUMAN:
+		return clampi(local_player_count, 2, 4)
+	return 4 if game_mode == Mode.FFA else 2
 
 # True for fighters the computer controls this match.
 func slot_is_bot(slot: int) -> bool:

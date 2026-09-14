@@ -116,7 +116,7 @@ Two keyboard schemes (WASD for P1, numpad for P2) plus up to four gamepads with 
 on a TowerFall-on-PlayStation layout. Rather than duplicate the mapping here and let it rot,
 the authoritative table lives with the code: **[`ninja_clash/README.md` ▸ Controls](../README.md#controls)**.
 
-Bindings are constructed at runtime in `main.gd::_setup_input_map()`, which is also what
+Bindings are constructed at runtime in `input_bindings.gd`, which is also what
 lets gamepad assignment be re-derived whenever a pad connects or disconnects.
 
 ---

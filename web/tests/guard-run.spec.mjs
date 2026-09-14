@@ -27,6 +27,8 @@ test('guarding keeps the katana raised while the legs run in both directions', a
   await screen('MODE_SELECT');
   await page.waitForTimeout(300);
   await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
   await screen('CLAN_SELECT');
   await page.waitForTimeout(300);
   await click(311, 375);

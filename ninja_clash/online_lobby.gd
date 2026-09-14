@@ -108,10 +108,10 @@ func _refresh() -> void:
 	map_button.disabled = not Net.is_host() or Net.lobby.locked
 	rules_button.text = ("EDIT RULES" if Net.is_host() else "VIEW RULES") + "\n%d HP · %d WINS" % [MatchConfig.max_hp, GameState.target_score]
 	rules_button.add_theme_font_size_override("font_size", 14)
-	rules_button.tooltip_text = "Host: edit match rules (Tab / gamepad Select)" if Net.is_host() else "View match rules (Tab / gamepad Select). Only the host can edit."
+	rules_button.tooltip_text = "Edit match rules" if Net.is_host() else "View match rules. Only the host can edit."
 	rules_button.disabled = Net.lobby.locked
 	start_button.text = "START WITH %d PLAYERS" % players.size() if Net.is_host() else "HOST STARTS THE MATCH"
-	start_button.tooltip_text = "Host: press F or gamepad Start"
+	start_button.tooltip_text = "Start the match when everyone is ready."
 	start_button.disabled = not Net.is_host() or not Net.lobby.can_start()
 	UI.select(start_button, not start_button.disabled)
 	if Net.lobby.locked:

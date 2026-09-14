@@ -48,10 +48,10 @@ func run() -> void:
 	modes._continue()
 	modes._input_lockout_until = 0
 	await press(modes,"p1_aim_down")
-	check(modes.diff == 2 and modes._rank_open,"Down selects Chunin inside the mandatory rank dialog")
+	check(modes.diff == 2 and modes._choice_open,"Down selects Chunin inside the mandatory rank dialog")
 	await capture("rank")
 	await press(modes,"menu_cancel")
-	check(not modes._rank_open and state.current_state == state.State.MODE_SELECT,"Cancel returns to mode cards")
+	check(not modes._choice_open and state.current_state == state.State.MODE_SELECT,"Cancel returns to mode cards")
 	modes._continue()
 	modes._input_lockout_until = 0
 	await press(modes,"p1_confirm")

@@ -37,12 +37,11 @@ func test_load_missing_file_keeps_defaults() -> void:
 	assert_false(s.fullscreen)
 
 
-func test_settings_show_tutorial_defaults_on() -> void:
+func test_settings_show_tutorial_defaults_off() -> void:
 	# Arrange / Act — a fresh store with no file loaded.
 	var s = autofree(SettingsScript.new())
 
-	# Assert — the HOW TO PLAY overlay is opt-out, so a first boot must show it.
-	assert_true(s.show_tutorial, "tutorial defaults ON for first-time players")
+	assert_false(s.show_tutorial, "tutorial defaults OFF for first-time players")
 
 
 func test_settings_show_tutorial_off_survives_save_load_roundtrip() -> void:

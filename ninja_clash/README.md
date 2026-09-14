@@ -64,16 +64,18 @@ Xbox pads both work; button constants are positional, so one mapping covers both
 
 ## Controls
 
-Click **Begin** or press **Enter**, **Space**, or **A / Cross** to start the opening chronicle.
+The animated welcome opens automatically. Press **Enter**, **Space**, or **A / Cross** to skip it.
 Use the **D-pad / left stick** to select menu buttons, **A / Cross** to confirm, and
 **B / Circle** to go back or skip the intro. The selected button has a gold outline.
+Local Multiplayer lets 2–4 people select unique clans and play together. The two keyboard layouts cover P1 and P2; controllers fill the remaining slots. For four players, use two keyboard layouts plus two controllers, one keyboard layout plus three controllers, or four controllers. The optional tutorial is off by default. Standard loadouts are 3 shurikens, 3 katana charges and 5 HP.
+
 All connected controllers can navigate shared menus, including controllers plugged in after launch.
-The three chapters also advance automatically. Room invitations go straight to the online menu after Begin.
+After the welcome, room invitations continue to the online menu.
 The online name field still uses keyboard text entry; its Back and Continue buttons support the controller.
 Browsers may require a click or keyboard press to enable audio even when starting with a controller
 ([Godot web limitations](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html#audio)).
 
-Bindings are built at runtime in `main.gd::_setup_input_map()` — there are no bindings
+Bindings are built at runtime in `input_bindings.gd` — there are no bindings
 stored in `project.godot`, so gamepad assignment can be re-derived on every hot-plug.
 
 ### Keyboard — Player 1 (WASD)

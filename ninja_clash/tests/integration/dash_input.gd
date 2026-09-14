@@ -64,7 +64,9 @@ func run() -> void:
 	await physics_frame
 	await process_frame
 	state.current_state = state.State.ROUND
-	game._add_pad(2, 7)
+	for child in game.get_children():
+		if child.get_script() != null and child.get_script().resource_path == "res://input_bindings.gd":
+			child._add_pad(2, 7)
 	for player in game.players:
 		player.collision_mask = 0
 		player.collision_layer = 0
