@@ -40,7 +40,7 @@ func _on_visibility_changed() -> void:
 
 func _build() -> void:
 	UI.backdrop(self, 0.88)
-	UI.panel(self, Rect2(166, 70, 470, 326))
+	UI.panel(self, Rect2(166, 70, 470, 354))
 	var menu_theme := Theme.new()
 	menu_theme.default_font = UI.FONT
 	theme = menu_theme
@@ -71,6 +71,8 @@ func _build() -> void:
 		hit.focus_mode = Control.FOCUS_NONE
 		hit.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		hit.pressed.connect(_mouse_activate.bind(i))
+		if rows[i].label == "ROUND TIME":
+			hit.tooltip_text = "Most HP wins at zero. Ties enter 20 seconds of sudden death."
 		add_child(hit)
 		var lbl := Label.new()
 		lbl.position = Vector2(ROW_X, y)
@@ -133,6 +135,10 @@ func _build_rows() -> void:
 			func() -> int: return MatchConfig.target_score,
 			func(v: int) -> void: MatchConfig.set_target_score(v),
 			MatchConfig.MIN_TARGET_SCORE, MatchConfig.MAX_TARGET_SCORE, Callable()),
+		_stepper("ROUND TIME",
+			func() -> int: return MatchConfig.round_time_seconds / MatchConfig.ROUND_TIME_STEP,
+			func(v: int) -> void: MatchConfig.set_round_time(v * MatchConfig.ROUND_TIME_STEP),
+			0, MatchConfig.MAX_ROUND_TIME / MatchConfig.ROUND_TIME_STEP, Callable()),
 		_action("RESET TO DEFAULTS", _do_reset),
 		_action("DONE", _do_done),
 	]
@@ -253,6 +259,9 @@ func _refresh() -> void:
 			"stepper":
 				var v: int = int(row.getter.call())
 				row_values[i].text = ("< %d >" % v) if (sel and active) else str(v)
+				if row.label == "ROUND TIME":
+					var time := "OFF" if v == 0 else preload("res://round_clock.gd").time_text(v * MatchConfig.ROUND_TIME_STEP)
+					row_values[i].text = "< %s >" % time if sel else time
 			"action":
 				row_values[i].text = ""
 

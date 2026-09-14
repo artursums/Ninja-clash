@@ -59,8 +59,8 @@ test('real Redis executes CAS scripts, expiry and rate limiting through the REST
     assert.equal(await store.limit('limit', 1, 60), true);
     assert.equal(await store.limit('limit', 1, 60), false);
     const rooms = new Rooms(store, async () => ({ iceServers: [] }));
-    const { room } = await rooms.handle({ action: 'create', protocol: 4, token: 'a'.repeat(64) });
-    const joins = await Promise.allSettled(['b', 'c', 'd', 'e'].map(c => rooms.handle({ action: 'join', protocol: 4, room, token: c.repeat(64) })));
+    const { room } = await rooms.handle({ action: 'create', protocol: 5, token: 'a'.repeat(64) });
+    const joins = await Promise.allSettled(['b', 'c', 'd', 'e'].map(c => rooms.handle({ action: 'join', protocol: 5, room, token: c.repeat(64) })));
     assert.equal(joins.filter(r => r.status === 'fulfilled').length, 3);
     assert.equal(joins.find(r => r.status === 'rejected').reason.status, 409);
   } finally {

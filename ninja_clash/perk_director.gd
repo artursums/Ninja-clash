@@ -66,16 +66,21 @@ func next_kind(alive: int, excluded: int = 0) -> int:
 func candidates() -> Array[Vector2]:
 	var result: Array[Vector2] = []
 	var data: Dictionary = Maps.get_map(GameState.selected_map_index)
-	for ledge: Rect2 in data.bot_ledges:
-		var pos := Vector2(ledge.get_center().x,ledge.position.y-18)
+	var terrain := Rules.terrain(get_tree())
+	for anchor: Vector2 in data.perk_anchors:
+		var pos := anchor - Vector2(0,18)
 		if pos.x < 36 or pos.x > 844 or pos.y < 60 or pos.y > 450:
 			continue
 		var clear := true
+		var supported := false
 		var bounds := Rect2(pos-Vector2(16,16),Vector2(32,32))
-		for wall in data.walls:
-			if Rect2(wall.center-wall.size/2,wall.size).intersects(bounds):
+		for wall in terrain:
+			var rect: Rect2 = wall.rect
+			if rect.intersects(bounds):
 				clear = false
-		if clear:
+			if absf(rect.position.y-anchor.y) < 1 and anchor.x >= rect.position.x+16 and anchor.x <= rect.end.x-16:
+				supported = true
+		if clear and supported:
 			result.append(pos)
 	return result
 
@@ -165,15 +170,16 @@ func _draw() -> void:
 	for p in pickups:
 		var color: Color = Rules.COLORS[p.kind]
 		var at: Vector2 = p.pos
+		var floor_at := at + Vector2(0,17)
+		draw_line(floor_at-Vector2(13,0),floor_at+Vector2(13,0),Color("0b111be0"),3)
+		draw_line(floor_at-Vector2(9,0),floor_at+Vector2(9,0),Color(color,0.6),1)
 		if p.warning > 0:
-			draw_arc(at,20,0,TAU,24,Color(color,0.5),1)
-			draw_arc(at,20,-PI/2,-PI/2+TAU*(1-p.warning),24,color,2)
+			var rise: float = 1-p.warning
+			for side in [-1,1]:
+				draw_line(floor_at+Vector2(side*11,-2),floor_at+Vector2(side*11,-2-24*rise),Color(color,0.65),1)
+			draw_circle(at,3*rise,Color(color,0.65))
 		else:
-			draw_rect(Rect2(at-Vector2(15,15),Vector2(30,30)),Color("111a2bef"))
-			draw_rect(Rect2(at-Vector2(15,15),Vector2(30,30)),color,false,2)
-			draw_line(at+Vector2(-13,18),at+Vector2(-13+26*p.left/8,18),color,2)
-		Rules.draw_icon(self,p.kind,at,14)
-		var label: String = Rules.NAMES[p.kind]
-		var width: float = Rules.FONT.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x
-		draw_rect(Rect2(at+Vector2(-width/2-3,-30),Vector2(width+6,12)),Color("111a2bef"))
-		draw_string(Rules.FONT,at+Vector2(-width/2,-20),label,HORIZONTAL_ALIGNMENT_LEFT,-1,10,color)
+			var bob := Vector2(0,sin(Time.get_ticks_msec()*0.003+p.id)*1.5)
+			draw_circle(at+bob,15,Color(color,0.08))
+			Rules.draw_icon(self,p.kind,at+bob,16)
+			draw_line(floor_at-Vector2(9,0),floor_at+Vector2(-9+18*p.left/8,0),color,1)

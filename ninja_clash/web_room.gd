@@ -1,7 +1,7 @@
 extends Node
 ## HTTPS room admission and per-guest signaling; gameplay travels through WebRTC.
 
-const PROTOCOL := 4
+const PROTOCOL := 5
 const CONNECT_TIMEOUT := 45.0
 const POLL_INTERVAL := 0.75
 

@@ -23,7 +23,7 @@ var _join_deadline: float = 0.0
 var _web_room: Node = null
 var invitation_code := ""
 const Roster := preload("res://online_roster.gd")
-const PROTOCOL := 4
+const PROTOCOL := 5
 var lobby := Roster.new()
 var player_name := ""
 var lobby_message := ""
@@ -385,7 +385,7 @@ func _build_snapshot() -> Dictionary:
 	for platform in _main.current_map_nodes:
 		if platform.is_in_group("crumble_platforms"):
 			platforms.append([platform.phase, platform.remaining])
-	return {"p": players, "s": shuris, "w": waves, "c": platforms, "perks": _main.perk_director.snapshot(), "map": _main._current_loaded_map}
+	return {"p": players, "s": shuris, "w": waves, "c": platforms, "perks": _main.perk_director.snapshot(), "clock": _main.round_clock.snapshot(), "map": _main._current_loaded_map}
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -395,6 +395,7 @@ func _snapshot(snap: Dictionary) -> void:
 	if int(snap.get("map", -1)) != _main._current_loaded_map:
 		return
 	_main.perk_director.apply_snapshot(snap.get("perks", []))
+	_main.round_clock.apply_snapshot(snap.get("clock", []))
 	var platforms: Array = snap.get("c", [])
 	var index := 0
 	for platform in _main.current_map_nodes:
@@ -494,6 +495,7 @@ func _build_state_bundle() -> Dictionary:
 		"target": GameState.target_score,
 		"winner": GameState.match_winner_slot,
 		"round_winner": _main._round_winner_slot if _main != null else 0,
+		"clock": _main.round_clock.snapshot() if _main != null else [],
 		"last_killer": GameState.last_kill_killer, "last_victim": GameState.last_kill_victim,
 		"scores": Combat.scores,
 		"stats": Combat.match_stats.duplicate(true),
@@ -506,6 +508,7 @@ func _build_state_bundle() -> Dictionary:
 			"infinite_shurikens": MatchConfig.infinite_shurikens,
 			"max_hp": MatchConfig.max_hp,
 			"blade_wave_enabled": MatchConfig.blade_wave_enabled,
+			"round_time_seconds": MatchConfig.round_time_seconds,
 		},
 	}
 
@@ -533,6 +536,8 @@ func _apply_state(s: int, bundle: Dictionary) -> void:
 	if _main != null:
 		_main._round_winner_slot = int(bundle.get("round_winner", 0))
 	GameState.change_state(s)
+	if _main != null:
+		_main.round_clock.apply_snapshot(bundle.get("clock", []))
 
 
 # === Lobby sync (clan + map select) =========================================
@@ -756,3 +761,4 @@ func _apply_rules(bundle: Dictionary) -> void:
 		MatchConfig.infinite_shurikens = bool(cfg.get("infinite_shurikens", false))
 		MatchConfig.max_hp = int(cfg.get("max_hp", 5))
 		MatchConfig.blade_wave_enabled = bool(cfg.get("blade_wave_enabled", false))
+		MatchConfig.round_time_seconds = MatchConfig.normalize_round_time(int(cfg.get("round_time_seconds", MatchConfig.DEFAULT_ROUND_TIME)))

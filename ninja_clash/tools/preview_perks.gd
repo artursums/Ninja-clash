@@ -17,7 +17,7 @@ func run() -> void:
 		var p: Node = game.players[i]
 		p.set_physics_process(false)
 		p.grant_perk(i+1)
-		game.perk_director.add_pickup(i+1,Vector2(160+i*180,240),0 if i%2 else 0.5)
+		game.perk_director.add_pickup(i+1,game.perk_director.candidates()[i],0)
 	game.players[0].reverse_left = 2.5
 	for frame in 5:
 		await process_frame

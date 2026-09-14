@@ -1,5 +1,9 @@
 # Round Flow
 
+> Live implementation update (2026-09-14): the default 60-second configurable round
+> clock, health-based timeout and bounded overtime are specified in [round-clock.md](round-clock.md).
+> This supersedes the earlier no-time-cap MVP rule below.
+
 > **Status**: Approved
 > **Author**: artursums + assistant
 > **Last Updated**: 2026-05-18

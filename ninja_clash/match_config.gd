@@ -19,6 +19,9 @@ const STASH_CAP := 5            # the catch cap in player.gd — start count can
 const MAX_HP_CAP := 9
 const MIN_TARGET_SCORE := 1
 const MAX_TARGET_SCORE := 15
+const DEFAULT_ROUND_TIME := 60
+const MAX_ROUND_TIME := 300
+const ROUND_TIME_STEP := 30
 
 # --- Variant state (every value defaults to today's standard behaviour) ---
 var katana_enabled: bool = true       # OFF = no katana at all (0 charges, swing no-ops, no HUD marks)
@@ -30,6 +33,7 @@ var infinite_shurikens: bool = false  # throws never deplete the stash
 var max_hp: int = 5                   # hits to kill
 var target_score: int = 5             # rounds to win the match
 var blade_wave_enabled: bool = false  # DEV-005: hold-katana → directional slash-wave projectile (OFF = standard rules)
+var round_time_seconds := DEFAULT_ROUND_TIME
 
 # --- Captured factory defaults (data-driven; restored by reset_to_defaults) ---
 var _def_katana_charges: int = 3
@@ -62,6 +66,7 @@ func capture_defaults() -> void:
 	katana_charges = _def_katana_charges
 	start_shurikens = _def_start_shurikens
 	target_score = _def_target_score
+	round_time_seconds = DEFAULT_ROUND_TIME
 
 
 # --- Effective loadout helpers (read by player.gd at respawn) ---
@@ -121,6 +126,15 @@ func set_target_score(n: int) -> void:
 	apply()
 	save_to(DEFAULT_PATH)
 
+func set_round_time(seconds: int) -> void:
+	round_time_seconds = normalize_round_time(seconds)
+	save_to(DEFAULT_PATH)
+
+static func normalize_round_time(seconds: int) -> int:
+	if seconds <= 0:
+		return 0
+	return clampi(roundi(float(seconds) / ROUND_TIME_STEP) * ROUND_TIME_STEP, ROUND_TIME_STEP, MAX_ROUND_TIME)
+
 
 func reset_to_defaults() -> void:
 	katana_enabled = true
@@ -148,6 +162,7 @@ func load_from(path: String) -> void:
 	infinite_shurikens = bool(cfg.get_value(SECTION, "infinite_shurikens", infinite_shurikens))
 	max_hp = clampi(int(cfg.get_value(SECTION, "max_hp", max_hp)), 1, MAX_HP_CAP)
 	target_score = clampi(int(cfg.get_value(SECTION, "target_score", target_score)), MIN_TARGET_SCORE, MAX_TARGET_SCORE)
+	round_time_seconds = normalize_round_time(int(cfg.get_value(SECTION, "round_time_seconds", round_time_seconds)))
 
 
 func save_to(path: String) -> void:
@@ -161,6 +176,7 @@ func save_to(path: String) -> void:
 	cfg.set_value(SECTION, "infinite_shurikens", infinite_shurikens)
 	cfg.set_value(SECTION, "max_hp", max_hp)
 	cfg.set_value(SECTION, "target_score", target_score)
+	cfg.set_value(SECTION, "round_time_seconds", round_time_seconds)
 	cfg.save(path)
 
 

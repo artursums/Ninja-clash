@@ -119,9 +119,17 @@ async function playMatch(browser, testInfo, count, forceRelay) {
       await screen(host.page, 'MATCH_SETUP');
       await host.page.waitForTimeout(300);
       await click(host.page, 410, 94);
+      await click(host.page, 410, 346);
+      await expect.poll(async () => (await state(host.page)).rules.roundTime).toBe(90);
+      for (let i = 0; i < 3; i++) { await host.page.keyboard.press('ArrowLeft'); await host.page.waitForTimeout(100); }
+      await expect.poll(async () => (await state(host.page)).rules.roundTime).toBe(0);
+      await host.page.screenshot({ path: testInfo.outputPath('timer-disabled.png') });
+      for (let i = 0; i < 3; i++) { await host.page.keyboard.press('ArrowRight'); await host.page.waitForTimeout(100); }
+      await expect.poll(async () => (await state(host.page)).rules.roundTime).toBe(90);
       await host.page.keyboard.press('Escape');
       await screen(host.page, 'ONLINE_LOBBY');
       await expect.poll(async () => (await state(players[1].page)).rules.katana).toBe(!before);
+      await expect.poll(async () => (await state(players[1].page)).rules.roundTime).toBe(90);
       await click(players[1].page, 414, 378);
       await players[1].page.screenshot({ path: testInfo.outputPath('shared-rules.png') });
       await players[1].page.keyboard.press('Escape');
@@ -137,9 +145,12 @@ async function playMatch(browser, testInfo, count, forceRelay) {
     for (const player of players) {
       await screen(player.page, 'ROUND');
       expect((await state(player.page)).fighters.length).toBe(count);
+      expect((await state(player.page)).clock[1]).toBeGreaterThan(count === 2 ? 80 : 50);
     }
     await expect.poll(async () => (await state(host.page)).perks?.length, { timeout: 15000 }).toBeGreaterThan(0);
     const capsules = (await state(host.page)).perks.map(row => row.slice(0, 4));
+    const hostClock = (await state(host.page)).clock[1];
+    for (const guest of players.slice(1)) expect(Math.abs((await state(guest.page)).clock[1] - hostClock)).toBeLessThan(1);
     if (count === 2) expect(capsules.every(row => row[1] !== 3)).toBe(true);
     for (const guest of players.slice(1)) {
       await expect.poll(async () => (await state(guest.page)).perks.map(row => row.slice(0, 4))).toEqual(capsules);

@@ -163,7 +163,7 @@ func _plan(actor: Node, enemy: Node, standing: int, now: float) -> void:
 	var same_floor := standing == foe_ledge and absf(actor.global_position.y - remembered_position.y) < 38
 	var visible_foe: bool = navigation.clear_line(actor.global_position, remembered_position, 5)
 	var blade := _pickup(actor, standing)
-	var urgent_pickup: bool = actor.stash == 0 or actor.stash < 2 and distance > 110
+	var urgent_pickup: bool = actor.available_shurikens() == 0 or actor.available_shurikens() < 2 and distance > 110
 	if blade != null and urgent_pickup:
 		tactic = Tactic.SCAVENGE
 		_set_goal(actor, standing, blade.global_position)
@@ -190,9 +190,9 @@ func _plan(actor: Node, enemy: Node, standing: int, now: float) -> void:
 			return
 	if now < recovery_until:
 		tactic = Tactic.RECOVER
-	elif same_floor and distance < _tuning.near_range[_level] and (actor.stash > 0 and (actor.hp <= 2 or actor.katana_charges == 0) or now < next_strike):
+	elif same_floor and distance < _tuning.near_range[_level] and (actor.available_shurikens() > 0 and (actor.hp <= 2 or actor.katana_charges == 0) or now < next_strike):
 		tactic = Tactic.RETREAT
-	elif actor.stash == 0 or now - last_attack > 5.5 or same_floor and enemy.stash == 0 and rng.randf() < _tuning.pressure_chance[_level]:
+	elif actor.available_shurikens() == 0 or now - last_attack > 5.5 or same_floor and enemy.available_shurikens() == 0 and rng.randf() < _tuning.pressure_chance[_level]:
 		tactic = Tactic.PRESSURE
 	elif same_floor and visible_foe and distance >= _tuning.near_range[_level] and distance <= _tuning.far_range[_level] and rng.randf() < 0.55:
 		tactic = Tactic.OBSERVE
@@ -230,7 +230,7 @@ func _plan(actor: Node, enemy: Node, standing: int, now: float) -> void:
 			var score := absf(separation - ideal) + path.size() * 38.0
 			score += actor.global_position.distance_to(point) * 0.12
 			if not line:
-				score += 160 if actor.stash > 0 else 0
+				score += 160 if actor.available_shurikens() > 0 else 0
 			if separation < _tuning.near_range[_level]:
 				score += 150
 			if tactic in [Tactic.RETREAT, Tactic.RECOVER]:
@@ -374,7 +374,7 @@ func _attack(actor: Node, enemy: Node, now: float) -> bool:
 			return true
 		return now >= next_strike
 	strike_ready = 0
-	if actor.stash <= 0:
+	if actor.available_shurikens() <= 0:
 		if actor.katana_charges == 0 and absf(offset.x) < 30 and absf(offset.y) < 40 and actor.is_on_floor() and now >= next_jump and actor._bot_should_stomp():
 			actor._bot_pressed[actor.input_jump] = true
 			next_jump = now + 0.7

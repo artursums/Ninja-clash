@@ -11,6 +11,7 @@ extends CharacterBody2D
 const Perks := preload("res://perk_rules.gd")
 var perk_kind: int = Perks.Kind.NONE
 var perk_charges := 0
+var perk_icon_anchor := Vector2.ZERO
 var reverse_left := 0.0
 var teleport_revision := 0
 
@@ -364,10 +365,10 @@ func _physics_process(delta: float) -> void:
 	# overlay: it does NOT touch movement, facing, or wall-grab — you keep running/jumping
 	# exactly as normal while you aim. Bots manage their own timed aim and release intent.
 	if is_bot:
-		if _pressed(input_throw) and stash > 0:
+		if _pressed(input_throw) and available_shurikens() > 0:
 			_throw_shuriken(_throw_aim())
 	else:
-		if not is_aiming and _pressed(input_throw) and stash > 0 and not _held(input_defend):
+		if not is_aiming and _pressed(input_throw) and available_shurikens() > 0 and not _held(input_defend):
 			is_aiming = true
 			aim_dir = _throw_aim()               # capture on press (covers instant quick-draws)
 			_relock_aim()                        # lock the assist onto whoever's in the wedge NOW
@@ -382,7 +383,7 @@ func _physics_process(delta: float) -> void:
 				# Released → fire the RETAINED, LOCKED aim. Not recomputed here, so letting go of
 				# the direction a frame early (or with the button) still throws where you aimed.
 				is_aiming = false
-				if stash > 0:
+				if available_shurikens() > 0:
 					_throw_shuriken(aim_dir)
 	_update_aim_reticle()
 
@@ -759,7 +760,7 @@ func _bot_should_stomp() -> bool:
 	if _bot_brain != null and _bot_brain.navigation != null:
 		var standing: int = _bot_brain.navigation.nearest_ledge(global_position)
 		scavengeable = _bot_brain._pickup(self, standing) != null
-	return BotLogic.should_stomp(stash, katana_charges, scavengeable)
+	return BotLogic.should_stomp(available_shurikens(), katana_charges, scavengeable)
 
 func _start_swing(t: float) -> void:
 	Combat.record(slot, "strikes")
@@ -1037,6 +1038,8 @@ func _update_movement_dust(t: float, was_falling: bool) -> void:
 # aim is a NON-normalized intent vector (per-axis -1/0/+1) from _throw_aim():
 #   (±1, 0) horizontal · (0, ±1) vertical · (±1, ±1) diagonal.
 func _throw_shuriken(aim: Vector2) -> void:
+	if available_shurikens() == 0:
+		return
 	var ShurikenScript: Script = load("res://shuriken.gd")
 	var s = Area2D.new()
 	s.set_script(ShurikenScript)
@@ -1085,7 +1088,7 @@ func _throw_shuriken(aim: Vector2) -> void:
 	s.throw_time = Time.get_ticks_msec() / 1000.0
 	get_parent().add_child(s)
 	Combat.record(slot, "throws")
-	if not MatchConfig.infinite_shurikens:
+	if s.perk_kind == Perks.Kind.NONE and not MatchConfig.infinite_shurikens:
 		stash -= 1
 		stash_changed.emit(slot, stash)
 	Audio.play("throw")
@@ -1256,7 +1259,7 @@ func _check_headstomp() -> void:
 				stomp_cooldown_until = t + STOMP_COOLDOWN_S
 				break   # one stomp per frame
 
-func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void:
+func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0, credit_kill: bool = true) -> void:
 	clear_perks()
 	alive = false
 	# A corpse is no obstacle — drop off the collision layer so the living run straight
@@ -1273,7 +1276,8 @@ func _die(impact_velocity: Vector2 = Vector2.ZERO, killer_slot: int = 0) -> void
 		death_spin_dir = 1
 	death_time = Time.get_ticks_msec() / 1000.0
 	stash_changed.emit(slot, stash)
-	Combat.on_kill(slot, killer_slot)
+	if credit_kill:
+		Combat.on_kill(slot, killer_slot)
 
 func respawn(at_pos: Vector2) -> void:
 	clear_perks()
@@ -1511,8 +1515,16 @@ func _process(_delta: float) -> void:
 func _update_stash_indicator() -> void:
 	if stash_icons.is_empty():
 		return
+	var count := clampi(stash, 0, stash_icons.size())
+	var special := perk_kind != Perks.Kind.NONE
+	var normal_width := (count-1)*6.5+6 if count > 0 else 0.0
+	var special_width := 20.0 if special and count > 0 else 16.0 if special else 0.0
+	var left := -(normal_width+special_width)*0.5
+	if is_inside_tree():
+		perk_icon_anchor = to_local(stash_icons[0].get_parent().to_global(Vector2(left+8, stash_icons[0].position.y)))
 	for i in stash_icons.size():
-		stash_icons[i].modulate.a = 1.0 if (alive and i < stash) else 0.0
+		stash_icons[i].position.x = left+special_width+3+i*6.5
+		stash_icons[i].modulate = Color("d6dfe5") if alive and i < count else Color.TRANSPARENT
 
 func _update_hp_indicator() -> void:
 	if heart_icons.is_empty():
@@ -1549,6 +1561,9 @@ func grant_perk(kind: int) -> bool:
 	perk_kind = kind
 	perk_charges = Perks.CHARGES[kind]
 	return true
+
+func available_shurikens() -> int:
+	return maxi(0, stash) + perk_charges
 
 func consume_perk() -> int:
 	var kind := perk_kind

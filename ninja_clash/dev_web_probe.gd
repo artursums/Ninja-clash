@@ -24,8 +24,8 @@ func _process(delta: float) -> void:
 		"players": Net.lobby.members, "playerName": Net.player_name, "localPlayer": Net.local_member(),
 		"canStart": Net.lobby.can_start(), "lobbyMessage": Net.lobby_message, "rulesRevision": Net.lobby.rules_revision,
 		"nameDialog": main.online_menu_screen.name_dialog.visible,
-		"rules": {"hp": MatchConfig.max_hp, "katana": MatchConfig.katana_enabled, "target": GameState.target_score}, "status": main.online_menu_screen.status_label.text,
-		"perks": main.perk_director.snapshot(),
+		"rules": {"roundTime": MatchConfig.round_time_seconds, "hp": MatchConfig.max_hp, "katana": MatchConfig.katana_enabled, "target": GameState.target_score}, "status": main.online_menu_screen.status_label.text,
+		"perks": main.perk_director.snapshot(), "clock": main.round_clock.snapshot(),
 		"map": GameState.selected_map_index, "scores": Combat.scores,
 		"tutorial": main.tutorial_overlay.visible, "signalingDone": Net._web_room != null and Net._web_room._signaling_done}
 	JavaScriptBridge.eval("window.__ninjaState = " + JSON.stringify(data), true)

@@ -9,7 +9,7 @@ func test_charges_are_finite_and_do_not_stack() -> void:
 	var p = autofree(Player.new())
 	assert_true(p.grant_perk(Rules.Kind.SEEKER))
 	assert_false(p.grant_perk(Rules.Kind.RICOCHET))
-	assert_eq(p.consume_perk(),Rules.Kind.SEEKER)
+	assert_eq(p.available_shurikens(),4)
 	assert_eq(p.consume_perk(),Rules.Kind.SEEKER)
 	assert_eq(p.consume_perk(),Rules.Kind.NONE)
 	p.reverse_left = 2
@@ -46,7 +46,8 @@ func test_special_state_replicates_and_swap_snaps() -> void:
 	source.teleport_revision = 1
 	NC.apply_player(guest,NC.encode_player(source,0),90)
 	assert_eq(guest.perk_kind,Rules.Kind.RICOCHET)
-	assert_eq(guest.perk_charges,2)
+	assert_eq(guest.perk_charges,1)
+	assert_eq(guest.available_shurikens(),4)
 	assert_eq(guest.reverse_left,2.5)
 	assert_eq(guest.position,source.position)
 	var shot = autofree(Shot.new())

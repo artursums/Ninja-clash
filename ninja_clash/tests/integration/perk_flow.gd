@@ -164,7 +164,7 @@ func run() -> void:
 	director.add_pickup(Rules.Kind.SEEKER,a.position,0)
 	b.position = a.position
 	director.advance(0)
-	check(a.perk_charges+b.perk_charges == 2 and director.pickups.is_empty(),"Simultaneous pickup grants only one player the perk")
+	check(a.perk_charges+b.perk_charges == 1 and director.pickups.is_empty(),"Simultaneous pickup grants only one player the perk")
 	director.add_pickup(Rules.Kind.SWAP,Vector2(400,100),0)
 	director.advance(0)
 	check(director.pickups.is_empty(),"Swap pickup is removed when only two fighters remain")

@@ -165,9 +165,10 @@ func _rules() -> void:
 		rules_overlay.show()
 
 func _refresh_rules() -> void:
-	rules_text.text = "2–4 PLAYERS · FREE-FOR-ALL\nFirst to %d wins · %d HP\nKatana: %s · %d charges\nRecharge each round: %s\nShurikens: %s · Start with %d\nInfinite shurikens: %s\nBlade wave: %s" % [GameState.target_score, MatchConfig.max_hp,
+	rules_text.text = "2–4 PLAYERS · FREE-FOR-ALL\nFirst to %d wins · %d HP\nKatana: %s · %d charges\nRecharge each round: %s\nShurikens: %s · Start with %d\nInfinite shurikens: %s\nBlade wave: %s\nRound time: %s" % [GameState.target_score, MatchConfig.max_hp,
 		_on_off(MatchConfig.katana_enabled), MatchConfig.katana_charges, _on_off(MatchConfig.katana_recharge),
-		_on_off(MatchConfig.shurikens_enabled), MatchConfig.start_shurikens, _on_off(MatchConfig.infinite_shurikens), _on_off(MatchConfig.blade_wave_enabled)]
+		_on_off(MatchConfig.shurikens_enabled), MatchConfig.start_shurikens, _on_off(MatchConfig.infinite_shurikens), _on_off(MatchConfig.blade_wave_enabled),
+		"OFF" if MatchConfig.round_time_seconds == 0 else preload("res://round_clock.gd").time_text(MatchConfig.round_time_seconds)]
 
 func _on_off(value: bool) -> String:
 	return "ON" if value else "OFF"

@@ -5,18 +5,22 @@ later changes to durations, spawn frequency or tracking strength.
 
 ## Player rules
 
-Touch a capsule after its one-second arrival warning to collect it. A fighter can hold
-one perk at a time. The badge beside the fighter shows the kind and remaining special
-throws. A perk modifies existing ammunition: it does not refill the stash. Charges are
-spent on throws, even with infinite ammunition enabled. Death and round reset clear
-both held charges and reversed movement.
+Touch a relic after its one-second arrival warning to collect it. It adds **one separate
+special blade**, independent of ordinary ammunition: three ordinary blades plus a relic
+means four throws, and an empty stash can still fire a relic. The special blade goes
+first, without consuming an ordinary blade. Only one relic can be held at once. Infinite
+ordinary ammunition never duplicates it. Death and round reset clear the held relic.
+
+The wordless icon appears first in the centered ammunition row beside silver ordinary
+blades. Its silhouette and color identify the next throw; no separate text card or charge
+number is displayed. A violet mask with a shrinking arc indicates reversed movement.
 
 | Capsule | Special throws | Effect |
 | --- | --- | --- |
-| REVERSE | 1 | A damaging hit reverses horizontal movement, including directional dashes, for 3 seconds. Jumping, attacks and aiming retain their controls. Further hits cannot extend the active reversal. The victim sees a countdown. |
-| SEEKER | 2 | Locks the nearest living opponent when thrown. Routes around terrain with limited turning speed for up to 2 seconds, then resumes ordinary flight. Does not retarget when that opponent dies. A katana deflection breaks tracking. |
+| REVERSE | 1 | A damaging hit reverses horizontal movement, including directional dashes, for 3 seconds. Jumping, attacks and aiming retain their controls. Further hits cannot extend the active reversal. The victim sees a shrinking status arc. |
+| SEEKER | 1 | Locks the nearest living opponent when thrown. Routes around terrain with limited turning speed for up to 2 seconds, then resumes ordinary flight. Does not retarget when that opponent dies. A katana deflection breaks tracking. |
 | PHASE SWAP | 1 | Flies straight through terrain. First valid enemy hit exchanges the fighters' positions without damage or inherited momentum. Refuses unsafe destinations inside terrain, another fighter or outside the arena. The projectile vanishes after 6 seconds if it misses. |
-| RICOCHET | 2 | Reflects off any terrain surface at the actual impact angle, up to **3 bounces**. Walls, ceilings, floors and platforms all count; the fourth terrain contact sticks. After the first bounce it can hurt its owner. After 3 seconds it becomes harmless, recoverable ammunition. |
+| RICOCHET | 1 | Reflects off any terrain surface at the actual impact angle, up to **3 bounces**. Walls, ceilings, floors and platforms all count; the fourth terrain contact sticks. After the first bounce it can hurt its owner. After 3 seconds it becomes harmless, recoverable ammunition. |
 
 Terrain bounce direction is determined by the surface normal. It is not a randomly
 chosen angle, and repeated contact with the same surface still consumes a bounce.
@@ -38,7 +42,7 @@ can still be thrown.
 - 50% of rounds schedule one capsule; 35% schedule a second 8–12 seconds after the
   first; 15% schedule two together, with different types and at least 180 pixels apart.
 - Types come from a shuffled bag without replacement, filtered for the living count.
-- Capsules use clear standing positions on authored ledges, at least 80 pixels from
+- Relics use explicit map-authored anchors on permanent ledges and route intersections, at least 80 pixels from
   living fighters when the warning begins. If no safe point is available, the event
   retries briefly and is then skipped. A double arrival may become single if only one
   safe location is available.
@@ -52,7 +56,7 @@ and swaps. Snapshots carry capsule identities and timers, fighter perk state, pr
 perk state and a teleport revision. Clients snap swapped positions immediately rather
 than smoothing the fighter through intervening walls.
 
-Room and peer protocol **4** requires the API and web export to ship together. Players
+Room and peer protocol **5** requires the API and web export to ship together. Players
 using an older cached build must reload before creating or joining a room.
 
 Seekers share a cached AStarGrid2D terrain map. A swept collision check remains the
@@ -77,3 +81,11 @@ latency or final competitive balance.
 
 Engine references: [AStarGrid2D](https://docs.godotengine.org/en/4.6/classes/class_astargrid2d.html)
 and [PhysicsShapeQueryParameters2D](https://docs.godotengine.org/en/4.6/classes/class_physicsshapequeryparameters2d.html).
+
+The curated anchors are validated against live terrain for support and headroom. Scene
+tests verify that each anchor is reachable from every authored player spawn using the
+existing traversal graph. They avoid crumbling surfaces and the screen-wrap openings.
+
+The [generated icon sources and prompts](../../sprites/perks/README.md) are stored in
+the project; Godot imports the transparent originals at 128 pixels and displays them
+at inventory/pickup size. The runtime has no image service dependency.

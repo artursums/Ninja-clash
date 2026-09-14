@@ -3,12 +3,13 @@ extends RefCounted
 enum Kind { NONE, MISDIRECTION, SEEKER, SWAP, RICOCHET }
 const NAMES := ["", "REVERSE", "SEEKER", "PHASE SWAP", "RICOCHET"]
 const COLORS := [Color.WHITE, Color("e87bff"), Color("f8d367"), Color("71eddd"), Color("ff9c54")]
-const CHARGES := [0, 1, 2, 1, 2]
+const CHARGES := [0, 1, 1, 1, 1]
 const REVERSE_SECONDS := 3.0
 const SEEK_SECONDS := 2.0
 const RICOCHET_SECONDS := 3.0
 const MAX_BOUNCES := 3
 const FONT := preload("res://fonts/PixelifySans.ttf")
+const ICONS := [null, preload("res://sprites/perks/reverse.png"), preload("res://sprites/perks/seeker.png"), preload("res://sprites/perks/swap.png"), preload("res://sprites/perks/ricochet.png")]
 
 static func terrain(tree: SceneTree) -> Array:
 	var result: Array = []
@@ -45,21 +46,6 @@ static func sweep(from: Vector2, motion: Vector2, rect: Rect2) -> Dictionary:
 	return {"fraction": maxf(0, enter), "normal": normal}
 
 static func draw_icon(canvas: CanvasItem, kind: int, at: Vector2, size: float = 10.0) -> void:
-	var color: Color = COLORS[kind]
-	var s := size * 0.55
-	match kind:
-		Kind.MISDIRECTION:
-			canvas.draw_line(at + Vector2(-s, -3), at + Vector2(s, -3), color, 2)
-			canvas.draw_line(at + Vector2(-s, 3), at + Vector2(s, 3), color, 2)
-			canvas.draw_polyline(PackedVector2Array([at + Vector2(-s+4,-7), at+Vector2(-s,-3), at+Vector2(-s+4,1)]),color,2)
-			canvas.draw_polyline(PackedVector2Array([at + Vector2(s-4,-1), at+Vector2(s,3), at+Vector2(s-4,7)]),color,2)
-		Kind.SEEKER:
-			canvas.draw_arc(at, s, 0, TAU, 16, color, 2)
-			canvas.draw_line(at-Vector2(s+3,0),at+Vector2(s+3,0),color,1)
-			canvas.draw_line(at-Vector2(0,s+3),at+Vector2(0,s+3),color,1)
-		Kind.SWAP:
-			canvas.draw_arc(at-Vector2(4,0),s,-PI/2,PI/2,12,color,2)
-			canvas.draw_arc(at+Vector2(4,0),s,PI/2,PI*1.5,12,color,2)
-		Kind.RICOCHET:
-			canvas.draw_polyline(PackedVector2Array([at+Vector2(-s,4),at+Vector2(0,-s),at+Vector2(s,4)]),color,2)
-			canvas.draw_line(at+Vector2(-s-2,-s-3),at+Vector2(s+2,-s-3),color,2)
+	if kind <= Kind.NONE or kind >= ICONS.size():
+		return
+	canvas.draw_texture_rect(ICONS[kind], Rect2(at.round()-Vector2.ONE*size, Vector2.ONE*size*2), false)

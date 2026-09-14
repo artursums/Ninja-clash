@@ -52,6 +52,7 @@ const PLAYER_TEXS: Array = [
 ]
 
 var perk_director: Node2D
+var round_clock: Node
 var arena_root: Node2D
 var sky_bg_solid: ColorRect
 var sky_rect: TextureRect
@@ -92,6 +93,9 @@ func _ready() -> void:
 	_build_arena()
 	perk_director = preload("res://perk_director.gd").new()
 	arena_root.add_child(perk_director)
+	round_clock = preload("res://round_clock.gd").new()
+	add_child(round_clock)
+	round_clock.expired.connect(_on_round_timeout)
 	_build_overlays()
 	Net.register_main(self)   # online layer needs the arena root + player list for snapshots/FX
 	GameState.state_changed.connect(_on_state_changed)
@@ -520,6 +524,8 @@ func _on_state_changed(s: int) -> void:
 		_clear_shurikens()
 
 func _enter_match_intro() -> void:
+	_round_winner_slot = 0
+	round_clock.start(MatchConfig.round_time_seconds)
 	_clear_shurikens()
 	if _current_loaded_map != GameState.selected_map_index:
 		_load_map(GameState.selected_map_index)
@@ -626,6 +632,7 @@ func _enter_match_intro() -> void:
 		_start_countdown()
 
 func _enter_round() -> void:
+	round_clock.start(MatchConfig.round_time_seconds)
 	perk_director.begin_round()
 	_in_countdown = false
 	banner_label.text = ""
@@ -658,11 +665,13 @@ func _separate_overlapping_spawns() -> void:
 		p.velocity = Vector2.ZERO
 
 func _enter_round_end() -> void:
+	round_clock.stop()
 	_round_end_until = Time.get_ticks_msec() / 1000.0 + 1.6
-	var winner_slot: int = _round_winner_slot if _round_winner_slot > 0 else GameState.last_kill_killer
+	var winner_slot: int = _round_winner_slot
 	if winner_slot > 0:
 		_show_round_winner(winner_slot)   # "P<N> WINS" sprite composite
-	# else: a draw (double-KO) → show nothing
+	else:
+		banner_label.text = "DRAW"
 
 func _start_countdown() -> void:
 	_in_countdown = true
@@ -747,11 +756,47 @@ func _on_kill_logged(_killer: int, _victim: int) -> void:
 			alive_count += 1
 			_round_winner_slot = p.slot
 	if alive_count <= 1:
-		if alive_count == 1:
-			Combat.award_survivor(_round_winner_slot)
+		_finish_round(_round_winner_slot if alive_count == 1 else 0)
+
+func _finish_round(winner: int) -> void:
+	if Net.is_client() or GameState.current_state != GameState.State.ROUND:
+		return
+	_round_winner_slot = winner
+	if winner > 0:
+		Combat.award_survivor(winner)
+	round_clock.stop()
+	GameState.change_state(GameState.State.ROUND_END)
+
+func _on_round_timeout(overtime: bool) -> void:
+	if Net.is_client() or GameState.current_state != GameState.State.ROUND:
+		return
+	if overtime:
+		_finish_round(0)
+		return
+	var best_hp := 0
+	var leaders: Array = []
+	for p in players:
+		if not p.alive:
+			continue
+		if p.hp > best_hp:
+			best_hp = p.hp
+			leaders.clear()
+		if p.hp == best_hp:
+			leaders.append(p)
+	if leaders.size() <= 1:
+		_finish_round(leaders[0].slot if not leaders.is_empty() else 0)
+		return
+	for p in players:
+		if not p.alive:
+			continue
+		if leaders.has(p):
+			p.hp = 1
+			p.hurt_iframe_until = 0
 		else:
-			_round_winner_slot = 0   # double-KO — no winner this round
-		GameState.change_state(GameState.State.ROUND_END)
+			p.hp = 0
+			p._die(Vector2.ZERO, 0, false)
+	round_clock.start_overtime()
+	Audio.play("countdown")
 
 # Two katanas met. Action-movie beat: arc lightning between the blades, freeze the
 # whole scene for a moment (real-time hitstop), then let it resume with both fighters

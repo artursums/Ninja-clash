@@ -77,6 +77,7 @@ static func _arena(title: String, subtitle: String, folder: String, ambience: St
 		"platform_overhang": 1.0, "transparent_platforms": false,
 		"walls": walls, "spawn_points": spawns, "bot_ledges": _exposed_ledges(geometry),
 		"lamp_anchors": PackedVector2Array(lamps),
+		"perk_anchors": _perk_anchors(ambience),
 	}
 	if ambience == "tokyo":
 		result["music"] = "res://audio/gameplay/Rain Circuit Clash.mp3"
@@ -133,3 +134,11 @@ static func _crumble_platforms(ambience: String) -> Array[Rect2]:
 		"sakura": return [Rect2(336, 352, 72, 16), Rect2(472, 352, 72, 16)]
 		"tokyo": return []
 		_: return [Rect2(320, 407, 64, 16), Rect2(496, 407, 64, 16)]
+
+static func _perk_anchors(ambience: String) -> Array[Vector2]:
+	# Permanent landing surfaces on contested routes; coordinates sit on the floor.
+	match ambience:
+		"cistern": return [Vector2(208,351), Vector2(672,351), Vector2(440,293), Vector2(312,164), Vector2(568,164), Vector2(440,117), Vector2(139,235), Vector2(740,235)]
+		"sakura": return [Vector2(224,286), Vector2(656,286), Vector2(440,224), Vector2(324,466), Vector2(556,466), Vector2(166,165), Vector2(714,165), Vector2(364,106), Vector2(516,106)]
+		"tokyo": return [Vector2(236,435), Vector2(644,435), Vector2(440,365), Vector2(192,295), Vector2(688,295), Vector2(142,165), Vector2(738,165)]
+		_: return [Vector2(146,297), Vector2(734,297), Vector2(264,231), Vector2(616,231), Vector2(440,297), Vector2(234,363), Vector2(646,363), Vector2(352,165), Vector2(528,165)]
