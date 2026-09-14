@@ -51,6 +51,10 @@ func _draw() -> void:
 				frame = 4
 			torso_shift = -roundf(sin(phase*PI)*2)*0.5
 			bob = roundf(sin(phase*PI))*0.5
+		"guard_run":
+			sheet = swing_texture if swing_texture != null else pose_texture
+			frame = 0 if swing_texture != null else 4
+			stride = roundf(sin(cycle)*1.2)*0.5
 		"throw":
 			frame = 4 if phase < 0.7 else 0
 			torso_shift = -roundf(sin(phase*PI)*2)*0.5
@@ -64,8 +68,13 @@ func _draw() -> void:
 	draw_set_transform(Vector2(40,11+32*(1-squash)),0,Vector2(-2,2*squash))
 	piece(sheet,frame,Rect2(0,0,16,8),Vector2(0,bob))
 	piece(sheet,frame,Rect2(0,8,16,4),Vector2(torso_shift,8+bob))
-	piece(sheet,frame,Rect2(0,12,8,4),Vector2(-stride,12-leg_lift))
-	piece(sheet,frame,Rect2(8,12,8,4),Vector2(8+stride,12+leg_lift))
+	var legs_sheet := sheet
+	var legs_frame := frame
+	if animation == "guard_run":
+		legs_sheet = run_texture if run_texture != null else pose_texture
+		legs_frame = mini(int(phase*6),5) if run_texture != null else (1 if phase < 0.5 else 2)
+	piece(legs_sheet,legs_frame,Rect2(0,12,8,4),Vector2(-stride,12-leg_lift))
+	piece(legs_sheet,legs_frame,Rect2(8,12,8,4),Vector2(8+stride,12+leg_lift))
 	draw_set_transform(Vector2.ZERO)
 
 func piece(sheet: Texture2D, frame: int, region: Rect2, point: Vector2) -> void:

@@ -64,10 +64,14 @@ Xbox pads both work; button constants are positional, so one mapping covers both
 
 ## Controls
 
-Click **Begin** or press **Enter** to start the music and the opening chronicle. Its three
-chapters advance automatically; click or press Enter to continue sooner, or press Esc to
-skip to the main menu. Room invitations go straight to the online menu after Begin.
-The opening screen waits for interaction so browsers can enable audio before the story starts.
+Click **Begin** or press **Enter**, **Space**, or **A / Cross** to start the opening chronicle.
+Use the **D-pad / left stick** to select menu buttons, **A / Cross** to confirm, and
+**B / Circle** to go back or skip the intro. The selected button has a gold outline.
+All connected controllers can navigate shared menus, including controllers plugged in after launch.
+The three chapters also advance automatically. Room invitations go straight to the online menu after Begin.
+The online name field still uses keyboard text entry; its Back and Continue buttons support the controller.
+Browsers may require a click or keyboard press to enable audio even when starting with a controller
+([Godot web limitations](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html#audio)).
 
 Bindings are built at runtime in `main.gd::_setup_input_map()` — there are no bindings
 stored in `project.godot`, so gamepad assignment can be re-derived on every hot-plug.

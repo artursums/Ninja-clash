@@ -12,14 +12,14 @@ func optional_texture(path: String) -> Texture2D:
 func bake() -> void:
 	var state: Node = root.get_node("GameState")
 	var viewport := SubViewport.new()
-	viewport.size = Vector2i(576,384)
+	viewport.size = Vector2i(Art.COLUMNS * 48, Art.ANIMATIONS.size() * 48)
 	viewport.transparent_bg = true
 	viewport.disable_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	root.add_child(viewport)
 	var poses: Array[Node2D] = []
-	for row in 8:
+	for row in Art.ANIMATIONS.size():
 		for col in 12:
 			var pose := Pose.new()
 			pose.animation = Art.ANIMATIONS[row]

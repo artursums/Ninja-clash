@@ -10,7 +10,7 @@ const SNAPSHOT_EVERY_N_TICKS := 2       # 60 Hz physics → 30 Hz snapshots
 const JOIN_TIMEOUT_S := 8.0
 # Sim SFX relayed host → client. Menu/countdown cues are NOT relayed — the client's own
 # screens generate those locally (relaying would double them).
-const RELAY_SFX := ["throw", "hit", "dodge", "block", "click"]
+const RELAY_SFX := ["throw", "hit", "dodge", "catch", "block", "click"]
 
 enum NetMode { OFFLINE, HOST, CLIENT }
 

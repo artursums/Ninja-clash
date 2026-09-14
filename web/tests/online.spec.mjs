@@ -247,3 +247,70 @@ test('name is mandatory, retained on failed join and cleared on leaving multipla
     expect(errors).toEqual([]);
   } finally { await context.close(); }
 });
+
+test('only the host edits match rules from online character selection', async ({ browser }, testInfo) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  try {
+    const host = await openGame(hostContext);
+    const room = await createRoom(host.page);
+    const guest = await openGame(guestContext, `${base}/#room=${room}`);
+    await enterName(guest.page, 'Guest');
+    await click(guest.page, 400, 196);
+    await screen(guest.page, 'ONLINE_LOBBY');
+    await expect.poll(async () => (await state(host.page)).players.length).toBe(2);
+    expect((await state(host.page)).rulesButton).toContain('EDIT RULES');
+    expect((await state(guest.page)).rulesButton).toContain('VIEW RULES');
+    await ready(host.page);
+    await ready(guest.page);
+    await expect.poll(async () => (await state(host.page)).canStart).toBe(true);
+    const before = (await state(host.page)).rules;
+    await click(host.page, 414, 378);
+    await screen(host.page, 'MATCH_SETUP');
+    await expect.poll(async () => (await state(guest.page)).rulesEditing).toBe(true);
+    await expect.poll(async () => (await state(guest.page)).players.every(p => !p.ready)).toBe(true);
+    await click(guest.page, 308, 324);
+    expect((await state(guest.page)).localPlayer.ready).toBe(false);
+    expect((await state(host.page)).canStart).toBe(false);
+    await host.page.waitForTimeout(300);
+    await click(host.page, 410, 94); // Katana toggle.
+    await click(host.page, 410, 290); // Hits to kill.
+    await click(host.page, 410, 318); // Rounds to win.
+    const expected = { katana: !before.katana, hp: before.hp === 9 ? 1 : before.hp + 1,
+      target: before.target === 15 ? 1 : before.target + 1, roundTime: before.roundTime };
+    await expect.poll(async () => (await state(host.page)).rules).toEqual(expected);
+    await host.page.screenshot({ path: testInfo.outputPath('host-edit-rules.png') });
+    await click(host.page, 410, 402); // Done.
+    await screen(host.page, 'ONLINE_LOBBY');
+    await expect.poll(async () => (await state(guest.page)).rules).toEqual(expected);
+    expect((await state(guest.page)).rulesEditing).toBe(false);
+    await click(guest.page, 414, 378);
+    await expect.poll(async () => (await state(guest.page)).rulesView).toBe(true);
+    await click(guest.page, 410, 140);
+    await guest.page.keyboard.press('ArrowRight');
+    await guest.page.keyboard.press('ArrowDown');
+    await guest.page.keyboard.press('ArrowLeft');
+    expect((await state(guest.page)).rules).toEqual(expected);
+    expect((await state(host.page)).rules).toEqual(expected);
+    await screen(guest.page, 'ONLINE_LOBBY');
+    await guest.page.screenshot({ path: testInfo.outputPath('guest-view-rules.png') });
+    await guest.page.keyboard.press('Escape');
+    await ready(host.page);
+    await ready(guest.page);
+    await expect.poll(async () => (await state(host.page)).canStart).toBe(true);
+    await click(host.page, 640, 378);
+    for (const peer of [host, guest]) {
+      await screen(peer.page, 'MATCH_INTRO');
+      await peer.page.waitForTimeout(600);
+      await peer.page.keyboard.press('Enter');
+    }
+    for (const peer of [host, guest]) {
+      await screen(peer.page, 'ROUND');
+      expect((await state(peer.page)).rules).toEqual(expected);
+      expect((await state(peer.page)).fighters.every(p => p.hp === expected.hp)).toBe(true);
+      expect(peer.errors).toEqual([]);
+    }
+  } finally {
+    await Promise.all([hostContext.close(), guestContext.close()]);
+  }
+});

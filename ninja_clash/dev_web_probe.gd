@@ -14,15 +14,22 @@ func _process(delta: float) -> void:
 	_elapsed = 0.0
 	var fighters: Array = []
 	for p in get_tree().get_nodes_in_group("players"):
-		fighters.append({"slot": p.slot, "x": p.position.x, "y": p.position.y, "hp": p.hp, "stash": p.stash,"perk": p.perk_kind,"charges": p.perk_charges,"reverse": p.reverse_left})
+		fighters.append({"slot": p.slot, "x": p.position.x, "y": p.position.y, "hp": p.hp, "stash": p.stash,"perk": p.perk_kind,"charges": p.perk_charges,"reverse": p.reverse_left,
+			"guard": p.is_defending, "grounded": p.is_on_floor(), "frame": p.visual.frame,
+			"bladeVisible": p.katana_sprite != null and p.katana_sprite.visible})
 	var main: Node = get_parent()
+	var focus := get_viewport().gui_get_focus_owner()
 	var data := {"state": GameState.State.keys()[GameState.current_state], "mode": Net.mode,
 		"prologueChapter": main.prologue_screen.chapter,
+		"menuSelection": {"intro": main.prologue_screen._cursor, "title": main.title_screen.cursor,
+			"online": main.online_menu_screen._cursor, "focus": focus.text if focus is Button else "field" if focus is LineEdit else ""},
 		"peer": Net._peer_id, "room": Net.invitation_code, "fighters": fighters,
 		"shurikens": get_tree().get_nodes_in_group("shurikens").size(), "puppets": Net._puppet_shurikens.size(),
 		"remoteHeld": Net._remote_inputs,
 		"players": Net.lobby.members, "playerName": Net.player_name, "localPlayer": Net.local_member(),
 		"canStart": Net.lobby.can_start(), "lobbyMessage": Net.lobby_message, "rulesRevision": Net.lobby.rules_revision,
+		"rulesEditing": Net.lobby.editing_rules, "rulesView": main.online_lobby_screen.rules_overlay.visible,
+		"rulesButton": main.online_lobby_screen.rules_button.text,
 		"nameDialog": main.online_menu_screen.name_dialog.visible,
 		"rules": {"roundTime": MatchConfig.round_time_seconds, "hp": MatchConfig.max_hp, "katana": MatchConfig.katana_enabled, "target": GameState.target_score}, "status": main.online_menu_screen.status_label.text,
 		"perks": main.perk_director.snapshot(), "clock": main.round_clock.snapshot(),

@@ -16,6 +16,15 @@ func check(condition: bool, description: String) -> void:
 		failures += 1
 		push_error(description)
 
+func same_visible_pixels(a: Image, b: Image) -> bool:
+	for y in a.get_height():
+		for x in a.get_width():
+			var before := a.get_pixel(x, y)
+			var after := b.get_pixel(x, y)
+			if before.a != after.a or (before.a > 0 and before != after):
+				return false
+	return true
+
 func projectile(offset: Vector2, previous: Vector2 = Vector2.INF) -> Node2D:
 	var star: Node2D = load("res://shuriken.gd").new()
 	star.thrower_slot = 2
@@ -99,7 +108,7 @@ func run() -> void:
 	check(state.skin_count() == Art.STYLES.size(), "Every selectable style has new artwork")
 	for style in Art.STYLES.size():
 		var texture: Texture2D = load(Art.path(style,state.get_clan(1).sprite))
-		check(texture.get_size() == Vector2(576,384), "Every costume has the full atlas")
+		check(texture.get_size() == Vector2(Art.COLUMNS * 48, Art.ANIMATIONS.size() * 48), "Every costume has the full atlas")
 		var pixels := texture.get_image()
 		for row in Art.ANIMATIONS.size():
 			var unique: Dictionary = {}
@@ -110,7 +119,7 @@ func run() -> void:
 			check(unique.size() >= 2, "Every movement state changes its pose")
 		state.p1_skin = style
 		game._enter_match_intro()
-		check(fighter.visual.texture == texture and fighter.visual.hframes == 12 and fighter.visual.vframes == 8, "Match uses selected costume's full animation grid")
+		check(fighter.visual.texture == texture and fighter.visual.hframes == Art.COLUMNS and fighter.visual.vframes == Art.ANIMATIONS.size(), "Match uses selected costume's full animation grid")
 		var portrait: Texture2D = game.clan_select_screen.Portraits.texture(state.clan_index(1), state.SKIN_STYLES[style])
 		check(portrait.resource_path.begins_with("res://sprites/portraits/"), "Selection uses the illustrated portrait collection")
 		await process_frame
@@ -130,6 +139,14 @@ func run() -> void:
 					if before.a != after.a or (before.a > 0 and before != after):
 						identical = false
 			check(identical, "Every clan and costume preserves the original neutral pixels")
+			var guard_row := Art.ANIMATIONS.find("guard_run")
+			var guard_top := atlas.get_image().get_region(Rect2i(0, Art.ANIMATIONS.find("swing") * 48, 48, 35))
+			var leg_poses := {}
+			for frame in Art.COUNTS[guard_row]:
+				var cell := atlas.get_image().get_region(Rect2i(frame * 48, guard_row * 48, 48, 48))
+				check(same_visible_pixels(cell.get_region(Rect2i(0, 0, 48, 35)), guard_top), "Running guard keeps the hands and torso in the stationary guard pose")
+				leg_poses[hash(cell.get_region(Rect2i(0, 35, 48, 13)).get_data())] = true
+			check(leg_poses.size() >= 2, "Running guard visibly animates the legs in every clan and costume")
 	check(fighter.stash_icons[0].texture.resource_path == "res://sprites/shuriken.svg", "Original above-head shuriken icon")
 	check(fighter.katana_icons[0].hframes == 6 and fighter.katana_icons[0].frame == 2 and fighter.katana_icons[0].rotation == 0, "Original vertical katana charge icon")
 	game.queue_free()

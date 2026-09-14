@@ -204,7 +204,7 @@ func _row_y(i: int) -> float:
 # --- Input ------------------------------------------------------------------
 
 func _nav_action(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+	return UI.nav(suffix)
 
 
 func _confirm_pressed() -> bool:
@@ -246,8 +246,8 @@ func _process(_delta: float) -> void:
 	var down := _arrow_edge(KEY_DOWN, _arrow_down_was)
 	_arrow_up_was = up["down"]
 	_arrow_down_was = down["down"]
-	var nav_up: bool = up["edge"] or (not typing and _nav_action("aim_up"))
-	var nav_down: bool = down["edge"] or (not typing and _nav_action("aim_down"))
+	var nav_up: bool = up["edge"] or UI.pad_nav("aim_up") or (not typing and _nav_action("aim_up"))
+	var nav_down: bool = down["edge"] or UI.pad_nav("aim_down") or (not typing and _nav_action("aim_down"))
 
 	if Input.is_action_just_pressed("menu_cancel"):
 		Audio.play("click")
@@ -262,7 +262,7 @@ func _process(_delta: float) -> void:
 		_cursor = (_cursor + 1) % ROWS.size()
 		Audio.play("click")
 		_refresh()
-	elif not typing and _confirm_pressed():
+	elif UI.pad_nav("jump") or (not typing and _confirm_pressed()):
 		match _cursor:
 			ROW_HOST: _start_host()
 			ROW_JOIN: _start_join()

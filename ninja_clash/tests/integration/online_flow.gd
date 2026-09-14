@@ -20,6 +20,7 @@ func run() -> void:
 	var inputs: Node = root.get_node("PlayerInput")
 	var combat: Node = root.get_node("Combat")
 	var settings: Node = root.get_node("Settings")
+	var config: Node = root.get_node("MatchConfig")
 	settings.show_tutorial = false
 	for count in [2, 3, 4]:
 		net.player_name = "Host"
@@ -34,6 +35,30 @@ func run() -> void:
 		net.return_to_lobby()
 		net._on_room_locked("", stale_generation)
 		check(state.current_state == state.State.ONLINE_LOBBY, "Stale Start response cannot start a new lobby")
+		for player in net.lobby.members:
+			net.lobby.pick(player.peer, player.clan, 0, true, net.lobby.rules_revision, state.skin_count())
+		var setup: Control = game.match_setup_screen
+		game.online_lobby_screen._rules()
+		check(state.current_state == state.State.MATCH_SETUP and net.lobby.editing_rules, "Host opens rules from character selection")
+		check(net.lobby.members.all(func(player): return not player.ready), "Opening rule editing invalidates every player's ready state")
+		check(not net.lobby.can_start(), "A match cannot start while rules are being edited")
+		var before: Dictionary = net._build_state_bundle()
+		net.mode = net.NetMode.CLIENT
+		setup.cursor = 0
+		setup._adjust(1)
+		setup._activate()
+		setup._mouse_activate(0)
+		setup._do_reset()
+		net.edit_rules()
+		net.finish_rules()
+		check(net._build_state_bundle() == before and net.lobby.editing_rules, "Client mouse, keyboard, controller and reset paths cannot change the rules")
+		net.mode = net.NetMode.HOST
+		setup.cursor = 0
+		setup._activate()
+		check(config.katana_enabled != before.cfg.katana_enabled, "Host can change a rule")
+		setup._activate()
+		setup._do_done()
+		check(state.current_state == state.State.ONLINE_LOBBY and not net.lobby.editing_rules, "Done returns the host to character selection")
 		for player in net.lobby.members:
 			net.lobby.pick(player.peer, player.clan, 0, true, net.lobby.rules_revision, state.skin_count())
 		net.start_lobby_match()

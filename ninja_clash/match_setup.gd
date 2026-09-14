@@ -157,6 +157,8 @@ func _action(label: String, do: Callable) -> Dictionary:
 
 
 func _do_reset() -> void:
+	if Net.is_client():
+		return
 	MatchConfig.reset_to_defaults()
 	Audio.play("confirm")
 	_refresh()
@@ -168,11 +170,11 @@ func _do_done() -> void:
 
 
 func _nav(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+	return UI.nav(suffix)
 
 
 func _process(_delta: float) -> void:
-	if not visible:
+	if not visible or Net.is_client():
 		return
 	if Time.get_ticks_msec() / 1000.0 < _input_lockout_until:
 		return
@@ -199,6 +201,8 @@ func _process(_delta: float) -> void:
 
 # Left/right on the focused row: flip a toggle, step a number (clamped), no-op on action rows.
 func _adjust(dir: int) -> void:
+	if Net.is_client():
+		return
 	var row: Dictionary = rows[cursor]
 	match row.kind:
 		"toggle":
@@ -216,6 +220,8 @@ func _adjust(dir: int) -> void:
 
 # Confirm on the focused row: run action rows, flip toggles, wrap-increment steppers.
 func _activate() -> void:
+	if Net.is_client():
+		return
 	var row: Dictionary = rows[cursor]
 	match row.kind:
 		"action":

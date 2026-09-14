@@ -182,14 +182,13 @@ func _process(_delta: float) -> void:
 		_process_settings()
 
 
-# Navigation works from any pad (p1/p2 D-pad + sticks) or the keyboard.
+# Navigation works from any pad or the keyboard.
 func _nav(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+	return UI.nav(suffix)
 
 
 func _confirm_pressed() -> bool:
-	return Input.is_action_just_pressed("p1_jump") or Input.is_action_just_pressed("p2_jump") \
-		or Input.is_action_just_pressed("p1_confirm") or Input.is_action_just_pressed("p2_confirm")
+	return UI.confirm()
 
 
 func _process_menu() -> void:

@@ -1121,6 +1121,7 @@ func hit_by_shuriken(shuriken) -> bool:
 		if stash < 5:
 			stash += 1
 			stash_changed.emit(slot, stash)
+			Audio.play("catch")
 			return true   # caught into the stash → consume
 		return false       # stash full → fly painlessly through
 	var t: float = Time.get_ticks_msec() / 1000.0
@@ -1132,6 +1133,7 @@ func hit_by_shuriken(shuriken) -> bool:
 		if stash < 5:
 			stash += 1
 			stash_changed.emit(slot, stash)
+			Audio.play("catch")
 			return true   # consumed into stash (held — not destroyed)
 		else:
 			shuriken.velocity_v = -shuriken.velocity_v
@@ -1451,8 +1453,12 @@ func _update_visual() -> void:
 		animation = "throw"
 		phase = 0.0
 	elif is_defending or katana_charging:
-		animation = "swing"
-		phase = 0.0
+		if is_defending and is_on_floor() and absf(velocity.x) > 15:
+			animation = "guard_run"
+			phase = fposmod(_motion_clock * 1.5, 1.0)
+		else:
+			animation = "swing"
+			phase = 0.0
 	elif is_wall_grabbing:
 		animation = "wall"
 		phase = fposmod(_motion_clock, 1)

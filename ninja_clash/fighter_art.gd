@@ -2,8 +2,8 @@ extends RefCounted
 
 const FRAME_SIZE := Vector2(48, 48)
 const COLUMNS := 12
-const ANIMATIONS := ["idle", "run", "rise", "fall", "wall", "swing", "throw", "dodge"]
-const COUNTS := [8, 12, 6, 6, 6, 10, 8, 8]
+const ANIMATIONS := ["idle", "run", "rise", "fall", "wall", "swing", "throw", "dodge", "guard_run"]
+const COUNTS := [8, 12, 6, 6, 6, 10, 8, 8, 12]
 const STYLES := ["base", "elemental", "ronin", "chef", "cyber", "edo", "office", "pirate", "vacation", "pig", "endobot", "neko", "stalker", "ironclad", "bakeneko"]
 const SWORD_ANGLES := [-110.0, -85.0, 5.0, 50.0, 70.0, 55.0, 35.0, 20.0, 5.0, 0.0]
 const PALETTE := preload("res://fighter_palette.gdshader")

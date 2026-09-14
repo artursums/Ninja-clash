@@ -22,6 +22,8 @@ var _body: Label
 var _number: Label
 var _invitation_hint: Label
 var _begin_button: Button
+var _story_buttons: Array[Button] = []
+var _cursor := 0
 var _progress: ColorRect
 var _art: TextureRect
 var _caption: Label
@@ -46,6 +48,8 @@ func _ready() -> void:
 	UI.label(_gate, "One valley. One broken oath.", Rect2(90, 216, 620, 36), 24, UI.IVORY, true)
 	_invitation_hint = UI.label(_gate, "Every legend begins with a challenge.", Rect2(90, 258, 620, 28), 18, UI.MUTED, true)
 	_begin_button = UI.button(_gate, "BEGIN", Rect2(280, 321, 240, 42), _begin, 23)
+	UI.select(_begin_button, true)
+	UI.label(_gate, "Enter / Space / A / Cross", Rect2(180, 374, 440, 24), 16, UI.MUTED, true)
 	_story = _layer()
 	_copy = _layer(_story)
 	_number = UI.label(_copy, "", Rect2(48, 66, 390, 24), 16, UI.GOLD)
@@ -54,8 +58,11 @@ func _ready() -> void:
 	_body = UI.label(_copy, "", Rect2(48, 190, 430, 153), 23)
 	_art = UI.image(_copy, STANDARDS, Rect2(493, 90, 266, 234))
 	_caption = UI.label(_copy, "", Rect2(472, 334, 304, 25), 14, UI.GOLD, true)
-	UI.button(_story, "CONTINUE  >", Rect2(48, 380, 180, 30), _advance, 16)
-	UI.button(_story, "SKIP INTRO", Rect2(570, 380, 182, 30), _finish, 14)
+	_story_buttons.append(UI.button(_story, "CONTINUE  >", Rect2(48, 380, 180, 30), _advance, 16))
+	_story_buttons.append(UI.button(_story, "SKIP INTRO", Rect2(570, 380, 182, 30), _finish, 14))
+	for index in _story_buttons.size():
+		_story_buttons[index].mouse_entered.connect(_select_story_button.bind(index))
+	_select_story_button(0)
 	UI.fill(_story, Rect2(48, 365, 704, 1), UI.EDGE)
 	_progress = UI.fill(_story, Rect2(48, 365, 0, 1), UI.GOLD)
 	_story.hide()
@@ -71,6 +78,11 @@ func _layer(parent: Node = null) -> Control:
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	(parent if parent != null else self).add_child(layer)
 	return layer
+
+func _select_story_button(index: int) -> void:
+	_cursor = index
+	for i in _story_buttons.size():
+		UI.select(_story_buttons[i], i == _cursor)
 
 func _begin() -> void:
 	if chapter >= 0 or _finished or not visible:
@@ -122,15 +134,16 @@ func _input(event: InputEvent) -> void:
 		return
 	var confirm: bool = event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
 	var cancel: bool = event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE
-	if event is InputEventJoypadButton and event.pressed and (chapter >= 0 or not OS.has_feature("web")):
+	if event is InputEventJoypadButton and event.pressed:
 		confirm = event.button_index == JOY_BUTTON_A
 		cancel = event.button_index == JOY_BUTTON_B
 	if not confirm and not cancel:
 		return
 	get_viewport().set_input_as_handled()
 	if chapter < 0:
-		_begin()
-	elif cancel:
+		if confirm:
+			_begin()
+	elif cancel or _cursor == 1:
 		_finish()
 	else:
 		_advance()
@@ -150,6 +163,10 @@ func _process(delta: float) -> void:
 	_ambience.advance(step)
 	_lockout = maxf(0.0, _lockout - step)
 	if chapter >= 0:
+		if UI.nav("left") or UI.nav("aim_up"):
+			_select_story_button(0)
+		elif UI.nav("right") or UI.nav("aim_down"):
+			_select_story_button(1)
 		_elapsed += step
 		_progress.size.x = 704.0 * clampf(_elapsed / float(CHAPTERS[chapter].duration), 0.0, 1.0)
 		if _elapsed >= float(CHAPTERS[chapter].duration):

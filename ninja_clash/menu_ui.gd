@@ -87,6 +87,9 @@ static func button(parent: Node, text: String, rect: Rect2, pressed: Callable, f
 	node.add_theme_stylebox_override("normal", normal)
 	node.add_theme_stylebox_override("hover", hover)
 	node.add_theme_stylebox_override("pressed", down)
+	var focus := style(true)
+	focus.bg_color = Color.TRANSPARENT
+	node.add_theme_stylebox_override("focus", focus)
 	node.size = rect.size
 	node.pressed.connect(pressed)
 	parent.add_child(node)
@@ -114,7 +117,34 @@ static func footer(parent: Node, text: String) -> Label:
 	return label(parent, text, Rect2(32, 416, 736, 24), 14, MUTED, true)
 
 static func nav(suffix: String) -> bool:
-	return Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+	return pad_nav(suffix) or Input.is_action_just_pressed("p1_" + suffix) or Input.is_action_just_pressed("p2_" + suffix)
+
+static func pad_nav(suffix: String) -> bool:
+	var action := "menu_pad_" + suffix
+	return InputMap.has_action(action) and Input.is_action_just_pressed(action)
+
+static func setup_gamepad_actions() -> void:
+	# Menu control is shared by every device, independently of fighter assignments.
+	var buttons := {"left": JOY_BUTTON_DPAD_LEFT, "right": JOY_BUTTON_DPAD_RIGHT,
+		"aim_up": JOY_BUTTON_DPAD_UP, "aim_down": JOY_BUTTON_DPAD_DOWN,
+		"jump": JOY_BUTTON_A, "skin": JOY_BUTTON_X}
+	var axes := {"left": [JOY_AXIS_LEFT_X, -1.0], "right": [JOY_AXIS_LEFT_X, 1.0],
+		"aim_up": [JOY_AXIS_LEFT_Y, -1.0], "aim_down": [JOY_AXIS_LEFT_Y, 1.0]}
+	for suffix in buttons:
+		var action := "menu_pad_" + String(suffix)
+		if not InputMap.has_action(action):
+			InputMap.add_action(action, 0.5)
+		InputMap.action_erase_events(action)
+		var button := InputEventJoypadButton.new()
+		button.device = -1
+		button.button_index = buttons[suffix]
+		InputMap.action_add_event(action, button)
+		if axes.has(suffix):
+			var motion := InputEventJoypadMotion.new()
+			motion.device = -1
+			motion.axis = axes[suffix][0]
+			motion.axis_value = axes[suffix][1]
+			InputMap.action_add_event(action, motion)
 
 static func confirm() -> bool:
 	return nav("jump") or nav("confirm")

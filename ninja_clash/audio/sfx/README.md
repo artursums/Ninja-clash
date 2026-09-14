@@ -10,6 +10,7 @@ autoload swaps the beep for your file automatically — **no code change needed*
 | `throw.ogg` | shuriken thrown |
 | `hit.ogg` | a hit lands |
 | `dodge.ogg` | dodge / dash |
+| `catch.ogg` | a flying shuriken is successfully caught into the stash |
 | `block.ogg` | guard blocks (blade parry) |
 | `round_start.ogg` | round begins |
 | `countdown.ogg` | pre-round countdown tick |

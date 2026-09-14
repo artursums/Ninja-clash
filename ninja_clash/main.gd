@@ -130,6 +130,7 @@ func _handle_dev_args() -> void:
 			add_child(driver)
 
 func _setup_input_map() -> void:
+	preload("res://menu_ui.gd").setup_gamepad_actions()
 	# P1 — MAIN keyboard scheme (the solo/testing player): WASD move/aim, Space jump,
 	#      L throw, K katana, J guard, Left Shift dash.
 	#      Enter = menu lock-in/confirm, P = skin cycle.

@@ -48,7 +48,8 @@ func _ready() -> void:
 	UI.fill(rules_overlay, Rect2(0, 0, 800, 450), Color(0.025, 0.03, 0.08, 0.94))
 	UI.panel(rules_overlay, Rect2(180, 38, 440, 366), UI.GOLD)
 	UI.label(rules_overlay, "MATCH RULES", Rect2(200, 50, 400, 40), 28, UI.GOLD, true)
-	rules_text = UI.label(rules_overlay, "", Rect2(220, 96, 360, 238), 18)
+	UI.label(rules_overlay, "Only the host can change these rules.", Rect2(200, 91, 400, 22), 15, UI.MUTED, true)
+	rules_text = UI.label(rules_overlay, "", Rect2(220, 115, 360, 219), 18)
 	UI.button(rules_overlay, "BACK TO LOBBY", Rect2(252, 346, 296, 44), rules_overlay.hide, 19)
 	rules_overlay.hide()
 	Net.lobby_changed.connect(_refresh)
@@ -105,9 +106,9 @@ func _refresh() -> void:
 	invite_button.disabled = Net.invitation_code == "" if OS.has_feature("web") else not Net.is_host()
 	map_button.text = Maps.get_map(GameState.selected_map_index).name + (" >" if Net.is_host() else "")
 	map_button.disabled = not Net.is_host() or Net.lobby.locked
-	rules_button.text = "RULES · %d HP · %d WINS" % [MatchConfig.max_hp, GameState.target_score]
+	rules_button.text = ("EDIT RULES" if Net.is_host() else "VIEW RULES") + "\n%d HP · %d WINS" % [MatchConfig.max_hp, GameState.target_score]
 	rules_button.add_theme_font_size_override("font_size", 14)
-	rules_button.tooltip_text = "Edit match rules (Tab)" if Net.is_host() else "View all match rules (Tab)"
+	rules_button.tooltip_text = "Host: edit match rules (Tab / gamepad Select)" if Net.is_host() else "View match rules (Tab / gamepad Select). Only the host can edit."
 	rules_button.disabled = Net.lobby.locked
 	start_button.text = "START WITH %d PLAYERS" % players.size() if Net.is_host() else "HOST STARTS THE MATCH"
 	start_button.tooltip_text = "Host: press F or gamepad Start"
