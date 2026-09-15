@@ -21,6 +21,11 @@ var _skin_buttons: Array[Button] = []
 var _selection_labels: Array[Label] = []
 var _docks: Array[Panel] = []
 var _input_lockout_until := 0.0
+# Controller focus on the bottom row: the slot whose cursor left the clan cards (0 = none).
+var _footer_slot := 0
+var _footer_on_setup := true
+var _back_button: Button
+var _setup_button: Button
 var _opened_frame := -1
 
 func _ready() -> void:
@@ -45,6 +50,7 @@ func _load_selection() -> void:
 	selection.configure(initial)
 	status_label.text = ""
 	_mouse_slot = 1
+	_footer_slot = 0
 	_input_lockout_until = Time.get_ticks_msec() / 1000.0 + 0.2
 	_refresh()
 
@@ -69,8 +75,8 @@ func _build() -> void:
 		_skin_buttons.append(UI.button(self, "", Rect2(0, 373, 90, 26), _mouse_skin.bind(i + 1), 14))
 		_player_buttons.append(UI.button(self, "", Rect2(0, 352, 122, 46), _mouse_lock.bind(i + 1), 18))
 	status_label = UI.label(self, "", Rect2(398, 62, 370, 26), 12, UI.MUTED, true)
-	UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
-	UI.button(self, "MATCH SETUP", Rect2(650, 416, 118, 24), _setup, 14)
+	_back_button = UI.button(self, "< BACK", Rect2(32, 416, 100, 24), _back, 14)
+	_setup_button = UI.button(self, "MATCH SETUP", Rect2(650, 416, 118, 24), _setup, 14)
 
 func _mouse_ready() -> bool:
 	return visible and Time.get_ticks_msec() / 1000.0 >= _input_lockout_until
@@ -130,16 +136,31 @@ func _process(_delta: float) -> void:
 	if not _mouse_ready() or Engine.get_process_frames() <= _opened_frame + 1:
 		return
 	if Input.is_action_just_pressed("menu_cancel"):
-		_back()
+		if _footer_slot > 0:
+			_footer_slot = 0
+			_refresh()
+		else:
+			_back()
 		return
 	if Input.is_action_just_pressed("menu_setup"):
 		_setup()
 		return
 	for index in selection.clans.size():
 		var slot := index + 1
+		if slot == _footer_slot:
+			_footer_input(slot)
+			if not visible:
+				return
+			continue
 		if selection.ready[index]:
 			if _pressed(slot, "aim_down"):
 				_mouse_lock(slot)
+			continue
+		if _pressed(slot, "aim_down"):
+			_footer_slot = slot
+			_footer_on_setup = true
+			Audio.play("click")
+			_refresh()
 			continue
 		if _pressed(slot, "skin"):
 			_mouse_skin(slot)
@@ -150,6 +171,24 @@ func _process(_delta: float) -> void:
 			_mouse_lock(slot)
 			if not visible:
 				return
+
+func _footer_input(slot: int) -> void:
+	if _pressed(slot, "aim_up"):
+		_footer_slot = 0
+	elif _pressed(slot, "left") or _pressed(slot, "right"):
+		if _footer_on_setup == _pressed(slot, "right"):
+			return
+		_footer_on_setup = not _footer_on_setup
+	elif _pressed(slot, "jump") or _pressed(slot, "confirm"):
+		if _footer_on_setup:
+			_setup()
+		else:
+			_back()
+		return
+	else:
+		return
+	Audio.play("click")
+	_refresh()
 
 func _refresh() -> void:
 	var count := selection.clans.size()
@@ -194,12 +233,16 @@ func _refresh() -> void:
 		_skin_buttons[index].text = GameState.skin_label(GameState.skin_index(index + 1)) + " >"
 		_skin_buttons[index].disabled = selection.ready[index]
 		_skin_buttons[index].text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		_skin_buttons[index].position = Vector2(328, 355) if solo else Vector2(x + 12, 373)
-		_skin_buttons[index].size = Vector2(188, 40) if solo else Vector2(width - 88, 26) if compact else Vector2(190, 26)
+		# Font size goes before size: a Control grows to its minimum size but never shrinks back, so
+		# sizing while the previous layout's larger font is still applied would push buttons out of the dock.
 		_skin_buttons[index].add_theme_font_size_override("font_size", 11 if compact else 14)
+		_skin_buttons[index].position = Vector2(328, 355) if solo else Vector2(x + 10, 373) if compact else Vector2(x + 12, 373)
+		_skin_buttons[index].size = Vector2(188, 40) if solo else Vector2(width - 90, 26) if compact else Vector2(190, 26)
 		var button := _player_buttons[index]
 		button.text = "READY >" if solo else ("UNDO" if selection.ready[index] else "READY") if compact else "P%d  %s" % [index + 1, "UNLOCK" if selection.ready[index] else "LOCK IN"]
-		button.position = Vector2(540, 352) if solo else Vector2(x + width - 68, 371) if compact else Vector2(x + 218, 352)
-		button.size = Vector2(216, 46) if solo else Vector2(60, 30) if compact else Vector2(122, 46)
 		button.add_theme_font_size_override("font_size", 12 if compact else 18)
+		button.position = Vector2(540, 352) if solo else Vector2(x + width - 74, 371) if compact else Vector2(x + 218, 352)
+		button.size = Vector2(216, 46) if solo else Vector2(64, 30) if compact else Vector2(122, 46)
 		UI.select(button, solo or selection.ready[index] or _mouse_slot == index + 1, clan.color)
+	UI.select(_back_button, _footer_slot > 0 and not _footer_on_setup)
+	UI.select(_setup_button, _footer_slot > 0 and _footer_on_setup)

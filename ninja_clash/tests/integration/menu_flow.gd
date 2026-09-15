@@ -18,6 +18,15 @@ func check(condition: bool, description: String) -> void:
 func unlock(screen: Control) -> void:
 	screen._input_lockout_until = 0.0
 
+func press(screen: Control, action: String) -> void:
+	screen.set_process(false)
+	Input.action_press(action)
+	screen._process(0.0)
+	Input.action_release(action)
+	await process_frame
+	await process_frame
+	screen.set_process(true)
+
 func click_control(control: Control) -> void:
 	var point: Vector2 = control.get_global_transform_with_canvas() * (control.size / 2.0)
 	var motion := InputEventMouseMotion.new()
@@ -93,8 +102,19 @@ func run() -> void:
 	click_control(clans._card_buttons[0])
 	check(clans.selection.clans[0] == 0, "Clicking the portrait selects its clan")
 	check(clans.clan_ninjas[0].material == null, "Returning to Classic clears costume recoloring")
-	clans._setup()
-	check(state.current_state == state.State.MATCH_SETUP, "Rules open from clan selection")
+	await process_frame
+	await process_frame
+	await press(clans, "p1_aim_down")
+	check(clans._footer_slot == 1 and clans._footer_on_setup and state.current_state == state.State.CLAN_SELECT, "Down on the controller focuses Match Setup")
+	await press(clans, "p1_left")
+	check(not clans._footer_on_setup and clans.selection.clans[0] == 0, "Left on the bottom row moves to Back without changing clan")
+	await press(clans, "p1_right")
+	check(clans._footer_on_setup, "Right on the bottom row returns to Match Setup")
+	await press(clans, "p1_aim_up")
+	check(clans._footer_slot == 0, "Up returns controller focus to the clans")
+	await press(clans, "p1_aim_down")
+	await press(clans, "p1_jump")
+	check(state.current_state == state.State.MATCH_SETUP, "Rules open from clan selection with a controller")
 	game.match_setup_screen._do_done()
 	check(clans.selection.clans[0] == 0, "Unconfirmed clan survives rules detour")
 	unlock(clans)
@@ -142,6 +162,16 @@ func run() -> void:
 	net.mode = net.NetMode.OFFLINE
 	state.game_mode = state.Mode.HUMAN_VS_HUMAN
 	state.change_state(state.State.CLAN_SELECT)
+	var two_players: int = state.local_player_count
+	state.local_player_count = 4
+	clans._load_selection()
+	var docked := true
+	for i in 4:
+		for button: Button in [clans._skin_buttons[i], clans._player_buttons[i]]:
+			docked = docked and clans._docks[i].get_rect().encloses(button.get_rect())
+	check(docked, "Four-player clan actions stay inside their docks after a two-player layout")
+	state.local_player_count = two_players
+	clans._load_selection()
 	unlock(clans)
 	state.p1_skin = 3
 	state.p2_skin = 4
