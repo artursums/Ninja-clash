@@ -16,6 +16,9 @@ const htmlPath = path.join(destination, 'public/index.html');
 const html = await readFile(htmlPath, 'utf8');
 if (!html.includes('</head>')) throw new Error('The web shell is missing its closing head tag.');
 await cp(path.join(root, 'web/client/gamepad-compat.js'), path.join(destination, 'public/gamepad-compat.js'));
+await cp(path.join(root, 'web/client/exit.html'), path.join(destination, 'public/exit.html'));
+await cp(path.join(root, 'ninja_clash/fonts/PixelifySans.ttf'), path.join(destination, 'public/PixelifySans.ttf'));
+await cp(path.join(root, 'ninja_clash/sprites/menu/sanctuary.webp'), path.join(destination, 'public/sanctuary.webp'));
 await writeFile(htmlPath, html.replace('</head>', '<script src="gamepad-compat.js"></script>\n</head>'));
 for (const entry of ['api', 'server', 'vercel.json', '.vercelignore']) {
   await cp(path.join(root, 'web', entry), path.join(destination, entry), { recursive: true });

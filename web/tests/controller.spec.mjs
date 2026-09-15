@@ -89,5 +89,18 @@ test('a controller starts the web game and selects visible menu buttons', async 
   await expect.poll(async () => (await state()).menuSelection.online).toBe(2);
   await button(0);
   await expect.poll(async () => (await state()).state).toBe('TITLE');
+  await button(12);
+  await button(12);
+  await expect.poll(async () => (await state()).menuSelection.title).toBe(4);
+  await page.screenshot({ path: testInfo.outputPath('controller-title-quit.png') });
+  await page.evaluate(() => {
+    window.__pads[3].buttons[0] = { pressed: true, touched: true, value: 1 };
+  });
+  await expect(page).toHaveURL(/\/exit\.html$/);
+  await expect(page.locator('canvas')).toHaveCount(0);
+  await expect(page.getByText('The game is closed. You can close this tab.')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('game-closed.png') });
+  await page.getByRole('link', { name: 'PLAY AGAIN' }).click();
+  await expect.poll(async () => (await state())?.state).toBe('WELCOME');
   expect(errors).toEqual([]);
 });

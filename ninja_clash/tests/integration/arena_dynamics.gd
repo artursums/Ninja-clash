@@ -52,7 +52,7 @@ func run() -> void:
 			if not clear_at(Vector2(18,y),data.walls):
 				continue
 			for direction in [-1,1]:
-				for speed in [158.4,400.0]:
+				for speed in [probe.MAX_HSPEED, probe.SLIDE_SPEED]:
 					probe.position = Vector2(18 if direction < 0 else Arena.WIDTH-18,y)
 					var crossed := false
 					for frame in 20:
@@ -84,7 +84,12 @@ func run() -> void:
 					check(clear_at(probe.position,data.walls),data.name+" vertical arrival keeps full body clear")
 				check(crossed,data.name+" vertical portal is traversable")
 				vertical_crossings += 1
-		check(vertical_crossings >= 2,data.name+" has an open vertical route")
+		if data.ambience == "tokyo":
+			check(vertical_crossings == 0, "Neo Tokyo keeps its solid courtyard floor and ceiling")
+			for x in range(12, int(Arena.WIDTH)-12, 8):
+				check(not clear_at(Vector2(x,8),data.walls) and not clear_at(Vector2(x,Arena.HEIGHT-8),data.walls), "Neo Tokyo has no gaps behind its sealed vertical edges")
+		else:
+			check(vertical_crossings >= 2,data.name+" has an open vertical route")
 		state.current_state = state.State.ROUND
 		check(get_nodes_in_group("crumble_platforms").size() == data.crumble_platforms.size(),"All authored slabs instantiate")
 		for platform in get_nodes_in_group("crumble_platforms"):

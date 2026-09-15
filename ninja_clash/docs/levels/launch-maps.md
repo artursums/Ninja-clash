@@ -22,7 +22,7 @@ Positions remain assigned by fighter slot across rounds.
 ## Traversal and readability
 
 - Primary climbs use the existing 480 px/s jump, 1400 px/s² gravity and
-  158.4 px/s horizontal speed. Most ascents are 58–72 pixels.
+  200.38 px/s horizontal speed. Most ascents are 58–72 pixels.
 - Every primary platform connects to every other through ordinary jumps and
   drops. Wall jumps, air dashes, and wrapping provide additional routes.
 - Open side passages are at least 40 pixels wide; tunnels have at least 44 pixels of height.
@@ -37,7 +37,8 @@ Positions remain assigned by fighter slot across rounds.
   so a straddling fighter retains support and cannot clip the opposite corner. Thrown shurikens clear their trail history when wrapping;
   charged blade waves expire outside the same world bounds.
 - Opposite edge openings align, including the ceiling/floor passages. Wrapping does
-  not deposit fighters behind a solid wall.
+  not deposit fighters behind a solid wall. Neo Tokyo has a solid floor and ceiling;
+  its wrapping routes run horizontally through the side openings.
 - Bot targets use exposed landing spans with full headroom, including the narrow
   service steps. Covered sections of a larger floor are excluded.
 

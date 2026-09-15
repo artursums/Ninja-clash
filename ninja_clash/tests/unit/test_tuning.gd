@@ -1,7 +1,7 @@
 extends GutTest
 ## Regression guard for the data-driven tuning (player_tuning.tres). Catches accidental balance
 ## drift from an editor save, and verifies the katana-window invariant. The .tres is the editable
-## balance source; these tests pin the validated prototype values + the structural invariant.
+## balance source; these tests pin the current defaults and structural invariant.
 
 
 func _tuning() -> PlayerTuning:
@@ -15,7 +15,7 @@ func test_tuning_resource_loads() -> void:
 func test_validated_movement_values() -> void:
 	var t := _tuning()
 	assert_almost_eq(t.gravity, 1400.0, 0.001)
-	assert_almost_eq(t.max_hspeed, 158.4, 0.001)
+	assert_almost_eq(t.max_hspeed, 200.38, 0.001)
 	assert_almost_eq(t.jump_strength, 480.0, 0.001)
 	assert_almost_eq(t.terminal_fall_speed, 320.0, 0.001)
 	assert_almost_eq(t.slide_speed, 400.0, 0.001)

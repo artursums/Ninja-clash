@@ -303,7 +303,7 @@ func _physics_process(_delta: float) -> void:
 			if _peer_id == 0:
 				return
 			_tick += 1
-			if _tick % SNAPSHOT_EVERY_N_TICKS == 0 and _main != null and GameState.current_state in [GameState.State.MATCH_INTRO, GameState.State.ROUND, GameState.State.ROUND_END]:
+			if _tick % SNAPSHOT_EVERY_N_TICKS == 0 and _main != null and not _main.is_loading and GameState.current_state in [GameState.State.MATCH_INTRO, GameState.State.ROUND, GameState.State.ROUND_END]:
 				_snapshot.rpc(_build_snapshot())
 		NetMode.CLIENT:
 			if _peer_id != 0:
@@ -390,7 +390,7 @@ func _build_snapshot() -> Dictionary:
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _snapshot(snap: Dictionary) -> void:
-	if not is_client() or _main == null:
+	if not is_client() or _main == null or _main.is_loading:
 		return
 	if int(snap.get("map", -1)) != _main._current_loaded_map:
 		return
@@ -516,6 +516,9 @@ func _build_state_bundle() -> Dictionary:
 @rpc("authority", "call_remote", "reliable")
 func _apply_state(s: int, bundle: Dictionary) -> void:
 	if not is_client():
+		return
+	if _main != null and _main.is_loading and s in [GameState.State.ROUND, GameState.State.ROUND_END, GameState.State.MATCH_END]:
+		_main.pending_network_state = {"state": s, "bundle": bundle.duplicate(true)}
 		return
 	GameState.game_mode = int(bundle.get("mode", GameState.game_mode))
 	GameState.apply_online_players(bundle.get("players", []))

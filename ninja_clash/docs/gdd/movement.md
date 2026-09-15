@@ -18,7 +18,7 @@
 >    (the lockout window), per Formula 1. The prototype's extra slide-cooldown + "instant
 >    ground-reset" were artifacts of a different model and do not carry over.
 > 3. **Pinned starting values** (from the validated prototype; CC values live in
->    `character_controller_config.tres`): `GRAVITY 1400`, `TERMINAL 320`, `MAX_HSPEED 158.4`,
+>    `character_controller_config.tres`): `GRAVITY 1400`, `TERMINAL 320`, `MAX_HSPEED 200.38`,
 >    `JUMP_STRENGTH 480`, `DODGE_DASH_SPEED 400`, `DODGE_IFRAME 0.20`, `DODGE_TOTAL 0.30`.
 > 4. **Defense (L2 guard) is NOT in v1** (deferred; was never part of this GDD).
 

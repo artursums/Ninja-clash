@@ -58,6 +58,8 @@ func run() -> void:
 	game.round_clock.advance(20)
 	check(state.current_state == state.State.ROUND_END and game._round_winner_slot == 0 and game.banner_label.text == "DRAW", "Overtime draw never displays an earlier killer as winner")
 	check(combat.scores.values().all(func(score): return score == 0), "Draw awards nobody a point")
+	state.advance_round_or_end_match()
+	check(state.current_state == state.State.MATCH_INTRO and game._in_countdown and game.banner_label.text == "", "Draw banner is cleared before the next round's countdown")
 	begin()
 	var p = game.players[0]
 	p.stash = 3

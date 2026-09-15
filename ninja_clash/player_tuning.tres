@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-max_hspeed = 158.4
+max_hspeed = 200.38
 jump_strength = 480.0
 gravity = 1400.0
 terminal_fall_speed = 320.0

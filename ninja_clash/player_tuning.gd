@@ -2,12 +2,12 @@ class_name PlayerTuning
 extends Resource
 ## Data-driven gameplay tuning for the player (movement + katana/HP feel). Extracted from
 ## player.gd's hardcoded consts so balance is editable in the inspector and injectable in tests.
-## Defaults below are the VALIDATED prototype numbers — editing player_tuning.tres changes balance
+## Defaults below match the current movement and combat balance — editing player_tuning.tres changes balance
 ## without touching code. (Structural values — hitbox size, sprite frame indices — stay as consts
 ## in player.gd; they are not balance knobs.)
 
 # --- Movement ---
-@export var max_hspeed: float = 158.4
+@export var max_hspeed: float = 200.38
 @export var jump_strength: float = 480.0
 @export var gravity: float = 1400.0
 @export var terminal_fall_speed: float = 320.0

@@ -101,6 +101,33 @@ func run() -> void:
 	check(state.num_players() == 4 and state.slot_is_bot(2), "Offline FFA still uses bots")
 	state.game_mode = state.Mode.HUMAN_VS_HUMAN
 	check(state.num_players() == 2 and not state.slot_is_bot(2), "Offline duel remains unchanged")
+	state.current_state = state.State.MATCH_INTRO
+	net.mode = net.NetMode.CLIENT
+	game.is_loading = true
+	var loading_generation: int = game._load_generation
+	var round_bundle: Dictionary = net._build_state_bundle()
+	net._apply_state(state.State.ROUND, round_bundle)
+	check(state.current_state == state.State.MATCH_INTRO, "A slow client does not start a round before its arena is ready")
+	check(game.pending_network_state.state == state.State.ROUND, "The round transition is retained during loading")
+	game.is_loading = false
+	var pending: Dictionary = game.pending_network_state.duplicate(true)
+	game.pending_network_state.clear()
+	net._apply_state(pending.state, pending.bundle)
+	check(state.current_state == state.State.ROUND, "The deferred round starts after loading completes")
+	game.is_loading = true
+	net._apply_state(state.State.MATCH_END, round_bundle)
+	state.change_state(state.State.TITLE)
+	check(not game.is_loading and game.pending_network_state.is_empty(), "Leaving during loading clears queued network transitions")
+	check(game._load_generation > loading_generation, "Leaving invalidates an unfinished loading task")
+	net.leave()
+	var cancelled_paths: Array[String] = ["res://sprites/shuriken.svg"]
+	game.loading_screen.open("TEST ARENA")
+	var needed := {"value": true}
+	var cancel := func() -> void: needed.value = false
+	process_frame.connect(cancel, CONNECT_ONE_SHOT)
+	var prepared: bool = await game.loading_screen.prepare(cancelled_paths, func() -> bool: return needed.value)
+	check(not prepared and game.loading_screen.resources.is_empty(), "Cancelled preparation cannot retain resources for a newer match")
+	game.loading_screen.finish()
 	game.queue_free()
 	await process_frame
 	print("Online integration: %d checks, %d failures" % [checks, failures])

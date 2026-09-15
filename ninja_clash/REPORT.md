@@ -92,7 +92,7 @@ three sub-hypotheses:
   - `shuriken_throw_velocity`: 200 (default kept)
   - `pickup_radius_px`: 12 (default kept)
   - `self_hit_immunity_s`: 0.083 (default kept)
-  - Movement: `MAX_HSPEED` 158.4 · `JUMP_STRENGTH` 480 · single jump (no double jump) ·
+  - Movement: `MAX_HSPEED` 200.38 · `JUMP_STRENGTH` 480 · single jump (no double jump) ·
     `SLIDE_SPEED` 400 with up-dash capped to `SLIDE_SPEED·sin45°` · dash recharges on floor touch
   - Katana: swing 0.32 s + 0.20 s recovery cooldown
 - **Subjective feel notes**: developer-confident the loop is fun; per-tester notes pending a social playtest

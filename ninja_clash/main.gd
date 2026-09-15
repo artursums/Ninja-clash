@@ -75,6 +75,10 @@ var countdown_sprite: Sprite2D
 var round_display: Node2D
 var win_display: Node2D
 var tutorial_overlay: Control
+var loading_screen: Control
+var is_loading := false
+var pending_network_state: Dictionary = {}
+var _load_generation := 0
 
 var _in_countdown: bool = false
 var _countdown_stage: int = 0
@@ -300,8 +304,19 @@ func _build_overlays() -> void:
 	tutorial_overlay.set_script(load("res://tutorial_overlay.gd"))
 	tutorial_layer.add_child(tutorial_overlay)
 	tutorial_overlay.closed.connect(_start_countdown)
+	var loading_layer := CanvasLayer.new()
+	loading_layer.layer = 20
+	add_child(loading_layer)
+	loading_screen = preload("res://match_loading.gd").new()
+	loading_layer.add_child(loading_screen)
 
 func _on_state_changed(s: int) -> void:
+	var interrupted_loading := is_loading
+	if is_loading:
+		_load_generation += 1
+		is_loading = false
+		pending_network_state.clear()
+		loading_screen.finish()
 
 	if Engine.time_scale != 1.0:
 		Engine.time_scale = 1.0
@@ -327,7 +342,10 @@ func _on_state_changed(s: int) -> void:
 		tutorial_overlay.hide()
 		banner_label.text = ""
 	if s == S.MATCH_INTRO:
-		_enter_match_intro()
+		if (GameState.current_round == 1 or interrupted_loading) and DisplayServer.get_name() != "headless":
+			_load_match_intro()
+		else:
+			_enter_match_intro()
 	elif s == S.ROUND:
 		_enter_round()
 	elif s == S.ROUND_END:
@@ -336,8 +354,54 @@ func _on_state_changed(s: int) -> void:
 		banner_label.text = ""
 		_clear_shurikens()
 
+func _load_match_intro() -> void:
+	_load_generation += 1
+	var generation := _load_generation
+	var still_needed := func() -> bool: return generation == _load_generation and GameState.current_state == GameState.State.MATCH_INTRO
+	is_loading = true
+	_in_countdown = false
+	arena_root.hide()
+	hud.hide()
+	loading_screen.open(Maps.get_map(GameState.selected_map_index).name)
+	# Give both Godot and the browser compositor a frame before loading or creating nodes.
+	await RenderingServer.frame_post_draw
+	await get_tree().process_frame
+	if not still_needed.call():
+		return
+	var paths: Array[String] = []
+	loading_screen.collect_paths(Maps.get_map(GameState.selected_map_index), paths)
+	for slot in range(1, GameState.num_players() + 1):
+		var clan: Dictionary = GameState.get_clan(slot)
+		loading_screen.collect_paths(FighterArt.path(GameState.skin_index(slot), clan.sprite), paths)
+		loading_screen.collect_paths("res://sprites/katanas/katana_%s_6frame_native_144x16.png" % clan.sprite, paths)
+	var prepared: bool = await loading_screen.prepare(paths, still_needed)
+	if not still_needed.call():
+		return
+	if not prepared:
+		Net.leave("UNABLE TO LOAD ARENA")
+		GameState.change_state(GameState.State.TITLE)
+		return
+	_enter_match_intro()
+	arena_root.show()
+	hud.show()
+	loading_screen.complete()
+	# First-use texture upload and shader compilation happen underneath the opaque overlay.
+	await RenderingServer.frame_post_draw
+	await get_tree().process_frame
+	if not still_needed.call():
+		return
+	is_loading = false
+	loading_screen.finish()
+	_finish_match_intro()
+	if not pending_network_state.is_empty():
+		var pending := pending_network_state.duplicate(true)
+		pending_network_state.clear()
+		Net._apply_state(pending.state, pending.bundle)
+
 func _enter_match_intro() -> void:
 	_round_winner_slot = 0
+	# Clear the previous round's result so "DRAW" doesn't sit behind the next countdown.
+	banner_label.text = ""
 	round_clock.start(MatchConfig.round_time_seconds)
 	_clear_shurikens()
 	if _current_loaded_map != GameState.selected_map_index:
@@ -423,6 +487,10 @@ func _enter_match_intro() -> void:
 
 	_separate_overlapping_spawns()
 
+	if not is_loading:
+		_finish_match_intro()
+
+func _finish_match_intro() -> void:
 	if GameState.current_round == 1 and Settings.show_tutorial:
 		tutorial_overlay.open()
 	else:

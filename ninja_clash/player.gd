@@ -21,7 +21,7 @@ var tuning: PlayerTuning = null
 const BOT_TUNING_PATH := "res://bot_tuning.tres"
 var bot_tuning: BotTuning = null
 
-var MAX_HSPEED := 158.4
+var MAX_HSPEED := 200.38
 var JUMP_STRENGTH := 480.0
 var GRAVITY := 1400.0
 var PLAYER_TERMINAL_FALL_SPEED := 320.0

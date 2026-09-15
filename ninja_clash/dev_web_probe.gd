@@ -38,5 +38,7 @@ func _process(delta: float) -> void:
 		"rules": {"roundTime": MatchConfig.round_time_seconds, "hp": MatchConfig.max_hp, "katana": MatchConfig.katana_enabled, "target": GameState.target_score}, "status": main.online_menu_screen.status_label.text,
 		"perks": main.perk_director.snapshot(), "clock": main.round_clock.snapshot(),
 		"map": GameState.selected_map_index, "scores": Combat.scores,
+		"loading": main.is_loading, "loadedMap": main._current_loaded_map,
+		"tutorialTab": main.tutorial_overlay.tab, "tutorialStartFocused": main.tutorial_overlay.focus_start,
 		"tutorial": main.tutorial_overlay.visible, "signalingDone": Net._web_room != null and Net._web_room._signaling_done}
 	JavaScriptBridge.eval("window.__ninjaState = " + JSON.stringify(data), true)

@@ -27,9 +27,6 @@ var _intro: Tween
 var _intro_active := false
 var _intro_played := false
 
-func _platform_slugs() -> Array:
-	return ["start", "online", "options", "credits"] if OS.has_feature("web") else BUTTON_SLUGS.duplicate()
-
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -79,7 +76,7 @@ func _build() -> void:
 			var lift := -48.0 if i % 2 == 0 else 38.0
 			_register_piece(glyph, Vector2((i - 4) * 9, lift), (i - 4) * 0.035, 0.08 + i * 0.025)
 		letter_x += advance
-	_slugs = _platform_slugs()
+	_slugs = BUTTON_SLUGS.duplicate()
 	for i in _slugs.size():
 		var slug: String = _slugs[i]
 		var btn := UI.button(_content, BUTTON_NAMES[slug], Rect2(58, 160 + i * 42, 274, 35), _activate.bind(i), 22)
@@ -184,7 +181,13 @@ func _activate(index: int) -> void:
 		"online": GameState.change_state(GameState.State.ONLINE_MENU)
 		"options": _set_overlay(OVERLAY_OPTIONS)
 		"credits": _set_overlay(OVERLAY_CREDITS)
-		"quit": get_tree().quit()
+		"quit":
+			Net.leave()
+			if OS.has_feature("web"):
+				# Navigation releases the game runtime even when the browser cannot close its tab.
+				JavaScriptBridge.eval("window.location.replace('exit.html');", true)
+			else:
+				get_tree().quit()
 
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_msec()

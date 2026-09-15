@@ -66,9 +66,18 @@ Connect controllers before launching or during play. Actions use Godot’s norma
 The animated welcome opens automatically. Press **Enter**, **Space**, or **A / Cross** to skip it.
 Use the **D-pad / left stick** to select menu buttons, **A / Cross** to confirm, and
 **B / Circle** to go back or skip the intro. The selected button has a gold outline.
+Quit closes the desktop application. In a browser it unloads the game and opens a
+small exit page, since user-opened tabs cannot reliably be closed by a website.
 Local Multiplayer lets 2–4 people select unique clans and play together. The two keyboard layouts cover P1 and P2; controllers fill the remaining slots. For four players, use two keyboard layouts plus two controllers, one keyboard layout plus three controllers, or four controllers. The optional tutorial is off by default. Standard loadouts are 3 shurikens, 3 katana charges and 5 HP.
 
 All connected controllers can navigate shared menus, including controllers plugged in after launch.
+The optional How to Play screen has keyboard, numpad, PlayStation and Xbox tabs.
+Use left/right to choose a tab, down to focus Start, and A / Cross to start; up returns
+to the tabs. Its matching controller diagrams and button icons use
+[Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0).
+After arena selection, a loading screen prepares map and fighter resources before the
+tutorial or countdown appears. Online clients finish loading before applying a received
+round transition.
 After the welcome, room invitations continue to the online menu.
 The online name field still uses keyboard text entry; its Back and Continue buttons support the controller.
 Browsers may require a click or keyboard press to enable audio even when starting with a controller
